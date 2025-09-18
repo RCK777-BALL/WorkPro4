@@ -70,10 +70,11 @@ function WorkOrders() {
             });
         }); }
     }), data = _c.data, isLoading = _c.isLoading;
-    var statusCounts = (data === null || data === void 0 ? void 0 : data.workOrders.reduce(function (acc, wo) {
+    var workOrders = Array.isArray(data) ? data : ((data === null || data === void 0 ? void 0 : data.workOrders) || []);
+    var statusCounts = workOrders.reduce(function (acc, wo) {
         acc[wo.status] = (acc[wo.status] || 0) + 1;
         return acc;
-    }, {})) || {};
+    }, {});
     if (isLoading) {
         return (<div className="space-y-6">
         <div className="h-8 bg-gray-200 rounded animate-pulse"></div>
@@ -120,7 +121,7 @@ function WorkOrders() {
 
       {/* Work Orders List */}
       <div className="space-y-4">
-        {data === null || data === void 0 ? void 0 : data.workOrders.map(function (workOrder) { return (<card_1.Card key={workOrder.id} className="hover:shadow-md transition-shadow cursor-pointer">
+        {workOrders.map(function (workOrder) { return (<card_1.Card key={workOrder.id} className="hover:shadow-md transition-shadow cursor-pointer">
             <card_1.CardContent className="p-6">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
@@ -179,7 +180,7 @@ function WorkOrders() {
           </card_1.Card>); })}
       </div>
 
-      {(!(data === null || data === void 0 ? void 0 : data.workOrders) || data.workOrders.length === 0) && (<card_1.Card>
+      {workOrders.length === 0 && (<card_1.Card>
           <card_1.CardContent className="p-12 text-center">
             <lucide_react_1.Wrench className="w-12 h-12 text-gray-400 mx-auto mb-4"/>
             <h3 className="text-lg font-medium text-gray-900 mb-2">No work orders found</h3>
