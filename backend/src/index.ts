@@ -1,9 +1,12 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import mongoose from 'mongoose';
 import { requestLogger } from './middleware/requestLogger';
 import { errorHandler } from './middleware/errorHandler';
+import { connectDB } from './db';
 
 // Routes
 import authRoutes from './routes/auth';
@@ -15,7 +18,7 @@ import vendorRoutes from './routes/vendors';
 import searchRoutes from './routes/search';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = Number(process.env.PORT) || 3001;
 
 // Security middleware
 app.use(helmet());
@@ -39,12 +42,12 @@ app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);
 
 // Health check
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    version: '1.0.0',
-  });
+app.get('/health', (_req, res) => {
+  res.json({ ok: true });
+});
+
+app.get('/health/db', (_req, res) => {
+  res.json({ readyState: mongoose.connection.readyState });
 });
 
 // API routes
@@ -71,8 +74,25 @@ app.use('*', (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Backend server running on port ${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
-  console.log(`🔐 API base: http://localhost:${PORT}/api`);
+async function start() {
+  const mongoUri = process.env.MONGO_URI;
+
+  if (!mongoUri) {
+    console.error('❌ MONGO_URI environment variable is required');
+    process.exit(1);
+  }
+
+  await connectDB(mongoUri, process.env.DB_NAME);
+
+  app.listen(PORT, () => {
+    console.log(`🚀 Backend server running on port ${PORT}`);
+    console.log(`🩺 Health check: http://localhost:${PORT}/health`);
+    console.log(`🗄️ DB health: http://localhost:${PORT}/health/db`);
+    console.log(`🔐 API base: http://localhost:${PORT}/api`);
+  });
+}
+
+start().catch((error) => {
+  console.error('❌ Failed to start server', error);
+  process.exit(1);
 });
