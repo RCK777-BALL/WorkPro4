@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { ok, fail, asyncHandler } from '../utils/response';
 import { authenticateToken, AuthRequest, requireRoles } from '../middleware/auth';
 import { tenantScope } from '../middleware/tenant';
@@ -49,7 +49,7 @@ router.post('/', requireRoles(['planner', 'supervisor', 'admin']), asyncHandler(
   const vendor = await prisma.vendor.create({
     data: {
       name: data.name,
-      contactJson: data.contact || null,
+      contactJson: data.contact ?? Prisma.JsonNull,
       tenantId,
     },
   });
@@ -81,7 +81,9 @@ router.put('/:id', requireRoles(['planner', 'supervisor', 'admin']), asyncHandle
 
   const updateData: any = {};
   if (data.name) updateData.name = data.name;
-  if (data.contact !== undefined) updateData.contactJson = data.contact;
+  if (data.contact !== undefined) {
+    updateData.contactJson = data.contact ?? Prisma.JsonNull;
+  }
 
   const vendor = await prisma.vendor.update({
     where: { id },
