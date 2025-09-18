@@ -48,12 +48,10 @@ router.get('/', asyncHandler(async (req: AuthRequest, res) => {
     prisma.asset.count({ where: { tenantId } }),
     prisma.asset.count({ where: { tenantId, status: 'down' } }),
     prisma.part.count({ where: { tenantId } }),
-    prisma.part.count({
-      where: {
-        tenantId,
-        onHand: { lt: prisma.part.fields.min },
-      },
-    }),
+    prisma.part.findMany({
+      where: { tenantId },
+      select: { onHand: true, min: true },
+    }).then(parts => parts.filter(part => part.onHand < part.min).length),
   ]);
 
   const operationalAssets = totalAssets - assetsDown;

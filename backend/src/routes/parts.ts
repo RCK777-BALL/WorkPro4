@@ -35,14 +35,8 @@ router.get('/', asyncHandler(async (req: AuthRequest, res) => {
   const tenantId = req.user!.tenantId;
   const { belowMin } = req.query;
 
-  const where: any = { tenantId };
-  
-  if (belowMin === '1') {
-    where.onHand = { lt: prisma.part.fields.min };
-  }
-
   const parts = await prisma.part.findMany({
-    where,
+    where: { tenantId },
     include: {
       vendor: {
         select: { id: true, name: true },
@@ -51,7 +45,11 @@ router.get('/', asyncHandler(async (req: AuthRequest, res) => {
     orderBy: { name: 'asc' },
   });
 
-  return ok(res, parts.map(part => ({
+  const filteredParts = belowMin === '1'
+    ? parts.filter(part => part.onHand < part.min)
+    : parts;
+
+  return ok(res, filteredParts.map(part => ({
     ...part,
     cost: parseFloat(part.cost.toString()),
     createdAt: part.createdAt.toISOString(),
