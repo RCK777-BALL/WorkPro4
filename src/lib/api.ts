@@ -1,3 +1,5 @@
+import type { DashboardSummaryResponse } from '../../shared/types/dashboard';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export interface ApiResult<T> {
@@ -43,7 +45,6 @@ class ApiClient {
 
     try {
       const response = await fetch(url, config);
-      
       const result = await this.handleResponse<T>(response);
 
       if (result.error) {
@@ -62,16 +63,16 @@ class ApiClient {
         const mockData = this.getMockData<T>(endpoint);
         return {
           data: mockData,
-          error: null
+          error: null,
         } as ApiResult<T>;
       }
-      
+
       return {
         data: null,
         error: {
           code: 500,
-          message: error instanceof Error ? error.message : 'Network error'
-        }
+          message: error instanceof Error ? error.message : 'Network error',
+        },
       };
     }
   }
@@ -79,16 +80,27 @@ class ApiClient {
   private getMockData<T>(endpoint: string): T {
     // Mock data for development when backend is not available
     if (endpoint.includes('/summary')) {
-      return {
-        pmCompliance: 95.2,
-        woBacklog: 12,
-        completedMTD: 45,
-        assetUptime: 94.5,
-        totalAssets: 234,
-        assetsDown: 3,
-        partsCount: 1250,
-        stockHealth: 87.3,
-      } as T;
+      const mockSummary: DashboardSummaryResponse = {
+        workOrders: {
+          open: 12,
+          overdue: 3,
+          completedThisMonth: 45,
+          completedTrend: 8.5,
+        },
+        assets: {
+          uptime: 94.5,
+          total: 234,
+          down: 3,
+          operational: 231,
+        },
+        inventory: {
+          totalParts: 1250,
+          lowStock: 18,
+          stockHealth: 87.3,
+        },
+      };
+
+      return mockSummary as T;
     }
     
     // Return empty data for other endpoints to let components handle fallbacks

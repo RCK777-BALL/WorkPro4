@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { ok, asyncHandler } from '../utils/response';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { tenantScope } from '../middleware/tenant';
+import { DashboardSummaryResponse } from '../../../shared/types/dashboard';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -12,12 +13,18 @@ router.use(tenantScope);
 
 router.get('/', asyncHandler(async (req: AuthRequest, res) => {
   const tenantId = req.user!.tenantId;
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const startOfPreviousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+  const endOfPreviousMonth = startOfMonth;
 
   // Get work order stats
   const [
     openWOs,
     overdueWOs,
     completedThisMonth,
+    completedLastMonth,
     totalAssets,
     assetsDown,
     totalParts,
@@ -41,7 +48,17 @@ router.get('/', asyncHandler(async (req: AuthRequest, res) => {
         tenantId,
         status: 'completed',
         updatedAt: {
-          gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+          gte: startOfMonth,
+        },
+      },
+    }),
+    prisma.workOrder.count({
+      where: {
+        tenantId,
+        status: 'completed',
+        updatedAt: {
+          gte: startOfPreviousMonth,
+          lt: endOfPreviousMonth,
         },
       },
     }),
@@ -59,17 +76,32 @@ router.get('/', asyncHandler(async (req: AuthRequest, res) => {
   const operationalAssets = totalAssets - assetsDown;
   const assetUptime = totalAssets > 0 ? (operationalAssets / totalAssets) * 100 : 100;
   const stockHealth = totalParts > 0 ? ((totalParts - lowStockParts) / totalParts) * 100 : 100;
+  const completedTrendRaw = completedLastMonth === 0
+    ? (completedThisMonth > 0 ? 100 : 0)
+    : ((completedThisMonth - completedLastMonth) / completedLastMonth) * 100;
+  const completedTrend = Math.round(completedTrendRaw * 10) / 10;
 
-  return ok(res, {
-    pmCompliance: 95.2, // TODO: Calculate from PM tasks
-    woBacklog: openWOs,
-    completedMTD: completedThisMonth,
-    assetUptime: Math.round(assetUptime * 10) / 10,
-    totalAssets,
-    assetsDown,
-    partsCount: totalParts,
-    stockHealth: Math.round(stockHealth * 10) / 10,
-  });
+  const summary: DashboardSummaryResponse = {
+    workOrders: {
+      open: openWOs,
+      overdue: overdueWOs,
+      completedThisMonth,
+      completedTrend,
+    },
+    assets: {
+      uptime: Math.round(assetUptime * 10) / 10,
+      total: totalAssets,
+      down: assetsDown,
+      operational: operationalAssets,
+    },
+    inventory: {
+      totalParts,
+      lowStock: lowStockParts,
+      stockHealth: Math.round(stockHealth * 10) / 10,
+    },
+  };
+
+  return ok(res, summary);
 }));
 
 router.get('/trends', asyncHandler(async (req: AuthRequest, res) => {
