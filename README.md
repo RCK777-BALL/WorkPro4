@@ -73,6 +73,8 @@ cd backend && npm run db:migrate
 npm run db:seed
 ```
 
+The backend also reads MongoDB connection details from `backend/.env`. By default it points to the local development instance (`mongodb://localhost:27017/workpro4`), but you can safely swap `MONGO_URI` to an Atlas SRV string when using MongoDB Atlas—for example `mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/workpro4?retryWrites=true&w=majority`.
+
 4. **Start development servers:**
 ```bash
 npm run dev
