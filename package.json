@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "npm run --prefix frontend dev",
+    "dev": "vite",
     "dev:all": "concurrently \"npm run dev\" \"npm run --prefix backend dev\"",
     "build": "vite build",
     "preview": "vite preview --host",

@@ -17,6 +17,12 @@ export default defineConfig({
   },
   preview: { host: true, port: 4173 },
   optimizeDeps: {
+    entries: ['index.html'],
     exclude: ['lucide-react'],
+  },
+  build: {
+    rollupOptions: {
+      input: 'index.html',
+    },
   },
 })
