@@ -26,7 +26,7 @@ A comprehensive, production-ready CMMS (Computerized Maintenance Management Syst
 
 ### Tech Stack
 - **Backend**: Node.js, Express, TypeScript, Prisma, PostgreSQL, Redis (in `/backend`)
-- **Frontend**: React, TypeScript, TanStack Query, Tailwind CSS, shadcn/ui (in `/frontend`)
+- **Frontend**: React, TypeScript, TanStack Query, Tailwind CSS, shadcn/ui (root `src/`)
 - **Real-time**: Socket.IO for live updates
 - **Queue System**: BullMQ for background jobs
 - **File Storage**: Local development + S3 adapter ready
@@ -36,7 +36,8 @@ A comprehensive, production-ready CMMS (Computerized Maintenance Management Syst
 ```
 workpro-cmms/
 ├── backend/          # Express API server
-├── frontend/         # React web application
+├── src/              # React web application source
+├── frontend/         # Legacy workspace (use root `src/` instead)
 └── docker-compose.yml # Development services
 ```
 
@@ -77,10 +78,10 @@ The backend also reads MongoDB connection details from `backend/.env`. By defaul
 
 4. **Start development servers:**
 ```bash
-npm run dev
+npm run dev:all
 ```
 
-This starts both the backend server (localhost:3001) and frontend app (localhost:3000).
+This starts both the backend server (localhost:3001) and frontend app (localhost:5173). To run only the frontend, use `npm run dev`.
 
 ### Production Build
 ```bash
