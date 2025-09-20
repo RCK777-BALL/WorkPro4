@@ -52,7 +52,7 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/health/db', async (_req, res) => {
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    await prisma.$runCommandRaw({ ping: 1 });
     res.json({ ok: true });
   } catch (error) {
     console.error('❌ Database health check failed', error);

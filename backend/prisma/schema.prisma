@@ -6,12 +6,12 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
 model Tenant {
-  id   String @id @default(cuid())
+  id   String @id @map("_id") @default(auto()) @db.ObjectId
   name String
 
   users         User[]
@@ -35,14 +35,14 @@ model Tenant {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  tenantId     String   @map("tenant_id")
+  id           String   @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId     String   @map("tenant_id") @db.ObjectId
   email        String   @unique
   passwordHash String   @map("password_hash")
   name         String
   roles        String[] // ['tech', 'planner', 'supervisor', 'admin']
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id])
 
   createdWorkOrders WorkOrder[] @relation("CreatedBy")
   auditLogs         AuditLog[]
@@ -54,11 +54,11 @@ model User {
 }
 
 model Site {
-  id       String @id @default(cuid())
-  tenantId String @map("tenant_id")
+  id       String @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId String @map("tenant_id") @db.ObjectId
   name     String
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id])
   areas  Area[]
 
   createdAt DateTime @default(now())
@@ -68,13 +68,13 @@ model Site {
 }
 
 model Area {
-  id       String @id @default(cuid())
-  tenantId String @map("tenant_id")
-  siteId   String @map("site_id")
+  id       String @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId String @map("tenant_id") @db.ObjectId
+  siteId   String @map("site_id") @db.ObjectId
   name     String
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  site   Site   @relation(fields: [siteId], references: [id])
   lines  Line[]
 
   createdAt DateTime @default(now())
@@ -84,13 +84,13 @@ model Area {
 }
 
 model Line {
-  id       String @id @default(cuid())
-  tenantId String @map("tenant_id")
-  areaId   String @map("area_id")
+  id       String @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId String @map("tenant_id") @db.ObjectId
+  areaId   String @map("area_id") @db.ObjectId
   name     String
 
-  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  area     Area      @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  area     Area      @relation(fields: [areaId], references: [id])
   stations Station[]
 
   createdAt DateTime @default(now())
@@ -100,13 +100,13 @@ model Line {
 }
 
 model Station {
-  id       String @id @default(cuid())
-  tenantId String @map("tenant_id")
-  lineId   String @map("line_id")
+  id       String @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId String @map("tenant_id") @db.ObjectId
+  lineId   String @map("line_id") @db.ObjectId
   name     String
 
-  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  line   Line    @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  tenant Tenant  @relation(fields: [tenantId], references: [id])
+  line   Line    @relation(fields: [lineId], references: [id])
   assets Asset[]
 
   createdAt DateTime @default(now())
@@ -123,9 +123,9 @@ enum AssetStatus {
 }
 
 model Asset {
-  id          String      @id @default(cuid())
-  tenantId    String      @map("tenant_id")
-  stationId   String?     @map("station_id")
+  id          String      @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId    String      @map("tenant_id") @db.ObjectId
+  stationId   String?     @map("station_id") @db.ObjectId
   code        String
   name        String
   status      AssetStatus @default(operational)
@@ -133,8 +133,8 @@ model Asset {
   meterJson   Json?       @map("meter_json") // {name: string, value: number, unit: string}[]
   docsFolder  String?     @map("docs_folder")
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  station   Station?   @relation(fields: [stationId], references: [id], onDelete: SetNull)
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  station   Station?   @relation(fields: [stationId], references: [id])
   workOrders WorkOrder[]
   pmTasks   PMTask[]
 
@@ -146,18 +146,18 @@ model Asset {
 }
 
 model Part {
-  id       String  @id @default(cuid())
-  tenantId String  @map("tenant_id")
+  id       String  @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId String  @map("tenant_id") @db.ObjectId
   sku      String
   name     String
   min      Int     @default(0)
   max      Int     @default(100)
   onHand   Int     @default(0) @map("on_hand")
-  cost     Decimal @default(0) @db.Decimal(10, 2)
-  vendorId String? @map("vendor_id")
+  cost     Float   @default(0)
+  vendorId String? @map("vendor_id") @db.ObjectId
 
-  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  vendor Vendor? @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  tenant Tenant  @relation(fields: [tenantId], references: [id])
+  vendor Vendor? @relation(fields: [vendorId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -167,12 +167,12 @@ model Part {
 }
 
 model Vendor {
-  id          String @id @default(cuid())
-  tenantId    String @map("tenant_id")
+  id          String @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId    String @map("tenant_id") @db.ObjectId
   name        String
   contactJson Json?  @map("contact_json") // {email?, phone?, address?}
 
-  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant         Tenant          @relation(fields: [tenantId], references: [id])
   parts          Part[]
   purchaseOrders PurchaseOrder[]
 
@@ -205,9 +205,9 @@ enum ApprovalStatus {
 }
 
 model WorkOrder {
-  id             String           @id @default(cuid())
-  tenantId       String           @map("tenant_id")
-  assetId        String?          @map("asset_id")
+  id             String           @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId       String           @map("tenant_id") @db.ObjectId
+  assetId        String?          @map("asset_id") @db.ObjectId
   lineName       String?          @map("line_name")
   stationNumber  String?          @map("station_number")
   title          String
@@ -222,12 +222,12 @@ model WorkOrder {
   timeSpentMin   Int?             @map("time_spent_min")
   photos         String[]         // attachment URLs
   failureCode    String?          @map("failure_code")
-  pmTaskId       String?          @map("pm_task_id")
-  createdBy      String           @map("created_by")
+  pmTaskId       String?          @map("pm_task_id") @db.ObjectId
+  createdBy      String           @map("created_by") @db.ObjectId
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  asset     Asset?   @relation(fields: [assetId], references: [id], onDelete: SetNull)
-  pmTask    PMTask?  @relation(fields: [pmTaskId], references: [id], onDelete: SetNull)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  asset     Asset?   @relation(fields: [assetId], references: [id])
+  pmTask    PMTask?  @relation(fields: [pmTaskId], references: [id])
   createdByUser User @relation("CreatedBy", fields: [createdBy], references: [id])
 
   createdAt DateTime @default(now())
@@ -237,16 +237,16 @@ model WorkOrder {
 }
 
 model PMTask {
-  id              String    @id @default(cuid())
-  tenantId        String    @map("tenant_id")
-  assetId         String    @map("asset_id")
+  id              String    @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId        String    @map("tenant_id") @db.ObjectId
+  assetId         String    @map("asset_id") @db.ObjectId
   title           String
   ruleJson        Json      @map("rule_json") // {type: 'calendar'|'meter', cron?: string, meterName?: string, threshold?: number}
   lastGeneratedAt DateTime? @map("last_generated_at")
   active          Boolean   @default(true)
 
-  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  asset      Asset       @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+  asset      Asset       @relation(fields: [assetId], references: [id])
   workOrders WorkOrder[]
 
   createdAt DateTime @default(now())
@@ -263,14 +263,14 @@ enum PurchaseOrderStatus {
 }
 
 model PurchaseOrder {
-  id       String              @id @default(cuid())
-  tenantId String              @map("tenant_id")
-  vendorId String              @map("vendor_id")
+  id       String              @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId String              @map("tenant_id") @db.ObjectId
+  vendorId String              @map("vendor_id") @db.ObjectId
   status   PurchaseOrderStatus @default(draft)
   lines    Json                // {partId: string, qty: number, unitCost: number}[]
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  vendor Vendor @relation(fields: [vendorId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -279,14 +279,14 @@ model PurchaseOrder {
 }
 
 model Attachment {
-  id          String @id @default(cuid())
-  tenantId    String @map("tenant_id")
+  id          String @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId    String @map("tenant_id") @db.ObjectId
   url         String
   filename    String
   contentType String @map("content_type")
   size        Int
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id])
 
   createdAt DateTime @default(now())
 
@@ -294,18 +294,18 @@ model Attachment {
 }
 
 model AuditLog {
-  id         String    @id @default(cuid())
+  id         String    @id @map("_id") @default(auto()) @db.ObjectId
   ts         DateTime  @default(now())
-  tenantId   String    @map("tenant_id")
-  userId     String?   @map("user_id")
+  tenantId   String    @map("tenant_id") @db.ObjectId
+  userId     String?   @map("user_id") @db.ObjectId
   action     String    // 'create', 'update', 'delete', 'assign', 'complete', etc.
   entityType String    @map("entity_type") // 'work_order', 'asset', 'part', etc.
   entityId   String    @map("entity_id")
   beforeJson Json?     @map("before_json")
   afterJson  Json?     @map("after_json")
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user   User?  @relation(fields: [userId], references: [id])
 
   @@map("audit_logs")
 }

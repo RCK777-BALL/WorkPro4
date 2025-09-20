@@ -1,16 +1,14 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:15
+  mongodb:
+    image: mongo:6
     environment:
-      POSTGRES_DB: workpro_dev
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      MONGO_INITDB_DATABASE: workpro_dev
     ports:
-      - "5432:5432"
+      - "27017:27017"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mongo_data:/data/db
 
   redis:
     image: redis:7-alpine
@@ -36,5 +34,5 @@ services:
       - "1025:1025"  # SMTP
 
 volumes:
-  postgres_data:
+  mongo_data:
   minio_data:
