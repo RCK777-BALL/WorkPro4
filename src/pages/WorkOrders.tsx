@@ -34,7 +34,8 @@ export default function WorkOrders() {
     queryKey: ['work-orders'],
     queryFn: async (): Promise<MockWorkOrder[]> => {
       try {
-        return await api.get<MockWorkOrder[]>('/work-orders');
+        const result = await api.get<MockWorkOrder[]>('/work-orders');
+        return Array.isArray(result) ? result : mockWorkOrders;
       } catch (error) {
         console.error('Failed to load work orders, using mock data', error);
         return mockWorkOrders;

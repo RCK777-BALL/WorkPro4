@@ -67,7 +67,8 @@ export function Purchasing() {
         const params = new URLSearchParams();
         if (search) params.set('q', search);
         if (statusFilter) params.set('status', statusFilter);
-        return await api.get<PurchaseOrderWithDetails[]>(`/purchase-orders?${params}`);
+        const result = await api.get<PurchaseOrderWithDetails[]>(`/purchase-orders?${params}`);
+        return Array.isArray(result) ? result : [];
       } catch {
         // Mock data fallback
         return [

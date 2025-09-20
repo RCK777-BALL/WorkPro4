@@ -52,15 +52,22 @@ export function WorkOrderForm({ workOrderId, onClose, onSuccess }: WorkOrderForm
     queryKey: ['assets'],
     queryFn: async (): Promise<Asset[]> => {
       try {
-        const result = await api.get<{ sites: any[] }>('/assets/tree');
+        const result = await api.get<{ sites?: any[] }>('/assets/tree');
+        const sites = Array.isArray(result?.sites) ? result.sites : [];
         // Flatten the asset tree structure
         const allAssets: Asset[] = [];
-        result.sites.forEach(site => {
-          site.areas?.forEach((area: any) => {
-            area.lines?.forEach((line: any) => {
-              line.stations?.forEach((station: any) => {
-                station.assets?.forEach((asset: any) => {
-                  allAssets.push(asset);
+        sites.forEach((site) => {
+          const areas = Array.isArray(site?.areas) ? site.areas : [];
+          areas.forEach((area: any) => {
+            const lines = Array.isArray(area?.lines) ? area.lines : [];
+            lines.forEach((line: any) => {
+              const stations = Array.isArray(line?.stations) ? line.stations : [];
+              stations.forEach((station: any) => {
+                const stationAssets = Array.isArray(station?.assets) ? station.assets : [];
+                stationAssets.forEach((asset: Asset) => {
+                  if (asset?.id && asset?.name) {
+                    allAssets.push(asset);
+                  }
                 });
               });
             });
@@ -83,7 +90,8 @@ export function WorkOrderForm({ workOrderId, onClose, onSuccess }: WorkOrderForm
     queryKey: ['users'],
     queryFn: async (): Promise<User[]> => {
       try {
-        return await api.get<User[]>('/users');
+        const result = await api.get<User[]>('/users');
+        return Array.isArray(result) ? result : [];
       } catch {
         // Mock data fallback
         return [
