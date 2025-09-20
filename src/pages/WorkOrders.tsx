@@ -1,50 +1,77 @@
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ClipboardList, Plus, Search, Filter, User, Calendar, AlertTriangle } from 'lucide-react';
+import { WorkOrderForm } from '../components/forms/WorkOrderForm';
+import { api } from '../lib/api';
 import { useTheme } from '../contexts/ThemeContext';
 
+type WorkOrder = {
+  id: string;
+  title: string;
+  description: string;
+  priority: 'Urgent' | 'High' | 'Medium' | 'Low';
+  status: 'Open' | 'Assigned' | 'In Progress' | 'Completed' | 'Cancelled';
+  asset: string;
+  assignee: string;
+  dueDate: string;
+  createdDate: string;
+};
+
 export default function WorkOrders() {
+  const [showCreate, setShowCreate] = useState(false);
+  const queryClient = useQueryClient();
   const { colors } = useTheme();
+
+  const { data: workOrders = [] } = useQuery({
+    queryKey: ['work-orders'],
+    queryFn: async (): Promise<WorkOrder[]> => {
+      try {
+        return await api.get<WorkOrder[]>('/work-orders');
+      } catch {
+        return [
+          {
+            id: 'WO-2024-001',
+            title: 'Motor Overheating - Emergency Repair',
+            description: 'Drive motor is running hot and making unusual noises. Needs immediate attention.',
+            priority: 'Urgent',
+            status: 'Assigned',
+            asset: 'Drive Motor #1',
+            assignee: 'John Smith',
+            dueDate: 'Today',
+            createdDate: '2 hours ago'
+          },
+          {
+            id: 'WO-2024-002',
+            title: 'Quarterly Hydraulic System Inspection',
+            description: 'Routine quarterly inspection of hydraulic pump and associated components.',
+            priority: 'Medium',
+            status: 'Completed',
+            asset: 'Hydraulic Pump #1',
+            assignee: 'Jane Doe',
+            dueDate: 'Yesterday',
+            createdDate: '3 days ago'
+          },
+          {
+            id: 'WO-2024-003',
+            title: 'Conveyor Belt Replacement',
+            description: 'Replace worn conveyor belt before it fails.',
+            priority: 'High',
+            status: 'Open',
+            asset: 'Conveyor Belt #1',
+            assignee: 'Unassigned',
+            dueDate: 'Next week',
+            createdDate: '1 day ago'
+          }
+        ];
+      }
+    }
+  });
 
   const statusStats = [
     { label: 'Open', count: 24, color: colors.info },
     { label: 'In Progress', count: 8, color: colors.warning },
     { label: 'Completed', count: 156, color: colors.success },
     { label: 'Overdue', count: 3, color: colors.error }
-  ];
-
-  const workOrders = [
-    {
-      id: 'WO-2024-001',
-      title: 'Motor Overheating - Emergency Repair',
-      description: 'Drive motor is running hot and making unusual noises. Needs immediate attention.',
-      priority: 'Urgent',
-      status: 'Assigned',
-      asset: 'Drive Motor #1',
-      assignee: 'John Smith',
-      dueDate: 'Today',
-      createdDate: '2 hours ago'
-    },
-    {
-      id: 'WO-2024-002',
-      title: 'Quarterly Hydraulic System Inspection',
-      description: 'Routine quarterly inspection of hydraulic pump and associated components.',
-      priority: 'Medium',
-      status: 'Completed',
-      asset: 'Hydraulic Pump #1',
-      assignee: 'Jane Doe',
-      dueDate: 'Yesterday',
-      createdDate: '3 days ago'
-    },
-    {
-      id: 'WO-2024-003',
-      title: 'Conveyor Belt Replacement',
-      description: 'Replace worn conveyor belt before it fails.',
-      priority: 'High',
-      status: 'Open',
-      asset: 'Conveyor Belt #1',
-      assignee: 'Unassigned',
-      dueDate: 'Next week',
-      createdDate: '1 day ago'
-    }
   ];
 
   const getPriorityColor = (priority: string) => {
@@ -78,9 +105,10 @@ export default function WorkOrders() {
             Manage and track maintenance work orders
           </p>
         </div>
-        <button 
+        <button
           className="flex items-center gap-2 px-4 py-2 rounded-xl hover:opacity-90 transition-colors"
           style={{ backgroundColor: colors.primary, color: 'white' }}
+          onClick={() => setShowCreate(true)}
         >
           <Plus className="w-4 h-4" />
           New Work Order
@@ -151,9 +179,9 @@ export default function WorkOrders() {
                   >
                     {wo.status}
                   </span>
-                  <span 
+                  <span
                     className="px-2 py-1 text-xs rounded-full flex items-center gap-1"
-                    style={{ 
+                    style={{
                       backgroundColor: `${getPriorityColor(wo.priority)}20`,
                       color: getPriorityColor(wo.priority)
                     }}
@@ -205,6 +233,15 @@ export default function WorkOrders() {
           </div>
         ))}
       </div>
+
+      {showCreate && (
+        <WorkOrderForm
+          onClose={() => setShowCreate(false)}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['work-orders'] });
+          }}
+        />
+      )}
     </div>
   );
 }
