@@ -1,4 +1,4 @@
-const React = require('react')
+import React from 'react'
 
 const TabsContext = React.createContext(null)
 
@@ -10,7 +10,7 @@ function useTabsContext() {
   return ctx
 }
 
-function TabsRoot({ defaultValue, value, onValueChange, children }) {
+export function Root({ defaultValue, value, onValueChange, children }) {
   const isControlled = value !== undefined
   const [internalValue, setInternalValue] = React.useState(defaultValue)
 
@@ -29,11 +29,11 @@ function TabsRoot({ defaultValue, value, onValueChange, children }) {
   return React.createElement(TabsContext.Provider, { value: contextValue }, children)
 }
 
-const TabsList = React.forwardRef(({ children, ...props }, ref) =>
+export const List = React.forwardRef(({ children, ...props }, ref) =>
   React.createElement('div', { role: 'tablist', ref, ...props }, children),
 )
 
-const TabsTrigger = React.forwardRef(({ value, children, onClick, ...props }, ref) => {
+export const Trigger = React.forwardRef(({ value, children, onClick, ...props }, ref) => {
   const { value: activeValue, setValue } = useTabsContext()
   const isActive = activeValue === value
 
@@ -55,7 +55,7 @@ const TabsTrigger = React.forwardRef(({ value, children, onClick, ...props }, re
   )
 })
 
-const TabsContent = React.forwardRef(({ value, children, ...props }, ref) => {
+export const Content = React.forwardRef(({ value, children, ...props }, ref) => {
   const { value: activeValue } = useTabsContext()
   if (activeValue !== value) {
     return null
@@ -63,9 +63,11 @@ const TabsContent = React.forwardRef(({ value, children, ...props }, ref) => {
   return React.createElement('div', { role: 'tabpanel', ref, ...props }, children)
 })
 
-module.exports = {
-  Root: TabsRoot,
-  List: TabsList,
-  Trigger: TabsTrigger,
-  Content: TabsContent,
+const TabsPrimitive = {
+  Root,
+  List,
+  Trigger,
+  Content,
 }
+
+export default TabsPrimitive

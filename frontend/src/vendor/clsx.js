@@ -12,11 +12,8 @@ function toClass(value) {
   return ''
 }
 
-function clsx(...inputs) {
+export function clsx(...inputs) {
   return inputs.map(toClass).filter(Boolean).join(' ')
 }
 
-module.exports = {
-  clsx,
-  default: clsx,
-}
+export default clsx
