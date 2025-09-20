@@ -18,6 +18,8 @@ const createWorkOrderSchema = z.object({
   description: z.string().optional(),
   priority: z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
   assignees: z.array(z.string()).default([]),
+  lineName: z.string().min(1).optional(),
+  stationNumber: z.string().min(1).optional(),
   checklists: z.array(z.object({
     text: z.string(),
     note: z.string().optional(),
@@ -29,6 +31,8 @@ const updateWorkOrderSchema = z.object({
   description: z.string().optional(),
   priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
   assignees: z.array(z.string()).optional(),
+  lineName: z.string().min(1).optional(),
+  stationNumber: z.string().min(1).optional(),
   checklists: z.array(z.object({
     text: z.string(),
     done: z.boolean(),
