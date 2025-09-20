@@ -6,6 +6,7 @@ import { ok, fail, asyncHandler } from '../utils/response';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { prisma } from '../db';
 
+
 const router = Router();
 
 const loginSchema = z.object({
@@ -29,7 +30,7 @@ router.post('/login', asyncHandler(async (req, res) => {
 
   const token = jwt.sign(
     { userId: user.id, tenantId: user.tenantId },
-    process.env.JWT_SECRET!,
+    getJwtSecret(),
     { expiresIn: '24h' }
   );
 
