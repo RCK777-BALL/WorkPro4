@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+
 import {
   Calendar,
   Filter,
   Plus,
   Search,
+  X,
   User,
   Wrench,
 } from 'lucide-react';
@@ -24,11 +26,13 @@ import { api } from '@/lib/api';
 import { formatDate, getPriorityColor, getStatusColor } from '@/lib/utils';
 
 const INITIAL_ADVANCED_FILTERS = {
+
   priority: '',
   assignee: '',
   from: '',
   to: '',
 };
+
 
 export function WorkOrders() {
   const [search, setSearch] = useState('');
@@ -47,6 +51,7 @@ export function WorkOrders() {
     }
   }, [isFiltersOpen, advancedFilters]);
 
+
   const {
     data,
     isLoading,
@@ -60,6 +65,7 @@ export function WorkOrders() {
         assignee: advancedFilters.assignee,
         from: advancedFilters.from,
         to: advancedFilters.to,
+
       },
     ],
     queryFn: async () => {
@@ -72,6 +78,7 @@ export function WorkOrders() {
         params.set('assignee', advancedFilters.assignee);
       if (advancedFilters.from) params.set('from', advancedFilters.from);
       if (advancedFilters.to) params.set('to', advancedFilters.to);
+
 
       const result = await api.get(`/work-orders?${params}`);
       return result.data;
@@ -105,7 +112,7 @@ export function WorkOrders() {
           <h1 className="text-3xl font-bold text-gray-900">Work Orders</h1>
           <p className="text-gray-500">Manage and track maintenance work orders</p>
         </div>
-        <Button className="flex items-center">
+        <Button className="flex items-center" onClick={() => setShowCreate(true)}>
           <Plus className="w-4 h-4 mr-2" />
           New Work Order
         </Button>
@@ -150,6 +157,7 @@ export function WorkOrders() {
           variant="outline"
           className="flex items-center"
           onClick={() => setIsFiltersOpen((prev) => !prev)}
+
         >
           <Filter className="w-4 h-4 mr-2" />
           Filters
@@ -172,6 +180,7 @@ export function WorkOrders() {
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select priority" />
+
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="low">Low</SelectItem>
@@ -190,13 +199,14 @@ export function WorkOrders() {
                   value={tempFilters.assignee}
                   onChange={(e) =>
                     setTempFilters((prev) => ({
+
                       ...prev,
                       assignee: e.target.value,
                     }))
                   }
                 />
               </div>
-              <div>
+             <div>
                 <p className="text-sm font-medium text-gray-700 mb-2">From</p>
                 <Input
                   type="date"
@@ -224,6 +234,7 @@ export function WorkOrders() {
                 onClick={() => {
                   setTempFilters({ ...INITIAL_ADVANCED_FILTERS });
                   setAdvancedFilters({ ...INITIAL_ADVANCED_FILTERS });
+
                 }}
               >
                 Clear
@@ -232,6 +243,7 @@ export function WorkOrders() {
                 onClick={() => {
                   setAdvancedFilters({ ...tempFilters });
                   setIsFiltersOpen(false);
+
                 }}
               >
                 Apply Filters
@@ -331,12 +343,44 @@ export function WorkOrders() {
                 ? 'Try adjusting your search or filter criteria'
                 : 'Get started by creating your first work order'}
             </p>
-            <Button>
+            <Button onClick={() => setShowCreate(true)}>
               <Plus className="w-4 h-4 mr-2" />
               New Work Order
             </Button>
           </CardContent>
         </Card>
+      )}
+
+      {showCreate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between border-b px-6 py-4">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Create Work Order</h2>
+                <p className="text-sm text-gray-500">
+                  Provide the details below to add a new work order.
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setShowCreate(false)}
+                className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto px-6 py-4">
+              <WorkOrderForm
+                onClose={() => setShowCreate(false)}
+                onSuccess={() => {
+                  setShowCreate(false);
+                  queryClient.invalidateQueries({ queryKey: ['work-orders'] });
+                }}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
