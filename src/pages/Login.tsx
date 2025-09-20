@@ -1,36 +1,32 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Building2, Shield, Users, Wrench } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../hooks/useAuth';
 
 export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
+  const { login, isLoading, error: authError } = useAuth();
+
+  useEffect(() => {
+    setError(authError ?? '');
+  }, [authError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
     setError('');
-    
+
     try {
-      // Mock login - replace with actual authentication
-      if (email && password) {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        navigate('/');
-      } else {
-        setError('Please enter email and password');
-      }
+      await login({ email, password });
+      navigate('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     }
-    
-    setIsLoading(false);
   };
 
   return (
