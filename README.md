@@ -85,6 +85,8 @@ This starts both the backend server (localhost:5010) and frontend app (localhost
 
 The API exposes a lightweight readiness probe at `http://localhost:5010/api/health` and a database-specific check at `http://localhost:5010/health/db`.
 
+> ℹ️ Configure the frontend API base URL by setting `VITE_API_URL=http://localhost:5010/api` in the root `.env` file. After changing environment variables, restart your `npm run dev`/`npm run dev:all` process so Vite picks up the updates.
+
 ### Production Build
 ```bash
 npm run build
