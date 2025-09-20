@@ -192,6 +192,8 @@ async function main() {
       data: {
         tenantId: tenant.id,
         assetId: assets[2].id, // Motor (down)
+        lineName: line.name,
+        stationNumber: 'A-01',
         title: 'Motor Overheating - Emergency Repair',
         description: 'Drive motor is running hot and making unusual noises. Needs immediate attention.',
         priority: 'urgent',
@@ -210,6 +212,8 @@ async function main() {
       data: {
         tenantId: tenant.id,
         assetId: assets[0].id, // Pump
+        lineName: line.name,
+        stationNumber: 'A-02',
         title: 'Quarterly Hydraulic System Inspection',
         description: 'Routine quarterly inspection of hydraulic pump and associated components.',
         priority: 'medium',
@@ -237,6 +241,8 @@ async function main() {
       data: {
         tenantId: tenant.id,
         assetId: assets[1].id, // Conveyor
+        lineName: line.name,
+        stationNumber: 'A-03',
         title: 'Conveyor Belt Replacement',
         description: 'Replace worn conveyor belt before it fails.',
         priority: 'high',
