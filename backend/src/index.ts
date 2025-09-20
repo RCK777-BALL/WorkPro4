@@ -3,10 +3,9 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import mongoose from 'mongoose';
 import { requestLogger } from './middleware/requestLogger';
 import { errorHandler } from './middleware/errorHandler';
-import { connectDB } from './db';
+import { prisma, verifyDatabaseConnection } from './db';
 
 // Routes
 import authRoutes from './routes/auth';
@@ -46,8 +45,14 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/health/db', (_req, res) => {
-  res.json({ readyState: mongoose.connection.readyState });
+app.get('/health/db', async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('❌ Database health check failed', error);
+    res.status(503).json({ ok: false });
+  }
 });
 
 // API routes
@@ -75,14 +80,20 @@ app.use('*', (req, res) => {
 });
 
 async function start() {
-  const mongoUri = process.env.MONGO_URI;
+  const databaseUrl = process.env.DATABASE_URL?.trim();
 
-  if (!mongoUri) {
-    console.error('❌ MONGO_URI environment variable is required');
+  if (!databaseUrl) {
+    console.error('❌ DATABASE_URL environment variable is required');
     process.exit(1);
   }
 
-  await connectDB(mongoUri, process.env.DB_NAME);
+  try {
+    await verifyDatabaseConnection();
+    console.log('🗄️ Connected to database');
+  } catch (error) {
+    console.error('❌ Failed to connect to database', error);
+    process.exit(1);
+  }
 
   app.listen(PORT, () => {
     console.log(`🚀 Backend server running on port ${PORT}`);

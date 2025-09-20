@@ -43,17 +43,13 @@ export const useAuth = create<AuthState>()(
         try {
           const response = await api.post<LoginResponse>('/auth/login', credentials);
           api.setToken(response.token);
-          set({ 
-            user: response.user, 
-          }
-          )
-          api.setToken(token);
+
           const user = await api.get<User>('/auth/me');
+
           set({ user, isAuthenticated: true, isLoading: false });
         } catch (error) {
           api.clearToken();
-          set({ isLoading: false });
-          set({ user: null, isAuthenticated: false });
+          set({ user: null, isAuthenticated: false, isLoading: false });
         }
       }
     }),
