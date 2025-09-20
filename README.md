@@ -81,7 +81,9 @@ The backend also reads MongoDB connection details from `backend/.env`. By defaul
 npm run dev:all
 ```
 
-This starts both the backend server (localhost:3001) and frontend app (localhost:5173). To run only the frontend, use `npm run dev`.
+This starts both the backend server (localhost:5010) and frontend app (localhost:5173). To run only the frontend, use `npm run dev`.
+
+The API exposes a lightweight readiness probe at `http://localhost:5010/api/health` and a database-specific check at `http://localhost:5010/health/db`.
 
 ### Production Build
 ```bash

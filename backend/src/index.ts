@@ -17,12 +17,12 @@ import vendorRoutes from './routes/vendors';
 import searchRoutes from './routes/search';
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3001;
+const PORT = Number(process.env.PORT) || 5010;
 
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' ? process.env.FRONTEND_URL : 'http://localhost:3000',
+  origin: process.env.NODE_ENV === 'production' ? process.env.FRONTEND_URL : 'http://localhost:5173',
   credentials: true,
 }));
 
@@ -42,6 +42,10 @@ app.use(requestLogger);
 
 // Health check
 app.get('/health', (_req, res) => {
+  res.json({ ok: true });
+});
+
+app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
 });
 
@@ -83,21 +87,20 @@ async function start() {
   const databaseUrl = process.env.DATABASE_URL?.trim();
 
   if (!databaseUrl) {
-    console.error('❌ DATABASE_URL environment variable is required');
-    process.exit(1);
-  }
-
-  try {
-    await verifyDatabaseConnection();
-    console.log('🗄️ Connected to database');
-  } catch (error) {
-    console.error('❌ Failed to connect to database', error);
-    process.exit(1);
+    console.warn('⚠️ DATABASE_URL not set. Starting server without database connection.');
+  } else {
+    try {
+      await verifyDatabaseConnection();
+      console.log('🗄️ Connected to database');
+    } catch (error) {
+      console.error('❌ Failed to connect to database', error);
+      process.exit(1);
+    }
   }
 
   app.listen(PORT, () => {
     console.log(`🚀 Backend server running on port ${PORT}`);
-    console.log(`🩺 Health check: http://localhost:${PORT}/health`);
+    console.log(`🩺 Health check: http://localhost:${PORT}/api/health`);
     console.log(`🗄️ DB health: http://localhost:${PORT}/health/db`);
     console.log(`🔐 API base: http://localhost:${PORT}/api`);
   });
