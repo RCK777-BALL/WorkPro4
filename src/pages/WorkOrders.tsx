@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ClipboardList, Plus, Search, Filter, User, Calendar, AlertTriangle } from 'lucide-react';
 import { WorkOrderForm } from '../components/forms/WorkOrderForm';
+
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../lib/api';
 
@@ -18,7 +19,21 @@ interface WorkOrder {
   createdDate: string;
 }
 
+type WorkOrder = {
+  id: string;
+  title: string;
+  description: string;
+  priority: 'Urgent' | 'High' | 'Medium' | 'Low';
+  status: 'Open' | 'Assigned' | 'In Progress' | 'Completed' | 'Cancelled';
+  asset: string;
+  assignee: string;
+  dueDate: string;
+  createdDate: string;
+};
+
 export default function WorkOrders() {
+  const [showCreate, setShowCreate] = useState(false);
+  const queryClient = useQueryClient();
   const { colors } = useTheme();
   const navigate = useNavigate();
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -74,6 +89,51 @@ export default function WorkOrders() {
   const completedCount = workOrders.filter(wo => wo.status === 'Completed').length;
   const overdueCount = workOrders.filter(wo => wo.priority === 'Urgent').length;
 
+  const { data: workOrders = [] } = useQuery({
+    queryKey: ['work-orders'],
+    queryFn: async (): Promise<WorkOrder[]> => {
+      try {
+        return await api.get<WorkOrder[]>('/work-orders');
+      } catch {
+        return [
+          {
+            id: 'WO-2024-001',
+            title: 'Motor Overheating - Emergency Repair',
+            description: 'Drive motor is running hot and making unusual noises. Needs immediate attention.',
+            priority: 'Urgent',
+            status: 'Assigned',
+            asset: 'Drive Motor #1',
+            assignee: 'John Smith',
+            dueDate: 'Today',
+            createdDate: '2 hours ago'
+          },
+          {
+            id: 'WO-2024-002',
+            title: 'Quarterly Hydraulic System Inspection',
+            description: 'Routine quarterly inspection of hydraulic pump and associated components.',
+            priority: 'Medium',
+            status: 'Completed',
+            asset: 'Hydraulic Pump #1',
+            assignee: 'Jane Doe',
+            dueDate: 'Yesterday',
+            createdDate: '3 days ago'
+          },
+          {
+            id: 'WO-2024-003',
+            title: 'Conveyor Belt Replacement',
+            description: 'Replace worn conveyor belt before it fails.',
+            priority: 'High',
+            status: 'Open',
+            asset: 'Conveyor Belt #1',
+            assignee: 'Unassigned',
+            dueDate: 'Next week',
+            createdDate: '1 day ago'
+          }
+        ];
+      }
+    }
+  });
+
   const statusStats = [
     { label: 'Open', count: openCount, color: colors.info },
     { label: 'In Progress', count: inProgressCount, color: colors.warning },
@@ -98,6 +158,7 @@ export default function WorkOrders() {
   const handleUpdate = (workOrderId: string) => {
     openForm(workOrderId);
   };
+
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -134,6 +195,7 @@ export default function WorkOrders() {
           className="flex items-center gap-2 px-4 py-2 rounded-xl hover:opacity-90 transition-colors"
           style={{ backgroundColor: colors.primary, color: 'white' }}
           onClick={() => openForm()}
+
         >
           <Plus className="w-4 h-4" />
           New Work Order
@@ -230,6 +292,7 @@ export default function WorkOrders() {
                       {wo.priority === 'Urgent' && <AlertTriangle className="w-3 h-3" />}
                       {wo.priority}
                     </span>
+
                   </div>
 
                   <h4 className="font-medium mb-2" style={{ color: colors.foreground }}>
@@ -284,6 +347,7 @@ export default function WorkOrders() {
           onClose={closeForm}
           onSuccess={() => {
             refetch();
+
           }}
         />
       )}
