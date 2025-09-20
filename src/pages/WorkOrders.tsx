@@ -1,8 +1,10 @@
 import { ClipboardList, Plus, Search, Filter, User, Calendar, AlertTriangle } from 'lucide-react';
+import { useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 
 export default function WorkOrders() {
   const { colors } = useTheme();
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
   const statusStats = [
     { label: 'Open', count: 24, color: colors.info },
@@ -68,6 +70,10 @@ export default function WorkOrders() {
     }
   };
 
+  const filteredWorkOrders = statusFilter
+    ? workOrders.filter((wo) => wo.status === statusFilter)
+    : workOrders;
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -89,16 +95,24 @@ export default function WorkOrders() {
 
       {/* Status Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {statusStats.map((stat, index) => (
-          <div 
-            key={index}
-            className="rounded-xl border p-4 shadow-sm text-center hover:shadow-md transition-shadow cursor-pointer"
-            style={{ backgroundColor: colors.card, borderColor: colors.border }}
-          >
-            <div className="text-2xl font-bold" style={{ color: stat.color }}>{stat.count}</div>
-            <div className="text-sm" style={{ color: colors.mutedForeground }}>{stat.label}</div>
-          </div>
-        ))}
+        {statusStats.map((stat, index) => {
+          const isActive = statusFilter === stat.label;
+
+          return (
+            <div
+              key={index}
+              onClick={() => setStatusFilter((prev) => (prev === stat.label ? null : stat.label))}
+              className="rounded-xl border p-4 shadow-sm text-center hover:shadow-md transition-shadow cursor-pointer"
+              style={{
+                backgroundColor: isActive ? `${stat.color}20` : colors.card,
+                borderColor: isActive ? stat.color : colors.border
+              }}
+            >
+              <div className="text-2xl font-bold" style={{ color: stat.color }}>{stat.count}</div>
+              <div className="text-sm" style={{ color: colors.mutedForeground }}>{stat.label}</div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Search and Filters */}
@@ -130,8 +144,8 @@ export default function WorkOrders() {
 
       {/* Work Orders List */}
       <div className="space-y-4">
-        {workOrders.map((wo) => (
-          <div 
+        {filteredWorkOrders.map((wo) => (
+          <div
             key={wo.id}
             className="rounded-xl border p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
