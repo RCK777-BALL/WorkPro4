@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Calendar,
@@ -13,22 +13,65 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { api } from '@/lib/api';
 import { formatDate, getPriorityColor, getStatusColor } from '@/lib/utils';
+
+const INITIAL_ADVANCED_FILTERS = {
+  priority: '',
+  assignee: '',
+  from: '',
+  to: '',
+};
 
 export function WorkOrders() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [advancedFilters, setAdvancedFilters] = useState(() => ({
+    ...INITIAL_ADVANCED_FILTERS,
+  }));
+  const [tempFilters, setTempFilters] = useState(() => ({
+    ...INITIAL_ADVANCED_FILTERS,
+  }));
+
+  useEffect(() => {
+    if (isFiltersOpen) {
+      setTempFilters({ ...advancedFilters });
+    }
+  }, [isFiltersOpen, advancedFilters]);
 
   const {
     data,
     isLoading,
   } = useQuery({
-    queryKey: ['work-orders', { search, status: statusFilter }],
+    queryKey: [
+      'work-orders',
+      {
+        search,
+        status: statusFilter,
+        priority: advancedFilters.priority,
+        assignee: advancedFilters.assignee,
+        from: advancedFilters.from,
+        to: advancedFilters.to,
+      },
+    ],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (search) params.set('q', search);
       if (statusFilter) params.set('status', statusFilter);
+      if (advancedFilters.priority)
+        params.set('priority', advancedFilters.priority);
+      if (advancedFilters.assignee)
+        params.set('assignee', advancedFilters.assignee);
+      if (advancedFilters.from) params.set('from', advancedFilters.from);
+      if (advancedFilters.to) params.set('to', advancedFilters.to);
 
       const result = await api.get(`/work-orders?${params}`);
       return result.data;
@@ -103,11 +146,100 @@ export function WorkOrders() {
             className="pl-10"
           />
         </div>
-        <Button variant="outline" className="flex items-center">
+        <Button
+          variant="outline"
+          className="flex items-center"
+          onClick={() => setIsFiltersOpen((prev) => !prev)}
+        >
           <Filter className="w-4 h-4 mr-2" />
           Filters
         </Button>
       </div>
+
+      {isFiltersOpen && (
+        <Card className="mt-4">
+          <CardContent className="p-6 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">
+                  Priority
+                </p>
+                <Select
+                  value={tempFilters.priority}
+                  onValueChange={(value) =>
+                    setTempFilters((prev) => ({ ...prev, priority: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select priority" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="urgent">Urgent</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">
+                  Assignee
+                </p>
+                <Input
+                  placeholder="Enter assignee name"
+                  value={tempFilters.assignee}
+                  onChange={(e) =>
+                    setTempFilters((prev) => ({
+                      ...prev,
+                      assignee: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">From</p>
+                <Input
+                  type="date"
+                  value={tempFilters.from}
+                  onChange={(e) =>
+                    setTempFilters((prev) => ({ ...prev, from: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">To</p>
+                <Input
+                  type="date"
+                  value={tempFilters.to}
+                  onChange={(e) =>
+                    setTempFilters((prev) => ({ ...prev, to: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setTempFilters({ ...INITIAL_ADVANCED_FILTERS });
+                  setAdvancedFilters({ ...INITIAL_ADVANCED_FILTERS });
+                }}
+              >
+                Clear
+              </Button>
+              <Button
+                onClick={() => {
+                  setAdvancedFilters({ ...tempFilters });
+                  setIsFiltersOpen(false);
+                }}
+              >
+                Apply Filters
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Work Orders List */}
       <div className="space-y-4">
