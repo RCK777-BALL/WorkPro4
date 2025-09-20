@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { ok, fail, asyncHandler } from '../utils/response';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { prisma } from '../db';
+import { getJwtSecret } from '../config/auth';
 
 
 const router = Router();
