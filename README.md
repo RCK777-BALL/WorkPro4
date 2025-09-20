@@ -83,6 +83,8 @@ npm run dev:all
 
 This starts both the backend server (localhost:3001) and frontend app (localhost:5173). To run only the frontend, use `npm run dev`.
 
+> ℹ️ Configure the frontend API base URL by setting `VITE_API_URL=http://localhost:5010/api` in the root `.env` file. After changing environment variables, restart your `npm run dev`/`npm run dev:all` process so Vite picks up the updates.
+
 ### Production Build
 ```bash
 npm run build
