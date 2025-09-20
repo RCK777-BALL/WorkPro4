@@ -1,8 +1,37 @@
+import { useState } from 'react';
 import { ClipboardList, Plus, Search, Filter, User, Calendar, AlertTriangle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '../contexts/ThemeContext';
+import { api } from '../lib/api';
+import { mockWorkOrders, type MockWorkOrder } from '../lib/mockWorkOrders';
+import { WorkOrderForm } from '../components/forms/WorkOrderForm';
 
 export default function WorkOrders() {
   const { colors } = useTheme();
+  const navigate = useNavigate();
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<string | null>(null);
+
+  const { data: workOrders = mockWorkOrders, isLoading, refetch } = useQuery<MockWorkOrder[]>({
+    queryKey: ['work-orders'],
+    queryFn: async () => {
+      try {
+        const result = await api.get<MockWorkOrder[]>('/work-orders');
+        if (!result || !Array.isArray(result) || result.length === 0) {
+          return mockWorkOrders;
+        }
+
+        return result.map((item) => ({
+          ...item,
+          priority: item.priority ?? 'Medium',
+          status: item.status ?? 'Open'
+        }));
+      } catch {
+        return mockWorkOrders;
+      }
+    }
+  });
 
   const statusStats = [
     { label: 'Open', count: 24, color: colors.info },
@@ -11,61 +40,48 @@ export default function WorkOrders() {
     { label: 'Overdue', count: 3, color: colors.error }
   ];
 
-  const workOrders = [
-    {
-      id: 'WO-2024-001',
-      title: 'Motor Overheating - Emergency Repair',
-      description: 'Drive motor is running hot and making unusual noises. Needs immediate attention.',
-      priority: 'Urgent',
-      status: 'Assigned',
-      asset: 'Drive Motor #1',
-      assignee: 'John Smith',
-      dueDate: 'Today',
-      createdDate: '2 hours ago'
-    },
-    {
-      id: 'WO-2024-002',
-      title: 'Quarterly Hydraulic System Inspection',
-      description: 'Routine quarterly inspection of hydraulic pump and associated components.',
-      priority: 'Medium',
-      status: 'Completed',
-      asset: 'Hydraulic Pump #1',
-      assignee: 'Jane Doe',
-      dueDate: 'Yesterday',
-      createdDate: '3 days ago'
-    },
-    {
-      id: 'WO-2024-003',
-      title: 'Conveyor Belt Replacement',
-      description: 'Replace worn conveyor belt before it fails.',
-      priority: 'High',
-      status: 'Open',
-      asset: 'Conveyor Belt #1',
-      assignee: 'Unassigned',
-      dueDate: 'Next week',
-      createdDate: '1 day ago'
-    }
-  ];
-
   const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'Urgent': return colors.error;
-      case 'High': return colors.warning;
-      case 'Medium': return colors.info;
-      case 'Low': return colors.success;
+    switch ((priority ?? '').toLowerCase()) {
+      case 'urgent': return colors.error;
+      case 'high': return colors.warning;
+      case 'medium': return colors.info;
+      case 'low': return colors.success;
       default: return colors.mutedForeground;
     }
   };
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Open': return colors.info;
-      case 'Assigned': return colors.warning;
-      case 'In Progress': return colors.warning;
-      case 'Completed': return colors.success;
-      case 'Cancelled': return colors.mutedForeground;
+    switch ((status ?? '').toLowerCase()) {
+      case 'open': return colors.info;
+      case 'assigned': return colors.warning;
+      case 'in progress': return colors.warning;
+      case 'completed': return colors.success;
+      case 'cancelled': return colors.mutedForeground;
       default: return colors.mutedForeground;
     }
+  };
+
+  const handleViewWorkOrder = (id: string) => {
+    navigate(`/work-orders/${id}`);
+  };
+
+  const handleUpdateWorkOrder = (id: string) => {
+    setSelectedWorkOrderId(id);
+    setIsFormOpen(true);
+  };
+
+  const handleNewWorkOrder = () => {
+    setSelectedWorkOrderId(null);
+    setIsFormOpen(true);
+  };
+
+  const handleCloseForm = () => {
+    setIsFormOpen(false);
+    setSelectedWorkOrderId(null);
+  };
+
+  const handleFormSuccess = () => {
+    refetch();
   };
 
   return (
@@ -78,9 +94,10 @@ export default function WorkOrders() {
             Manage and track maintenance work orders
           </p>
         </div>
-        <button 
+        <button
           className="flex items-center gap-2 px-4 py-2 rounded-xl hover:opacity-90 transition-colors"
           style={{ backgroundColor: colors.primary, color: 'white' }}
+          onClick={handleNewWorkOrder}
         >
           <Plus className="w-4 h-4" />
           New Work Order
@@ -130,8 +147,26 @@ export default function WorkOrders() {
 
       {/* Work Orders List */}
       <div className="space-y-4">
+        {isLoading && (
+          <div
+            className="rounded-xl border p-6 text-center"
+            style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.mutedForeground }}
+          >
+            Loading work orders...
+          </div>
+        )}
+
+        {!isLoading && workOrders.length === 0 && (
+          <div
+            className="rounded-xl border p-6 text-center"
+            style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.mutedForeground }}
+          >
+            No work orders found.
+          </div>
+        )}
+
         {workOrders.map((wo) => (
-          <div 
+          <div
             key={wo.id}
             className="rounded-xl border p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
@@ -158,7 +193,7 @@ export default function WorkOrders() {
                       color: getPriorityColor(wo.priority)
                     }}
                   >
-                    {wo.priority === 'Urgent' && <AlertTriangle className="w-3 h-3" />}
+                    {wo.priority.toLowerCase() === 'urgent' && <AlertTriangle className="w-3 h-3" />}
                     {wo.priority}
                   </span>
                 </div>
@@ -166,37 +201,39 @@ export default function WorkOrders() {
                 <h4 className="font-medium mb-2" style={{ color: colors.foreground }}>
                   {wo.title}
                 </h4>
-                
+
                 <p className="text-sm mb-3" style={{ color: colors.mutedForeground }}>
-                  {wo.description}
+                  {wo.description ?? 'No description provided.'}
                 </p>
                 
                 <div className="flex items-center gap-6 text-sm" style={{ color: colors.mutedForeground }}>
                   <div className="flex items-center gap-1">
                     <ClipboardList className="w-4 h-4" />
-                    Asset: {wo.asset}
+                    Asset: {wo.asset ?? 'N/A'}
                   </div>
                   <div className="flex items-center gap-1">
                     <User className="w-4 h-4" />
-                    {wo.assignee}
+                    {wo.assignee ?? 'Unassigned'}
                   </div>
                   <div className="flex items-center gap-1">
                     <Calendar className="w-4 h-4" />
-                    Due: {wo.dueDate}
+                    Due: {wo.dueDate ?? 'TBD'}
                   </div>
                 </div>
               </div>
-              
+
               <div className="flex gap-2">
-                <button 
+                <button
                   className="px-3 py-1 border rounded-lg hover:bg-opacity-80 transition-colors text-sm"
                   style={{ borderColor: colors.border, color: colors.foreground }}
+                  onClick={() => handleViewWorkOrder(wo.id)}
                 >
                   View
                 </button>
-                <button 
+                <button
                   className="px-3 py-1 rounded-lg hover:opacity-90 transition-colors text-sm"
                   style={{ backgroundColor: colors.primary, color: 'white' }}
+                  onClick={() => handleUpdateWorkOrder(wo.id)}
                 >
                   Update
                 </button>
@@ -205,6 +242,14 @@ export default function WorkOrders() {
           </div>
         ))}
       </div>
+
+      {isFormOpen && (
+        <WorkOrderForm
+          workOrderId={selectedWorkOrderId ?? undefined}
+          onClose={handleCloseForm}
+          onSuccess={handleFormSuccess}
+        />
+      )}
     </div>
   );
 }
