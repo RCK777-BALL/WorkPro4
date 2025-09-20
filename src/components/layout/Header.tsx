@@ -8,6 +8,7 @@ import {
   User, 
   Settings, 
   LogOut,
+  LogIn,
   ChevronDown
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -133,11 +134,10 @@ export function Header({ onToggleSidebar }: HeaderProps) {
               className="flex items-center gap-2 p-2 rounded-lg transition-colors hover:opacity-80"
               style={{ color: colors.mutedForeground }}
             >
-              <div 
+              <div
                 className="w-8 h-8 rounded-full flex items-center justify-center"
                 style={{ backgroundColor: colors.muted }}
               >
-              onClick={() => window.location.href = '/login'}
                 <User className="w-4 h-4" />
               </div>
               <ChevronDown className="w-4 h-4 hidden sm:block" />
@@ -161,7 +161,17 @@ export function Header({ onToggleSidebar }: HeaderProps) {
                       <div className="font-medium" style={{ color: colors.foreground }}>John Doe</div>
                       <div>john@workpro3.com</div>
                     </div>
-                    <button 
+                    <button
+                      onClick={() => {
+                        window.location.href = '/login';
+                      }}
+                      className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg transition-colors hover:opacity-80"
+                      style={{ color: colors.foreground }}
+                    >
+                      <LogIn className="w-4 h-4" />
+                      Login
+                    </button>
+                    <button
                       className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg transition-colors hover:opacity-80"
                       style={{ color: colors.foreground }}
                     >
