@@ -1,156 +1,93 @@
 import { useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, Calendar, ClipboardList, User, MapPin, FileText } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Calendar, ClipboardList, User, AlertTriangle, Clock, FileText } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../lib/api';
-
-interface WorkOrderDetailsData {
-  id: string;
-  title: string;
-  description: string;
-  priority: 'Low' | 'Medium' | 'High' | 'Urgent' | string;
-  status: 'Open' | 'Assigned' | 'In Progress' | 'Completed' | 'Cancelled' | string;
-  asset: string;
-  assignee: string;
-  dueDate: string;
-  createdDate: string;
-  estimatedHours?: number;
-  completedHours?: number;
-  notes?: string;
-}
-
-const fallbackWorkOrders: WorkOrderDetailsData[] = [
-  {
-    id: 'WO-2024-001',
-    title: 'Motor Overheating - Emergency Repair',
-    description: 'Drive motor is running hot and making unusual noises. Needs immediate attention.',
-    priority: 'Urgent',
-    status: 'Assigned',
-    asset: 'Drive Motor #1',
-    assignee: 'John Smith',
-    dueDate: 'Today',
-    createdDate: '2 hours ago',
-    estimatedHours: 6,
-    notes: 'Technician dispatched and materials staged for repair.'
-  },
-  {
-    id: 'WO-2024-002',
-    title: 'Quarterly Hydraulic System Inspection',
-    description: 'Routine quarterly inspection of hydraulic pump and associated components.',
-    priority: 'Medium',
-    status: 'Completed',
-    asset: 'Hydraulic Pump #1',
-    assignee: 'Jane Doe',
-    dueDate: 'Yesterday',
-    createdDate: '3 days ago',
-    estimatedHours: 4,
-    completedHours: 3,
-    notes: 'All components passed inspection. Minor wear noted on pressure gauge.'
-  },
-  {
-    id: 'WO-2024-003',
-    title: 'Conveyor Belt Replacement',
-    description: 'Replace worn conveyor belt before it fails.',
-    priority: 'High',
-    status: 'Open',
-    asset: 'Conveyor Belt #1',
-    assignee: 'Unassigned',
-    dueDate: 'Next week',
-    createdDate: '1 day ago',
-    estimatedHours: 8,
-    notes: 'Awaiting part delivery scheduled for tomorrow.'
-  }
-];
+import { type MockWorkOrder, getMockWorkOrderById } from '../lib/mockWorkOrders';
 
 export default function WorkOrderDetails() {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const { colors } = useTheme();
+  const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
 
-  const fallback = useMemo(
-    () => fallbackWorkOrders.find(workOrder => workOrder.id === id),
-    [id]
-  );
-
-  const { data: workOrder, isLoading, error } = useQuery<WorkOrderDetailsData, Error>({
+  const { data: workOrder, isLoading } = useQuery<MockWorkOrder | null>({
     queryKey: ['work-order', id],
-    queryFn: async (): Promise<WorkOrderDetailsData> => {
-      if (!id) {
-        throw new Error('Work order not found');
-      }
-
+    queryFn: async () => {
+      if (!id) return null;
       try {
-        return await api.get<WorkOrderDetailsData>(`/work-orders/${id}`);
-      } catch {
-        if (fallback) {
-          return fallback;
+        const result = await api.get<MockWorkOrder>(`/work-orders/${id}`);
+        if (!result) {
+          return getMockWorkOrderById(id) ?? null;
         }
-        throw new Error('Work order not found');
+        return result;
+      } catch {
+        return getMockWorkOrderById(id) ?? null;
       }
     },
     enabled: !!id,
-    retry: 0
+    initialData: () => (id ? getMockWorkOrderById(id) ?? null : null)
   });
 
-  const details = workOrder ?? fallback;
-
-  const getPriorityColor = (priority: string) => {
+  const priorityBadge = useMemo(() => {
+    if (!workOrder) return { label: 'Unknown', color: colors.mutedForeground };
+    const priority = workOrder.priority?.toLowerCase() ?? 'medium';
     switch (priority) {
-      case 'Urgent':
-        return colors.error;
-      case 'High':
-        return colors.warning;
-      case 'Medium':
-        return colors.info;
-      case 'Low':
-        return colors.success;
+      case 'urgent':
+        return { label: 'Urgent', color: colors.error };
+      case 'high':
+        return { label: 'High', color: colors.warning };
+      case 'low':
+        return { label: 'Low', color: colors.success };
       default:
-        return colors.mutedForeground;
+        return { label: 'Medium', color: colors.info };
     }
-  };
+  }, [colors.error, colors.info, colors.mutedForeground, colors.success, colors.warning, workOrder]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Open':
-        return colors.info;
-      case 'Assigned':
-      case 'In Progress':
-        return colors.warning;
-      case 'Completed':
-        return colors.success;
-      case 'Cancelled':
-        return colors.mutedForeground;
-      default:
-        return colors.mutedForeground;
-    }
-  };
 
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div className="h-10 w-64 rounded bg-gray-200 animate-pulse" />
-        <div className="h-64 rounded bg-gray-200 animate-pulse" />
+        <div className="flex items-center justify-between">
+          <button
+            className="flex items-center gap-2 px-3 py-2 rounded-lg"
+            style={{ backgroundColor: colors.card, color: colors.foreground, border: `1px solid ${colors.border}` }}
+            onClick={() => navigate(-1)}
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </button>
+        </div>
+        <div
+          className="rounded-xl border p-6 text-center"
+          style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.mutedForeground }}
+        >
+          Loading work order details...
+        </div>
+
       </div>
     );
   }
 
-  if (error || !details) {
+  if (!workOrder) {
     return (
-      <div className="space-y-4">
-        <button
-          className="flex items-center gap-2 px-4 py-2 rounded-lg"
-          style={{ color: colors.foreground }}
-          onClick={() => navigate(-1)}
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Work Orders
-        </button>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <button
+            className="flex items-center gap-2 px-3 py-2 rounded-lg"
+            style={{ backgroundColor: colors.card, color: colors.foreground, border: `1px solid ${colors.border}` }}
+            onClick={() => navigate('/work-orders')}
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Work Orders
+          </button>
+        </div>
         <div
-          className="rounded-xl border p-6"
-          style={{ backgroundColor: colors.card, borderColor: colors.border }}
+          className="rounded-xl border p-6 text-center"
+          style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.mutedForeground }}
         >
-          <p style={{ color: colors.error }}>Unable to load work order details.</p>
+          Work order not found.
+
         </div>
       </div>
     );
@@ -158,83 +95,74 @@ export default function WorkOrderDetails() {
 
   return (
     <div className="space-y-6">
-      <button
-        className="flex items-center gap-2 px-4 py-2 rounded-lg"
-        style={{ color: colors.foreground }}
-        onClick={() => navigate(-1)}
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back to Work Orders
-      </button>
+      <div className="flex items-center justify-between">
+        <button
+          className="flex items-center gap-2 px-3 py-2 rounded-lg"
+          style={{ backgroundColor: colors.card, color: colors.foreground, border: `1px solid ${colors.border}` }}
+          onClick={() => navigate('/work-orders')}
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Work Orders
+        </button>
+      </div>
 
       <div
-        className="rounded-xl border p-6 shadow-sm"
+        className="rounded-xl border p-6"
         style={{ backgroundColor: colors.card, borderColor: colors.border }}
       >
-        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-3xl font-bold" style={{ color: colors.foreground }}>
-                {details.title}
-              </h1>
-              <span
-                className="px-3 py-1 text-xs rounded-full"
-                style={{
-                  backgroundColor: `${getStatusColor(details.status)}20`,
-                  color: getStatusColor(details.status)
-                }}
-              >
-                {details.status}
-              </span>
-              <span
-                className="px-3 py-1 text-xs rounded-full flex items-center gap-1"
-                style={{
-                  backgroundColor: `${getPriorityColor(details.priority)}20`,
-                  color: getPriorityColor(details.priority)
-                }}
-              >
-                {details.priority === 'Urgent' && <AlertTriangle className="w-3 h-3" />}
-                {details.priority}
-              </span>
-            </div>
-            <p className="text-sm" style={{ color: colors.mutedForeground }}>
-              {details.description}
-            </p>
+            <h1 className="text-3xl font-bold" style={{ color: colors.foreground }}>{workOrder.title}</h1>
+            <p className="mt-2 text-sm" style={{ color: colors.mutedForeground }}>{workOrder.id}</p>
           </div>
-          <div className="space-y-2 text-sm" style={{ color: colors.mutedForeground }}>
-            <div className="flex items-center gap-2">
-              <ClipboardList className="w-4 h-4" />
-              <span>Asset: {details.asset}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <User className="w-4 h-4" />
-              <span>Assignee: {details.assignee}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4" />
-              <span>Due: {details.dueDate}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4" />
-              <span>Estimated: {details.estimatedHours ?? '—'} hrs</span>
-            </div>
-            {details.completedHours !== undefined && (
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4" />
-                <span>Actual: {details.completedHours} hrs</span>
-              </div>
-            )}
+          <div className="flex items-center gap-3">
+            <span
+              className="px-3 py-1 text-xs font-semibold rounded-full"
+              style={{ backgroundColor: `${priorityBadge.color}20`, color: priorityBadge.color }}
+            >
+              Priority: {priorityBadge.label}
+            </span>
+            <span
+              className="px-3 py-1 text-xs font-semibold rounded-full"
+              style={{ backgroundColor: `${colors.info}20`, color: colors.info }}
+            >
+              Status: {workOrder.status}
+            </span>
           </div>
         </div>
 
-        {details.notes && (
-          <div className="mt-6">
-            <div className="flex items-center gap-2 mb-2" style={{ color: colors.foreground }}>
+        <p className="mt-4 text-sm leading-relaxed" style={{ color: colors.mutedForeground }}>
+          {workOrder.description}
+        </p>
+
+        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="flex items-center gap-2" style={{ color: colors.mutedForeground }}>
+            <ClipboardList className="w-4 h-4" />
+            Asset: {workOrder.asset ?? 'N/A'}
+          </div>
+          <div className="flex items-center gap-2" style={{ color: colors.mutedForeground }}>
+            <User className="w-4 h-4" />
+            Assigned To: {workOrder.assignee ?? 'Unassigned'}
+          </div>
+          <div className="flex items-center gap-2" style={{ color: colors.mutedForeground }}>
+            <Calendar className="w-4 h-4" />
+            Due Date: {workOrder.dueDate ?? 'TBD'}
+          </div>
+          <div className="flex items-center gap-2" style={{ color: colors.mutedForeground }}>
+            <MapPin className="w-4 h-4" />
+            Location: {workOrder.location ?? 'Not specified'}
+          </div>
+        </div>
+
+        {workOrder.instructions && (
+          <div className="mt-6 rounded-lg border p-4" style={{ borderColor: colors.border, backgroundColor: colors.background }}>
+            <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: colors.foreground }}>
               <FileText className="w-4 h-4" />
-              <h2 className="text-lg font-semibold">Notes</h2>
+              Special Instructions
             </div>
-            <p className="text-sm" style={{ color: colors.mutedForeground }}>
-              {details.notes}
+            <p className="mt-2 text-sm" style={{ color: colors.mutedForeground }}>
+              {workOrder.instructions}
+
             </p>
           </div>
         )}
