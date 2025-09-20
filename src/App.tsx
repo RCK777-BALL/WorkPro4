@@ -16,6 +16,7 @@ import Vendors from './pages/Vendors';
 import Documents from './pages/Documents';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
+import NotFound from './pages/NotFound';
 
 export default function App() {
   return (
@@ -34,6 +35,7 @@ export default function App() {
             <Route path="documents" element={<Documents />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
       </QueryClientProvider>
