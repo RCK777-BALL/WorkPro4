@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Bell,
   Command,
@@ -8,18 +9,27 @@ import {
   User,
 } from 'lucide-react';
 
+import { useAuth } from '@/hooks/useAuth';
+
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 
 export function Header() {
   const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const navigate = useNavigate();
+  const { logout } = useAuth();
 
   const handleKeyDown = (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
       e.preventDefault();
       setShowCommandPalette(true);
     }
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
   };
 
   return (
@@ -68,10 +78,16 @@ export function Header() {
                 <User className="w-4 h-4 text-white" />
               </div>
               <div className="text-white text-sm">
-                <div className="font-medium">John Smith</div>
-                <div className="text-white/70">Administrator</div>
+                <div className="font-medium">Authenticated User</div>
+                <div className="text-white/70">Online</div>
               </div>
-              <Button variant="ghost" size="icon" className="text-white hover:bg-white/10">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-white hover:bg-white/10"
+                onClick={handleLogout}
+                title="Log out"
+              >
                 <LogOut className="w-4 h-4" />
               </Button>
             </div>
