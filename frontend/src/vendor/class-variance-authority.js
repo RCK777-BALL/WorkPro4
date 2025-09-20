@@ -8,7 +8,7 @@ function resolveVariant(options, key, value) {
   return variantMap[resolved] || ''
 }
 
-function cva(base, options = {}) {
+export function cva(base, options = {}) {
   return function variantFn(props = {}) {
     const classNames = [base]
     const keys = Object.keys(options.variants || {})
@@ -22,7 +22,4 @@ function cva(base, options = {}) {
   }
 }
 
-module.exports = {
-  cva,
-  default: cva,
-}
+export default cva

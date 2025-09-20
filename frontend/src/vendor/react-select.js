@@ -1,39 +1,39 @@
-const React = require('react')
+import React from 'react'
 
-const Root = ({ children }) => React.createElement('div', null, children)
-const Group = ({ children }) => React.createElement('div', null, children)
-const Value = ({ children }) => React.createElement('span', null, children)
+export const Root = ({ children }) => React.createElement('div', null, children)
+export const Group = ({ children }) => React.createElement('div', null, children)
+export const Value = ({ children }) => React.createElement('span', null, children)
 
-const Trigger = React.forwardRef(({ children, ...props }, ref) =>
+export const Trigger = React.forwardRef(({ children, ...props }, ref) =>
   React.createElement('button', { type: 'button', ref, ...props }, children),
 )
 
-const Icon = ({ asChild, children }) => (asChild ? children : React.createElement('span', null, children))
-const ScrollUpButton = React.forwardRef(({ children, ...props }, ref) =>
+export const Icon = ({ asChild, children }) => (asChild ? children : React.createElement('span', null, children))
+export const ScrollUpButton = React.forwardRef(({ children, ...props }, ref) =>
   React.createElement('button', { type: 'button', ref, ...props }, children),
 )
-const ScrollDownButton = React.forwardRef(({ children, ...props }, ref) =>
+export const ScrollDownButton = React.forwardRef(({ children, ...props }, ref) =>
   React.createElement('button', { type: 'button', ref, ...props }, children),
 )
 
-const Portal = ({ children }) => React.createElement(React.Fragment, null, children)
-const Content = React.forwardRef(({ children, ...props }, ref) =>
+export const Portal = ({ children }) => React.createElement(React.Fragment, null, children)
+export const Content = React.forwardRef(({ children, ...props }, ref) =>
   React.createElement('div', { ref, ...props }, children),
 )
-const Viewport = ({ children, ...props }) => React.createElement('div', { ...props }, children)
+export const Viewport = ({ children, ...props }) => React.createElement('div', { ...props }, children)
 
-const Item = React.forwardRef(({ children, ...props }, ref) =>
+export const Item = React.forwardRef(({ children, ...props }, ref) =>
   React.createElement('div', { role: 'option', ref, ...props }, children),
 )
-const ItemIndicator = ({ children }) => React.createElement('span', null, children)
-const ItemText = ({ children }) => React.createElement('span', null, children)
+export const ItemIndicator = ({ children }) => React.createElement('span', null, children)
+export const ItemText = ({ children }) => React.createElement('span', null, children)
 
-const Label = React.forwardRef(({ children, ...props }, ref) =>
+export const Label = React.forwardRef(({ children, ...props }, ref) =>
   React.createElement('div', { ref, ...props }, children),
 )
-const Separator = React.forwardRef((props, ref) => React.createElement('div', { ref, ...props }))
+export const Separator = React.forwardRef((props, ref) => React.createElement('div', { ref, ...props }))
 
-module.exports = {
+const SelectPrimitive = {
   Root,
   Group,
   Value,
@@ -50,3 +50,5 @@ module.exports = {
   Label,
   Separator,
 }
+
+export default SelectPrimitive
