@@ -1,13 +1,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
 import { ok, fail, asyncHandler } from '../utils/response';
 import { authenticateToken, AuthRequest, requireRoles } from '../middleware/auth';
 import { tenantScope } from '../middleware/tenant';
 import { auditLog } from '../middleware/audit';
+import { prisma } from '../db';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.use(authenticateToken);
 router.use(tenantScope);

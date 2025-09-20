@@ -12,8 +12,10 @@ const createMockPrisma = () => ({
 
 let mockPrisma = createMockPrisma();
 
-vi.mock('@prisma/client', () => ({
-  PrismaClient: vi.fn(() => mockPrisma),
+vi.mock('../../db', () => ({
+  get prisma() {
+    return mockPrisma;
+  },
 }));
 
 vi.mock('../../middleware/auth', () => ({

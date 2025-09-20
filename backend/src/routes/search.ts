@@ -1,11 +1,10 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { ok, asyncHandler } from '../utils/response';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { tenantScope } from '../middleware/tenant';
+import { prisma } from '../db';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.use(authenticateToken);
 router.use(tenantScope);

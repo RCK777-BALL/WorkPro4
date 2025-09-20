@@ -96,15 +96,18 @@ async function start() {
   const databaseUrl = process.env.DATABASE_URL?.trim();
 
   if (!databaseUrl) {
-    console.warn('⚠️ DATABASE_URL not set. Starting server without database connection.');
-  } else {
-    try {
-      await verifyDatabaseConnection();
-      console.log('🗄️ Connected to database');
-    } catch (error) {
-      console.error('❌ Failed to connect to database', error);
-      process.exit(1);
-    }
+    console.error('❌ DATABASE_URL environment variable is required. Shutting down.');
+    process.exit(1);
+    return;
+  }
+
+  try {
+    await verifyDatabaseConnection();
+    console.log('🗄️ Connected to database');
+  } catch (error) {
+    console.error('❌ Failed to connect to database', error);
+    process.exit(1);
+    return;
   }
 
   app.listen(PORT, () => {
