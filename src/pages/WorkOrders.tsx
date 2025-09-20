@@ -1,9 +1,42 @@
 import { useMemo, useState } from 'react';
+
 import { ClipboardList, Plus, Search, Filter, User, Calendar, AlertTriangle } from 'lucide-react';
+import { WorkOrderForm } from '../components/forms/WorkOrderForm';
+
 import { useTheme } from '../contexts/ThemeContext';
+import { api } from '../lib/api';
+
+interface WorkOrder {
+  id: string;
+  title: string;
+  description: string;
+  priority: 'Low' | 'Medium' | 'High' | 'Urgent' | string;
+  status: 'Open' | 'Assigned' | 'In Progress' | 'Completed' | 'Cancelled' | string;
+  asset: string;
+  assignee: string;
+  dueDate: string;
+  createdDate: string;
+}
+
+type WorkOrder = {
+  id: string;
+  title: string;
+  description: string;
+  priority: 'Urgent' | 'High' | 'Medium' | 'Low';
+  status: 'Open' | 'Assigned' | 'In Progress' | 'Completed' | 'Cancelled';
+  asset: string;
+  assignee: string;
+  dueDate: string;
+  createdDate: string;
+};
 
 export default function WorkOrders() {
+  const [showCreate, setShowCreate] = useState(false);
+  const queryClient = useQueryClient();
   const { colors } = useTheme();
+  const navigate = useNavigate();
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<string | null>(null);
 
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
@@ -117,6 +150,27 @@ export default function WorkOrders() {
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
+
+
+  const openForm = (workOrderId?: string) => {
+    setSelectedWorkOrderId(workOrderId ?? null);
+    setIsFormOpen(true);
+  };
+
+  const closeForm = () => {
+    setIsFormOpen(false);
+    setSelectedWorkOrderId(null);
+  };
+
+  const handleView = (workOrderId: string) => {
+    navigate(`/work-orders/${workOrderId}`);
+  };
+
+  const handleUpdate = (workOrderId: string) => {
+    openForm(workOrderId);
+  };
+
+
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'Urgent': return colors.error;
@@ -148,9 +202,11 @@ export default function WorkOrders() {
             Manage and track maintenance work orders
           </p>
         </div>
-        <button 
+        <button
           className="flex items-center gap-2 px-4 py-2 rounded-xl hover:opacity-90 transition-colors"
           style={{ backgroundColor: colors.primary, color: 'white' }}
+          onClick={() => openForm()}
+
         >
           <Plus className="w-4 h-4" />
           New Work Order
@@ -325,76 +381,101 @@ export default function WorkOrders() {
             key={wo.id}
             className="rounded-xl border p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
+
           >
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-2">
-                  <h3 className="text-lg font-semibold" style={{ color: colors.foreground }}>
-                    {wo.id}
-                  </h3>
-                  <span 
-                    className="px-2 py-1 text-xs rounded-full"
-                    style={{ 
-                      backgroundColor: `${getStatusColor(wo.status)}20`,
-                      color: getStatusColor(wo.status)
-                    }}
-                  >
-                    {wo.status}
-                  </span>
-                  <span 
-                    className="px-2 py-1 text-xs rounded-full flex items-center gap-1"
-                    style={{ 
-                      backgroundColor: `${getPriorityColor(wo.priority)}20`,
-                      color: getPriorityColor(wo.priority)
-                    }}
-                  >
-                    {wo.priority === 'Urgent' && <AlertTriangle className="w-3 h-3" />}
-                    {wo.priority}
-                  </span>
+            No work orders found.
+          </div>
+        ) : (
+          workOrders.map((wo) => (
+            <div
+              key={wo.id}
+              className="rounded-xl border p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+              style={{ backgroundColor: colors.card, borderColor: colors.border }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h3 className="text-lg font-semibold" style={{ color: colors.foreground }}>
+                      {wo.id}
+                    </h3>
+                    <span
+                      className="px-2 py-1 text-xs rounded-full"
+                      style={{
+                        backgroundColor: `${getStatusColor(wo.status)}20`,
+                        color: getStatusColor(wo.status)
+                      }}
+                    >
+                      {wo.status}
+                    </span>
+                    <span
+                      className="px-2 py-1 text-xs rounded-full flex items-center gap-1"
+                      style={{
+                        backgroundColor: `${getPriorityColor(wo.priority)}20`,
+                        color: getPriorityColor(wo.priority)
+                      }}
+                    >
+                      {wo.priority === 'Urgent' && <AlertTriangle className="w-3 h-3" />}
+                      {wo.priority}
+                    </span>
+
+                  </div>
+
+                  <h4 className="font-medium mb-2" style={{ color: colors.foreground }}>
+                    {wo.title}
+                  </h4>
+
+                  <p className="text-sm mb-3" style={{ color: colors.mutedForeground }}>
+                    {wo.description}
+                  </p>
+
+                  <div className="flex items-center gap-6 text-sm" style={{ color: colors.mutedForeground }}>
+                    <div className="flex items-center gap-1">
+                      <ClipboardList className="w-4 h-4" />
+                      Asset: {wo.asset}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <User className="w-4 h-4" />
+                      {wo.assignee}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Calendar className="w-4 h-4" />
+                      Due: {wo.dueDate}
+                    </div>
+                  </div>
                 </div>
-                
-                <h4 className="font-medium mb-2" style={{ color: colors.foreground }}>
-                  {wo.title}
-                </h4>
-                
-                <p className="text-sm mb-3" style={{ color: colors.mutedForeground }}>
-                  {wo.description}
-                </p>
-                
-                <div className="flex items-center gap-6 text-sm" style={{ color: colors.mutedForeground }}>
-                  <div className="flex items-center gap-1">
-                    <ClipboardList className="w-4 h-4" />
-                    Asset: {wo.asset}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <User className="w-4 h-4" />
-                    {wo.assignee}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Calendar className="w-4 h-4" />
-                    Due: {wo.dueDate}
-                  </div>
+
+                <div className="flex gap-2">
+                  <button
+                    className="px-3 py-1 border rounded-lg hover:bg-opacity-80 transition-colors text-sm"
+                    style={{ borderColor: colors.border, color: colors.foreground }}
+                    onClick={() => handleView(wo.id)}
+                  >
+                    View
+                  </button>
+                  <button
+                    className="px-3 py-1 rounded-lg hover:opacity-90 transition-colors text-sm"
+                    style={{ backgroundColor: colors.primary, color: 'white' }}
+                    onClick={() => handleUpdate(wo.id)}
+                  >
+                    Update
+                  </button>
                 </div>
-              </div>
-              
-              <div className="flex gap-2">
-                <button 
-                  className="px-3 py-1 border rounded-lg hover:bg-opacity-80 transition-colors text-sm"
-                  style={{ borderColor: colors.border, color: colors.foreground }}
-                >
-                  View
-                </button>
-                <button 
-                  className="px-3 py-1 rounded-lg hover:opacity-90 transition-colors text-sm"
-                  style={{ backgroundColor: colors.primary, color: 'white' }}
-                >
-                  Update
-                </button>
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
+
+      {isFormOpen && (
+        <WorkOrderForm
+          workOrderId={selectedWorkOrderId ?? undefined}
+          onClose={closeForm}
+          onSuccess={() => {
+            refetch();
+
+          }}
+        />
+      )}
     </div>
   );
 }
