@@ -48,6 +48,10 @@ export default function WorkOrders() {
     ? workOrders.filter((wo) => wo.status === statusFilter)
     : workOrders;
 
+  const handleStatusTileClick = (status: string) => {
+    setStatusFilter((current) => (current === status ? null : status));
+  };
+
 
   return (
     <div className="space-y-6">
@@ -74,16 +78,17 @@ export default function WorkOrders() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {statusStats.map((stat, index) => {
           const isActive = statusFilter === stat.label;
-
           return (
             <div
               key={index}
-              onClick={() => setStatusFilter((prev) => (prev === stat.label ? null : stat.label))}
               className="rounded-xl border p-4 shadow-sm text-center hover:shadow-md transition-shadow cursor-pointer"
               style={{
                 backgroundColor: isActive ? `${stat.color}20` : colors.card,
-                borderColor: isActive ? stat.color : colors.border
+                borderColor: isActive ? stat.color : colors.border,
+                color: colors.foreground
               }}
+              onClick={() => handleStatusTileClick(stat.label)}
+
             >
               <div className="text-2xl font-bold" style={{ color: stat.color }}>{stat.count}</div>
               <div className="text-sm" style={{ color: colors.mutedForeground }}>{stat.label}</div>
@@ -122,8 +127,8 @@ export default function WorkOrders() {
       {/* Work Orders List */}
       <div className="space-y-4">
         {filteredWorkOrders.map((wo) => (
+          <div 
 
-          <div
             key={wo.id}
             className="rounded-xl border p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
