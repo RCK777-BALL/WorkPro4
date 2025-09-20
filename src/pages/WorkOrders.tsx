@@ -1,9 +1,51 @@
 import { useState } from 'react';
+
 import { ClipboardList, Plus, Search, Filter, User, Calendar, AlertTriangle } from 'lucide-react';
+import { WorkOrderForm } from '../components/forms/WorkOrderForm';
+
 import { useTheme } from '../contexts/ThemeContext';
+import { api } from '../lib/api';
+
+interface WorkOrder {
+  id: string;
+  title: string;
+  description: string;
+  priority: 'Low' | 'Medium' | 'High' | 'Urgent' | string;
+  status: 'Open' | 'Assigned' | 'In Progress' | 'Completed' | 'Cancelled' | string;
+  asset: string;
+  assignee: string;
+  dueDate: string;
+  createdDate: string;
+}
+
+type WorkOrder = {
+  id: string;
+  title: string;
+  description: string;
+  priority: 'Urgent' | 'High' | 'Medium' | 'Low';
+  status: 'Open' | 'Assigned' | 'In Progress' | 'Completed' | 'Cancelled';
+  asset: string;
+  assignee: string;
+  dueDate: string;
+  createdDate: string;
+};
 
 export default function WorkOrders() {
+  const [showCreate, setShowCreate] = useState(false);
+  const queryClient = useQueryClient();
   const { colors } = useTheme();
+  const navigate = useNavigate();
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<string | null>(null);
+
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    status: '',
+    priority: '',
+    assignee: '',
+    dateFrom: '',
+    dateTo: ''
+  });
 
   type FilterState = {
     status: string;
@@ -29,7 +71,22 @@ export default function WorkOrders() {
     { label: 'Overdue', count: 3, color: colors.error }
   ];
 
-  const workOrders = [
+  type WorkOrder = {
+    id: string;
+    title: string;
+    description: string;
+    priority: string;
+    status: string;
+    asset: string;
+    assignee: string;
+    dueDate: string;
+    createdDate: string;
+    dueDateValue: string;
+    createdDateValue: string;
+  };
+
+  const workOrders = useMemo<WorkOrder[]>(
+    () => [
     {
       id: 'WO-2024-001',
       title: 'Motor Overheating - Emergency Repair',
@@ -41,6 +98,7 @@ export default function WorkOrders() {
       dueDate: 'Today',
       createdDate: '2 hours ago',
       createdAt: '2024-04-24'
+
     },
     {
       id: 'WO-2024-002',
@@ -53,6 +111,7 @@ export default function WorkOrders() {
       dueDate: 'Yesterday',
       createdDate: '3 days ago',
       createdAt: '2024-04-20'
+
     },
     {
       id: 'WO-2024-003',
@@ -65,8 +124,69 @@ export default function WorkOrders() {
       dueDate: 'Next week',
       createdDate: '1 day ago',
       createdAt: '2024-04-22'
+
     }
-  ];
+  ], []);
+
+  const statusOptions = useMemo(
+    () => Array.from(new Set(workOrders.map((wo) => wo.status))).sort(),
+    [workOrders]
+  );
+
+  const priorityOptions = useMemo(
+    () => Array.from(new Set(workOrders.map((wo) => wo.priority))).sort(),
+    [workOrders]
+  );
+
+  const assigneeOptions = useMemo(
+    () => Array.from(new Set(workOrders.map((wo) => wo.assignee))).sort(),
+    [workOrders]
+  );
+
+  const filteredWorkOrders = useMemo(() => {
+    return workOrders.filter((wo) => {
+      const matchesStatus = filters.status ? wo.status === filters.status : true;
+      const matchesPriority = filters.priority ? wo.priority === filters.priority : true;
+      const matchesAssignee = filters.assignee ? wo.assignee === filters.assignee : true;
+
+      const createdDate = new Date(wo.createdDateValue);
+      const matchesDateFrom = filters.dateFrom ? createdDate >= new Date(filters.dateFrom) : true;
+      const matchesDateTo = filters.dateTo ? createdDate <= new Date(filters.dateTo) : true;
+
+      return (
+        matchesStatus &&
+        matchesPriority &&
+        matchesAssignee &&
+        matchesDateFrom &&
+        matchesDateTo
+      );
+    });
+  }, [filters, workOrders]);
+
+  const handleFilterChange = (key: keyof typeof filters, value: string) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+
+
+  const openForm = (workOrderId?: string) => {
+    setSelectedWorkOrderId(workOrderId ?? null);
+    setIsFormOpen(true);
+  };
+
+  const closeForm = () => {
+    setIsFormOpen(false);
+    setSelectedWorkOrderId(null);
+  };
+
+  const handleView = (workOrderId: string) => {
+    navigate(`/work-orders/${workOrderId}`);
+  };
+
+  const handleUpdate = (workOrderId: string) => {
+    openForm(workOrderId);
+  };
+
 
   const statusOptions = ['All', 'Open', 'Assigned', 'In Progress', 'Completed', 'Cancelled'];
   const priorityOptions = ['All', 'Urgent', 'High', 'Medium', 'Low'];
@@ -129,9 +249,11 @@ export default function WorkOrders() {
             Manage and track maintenance work orders
           </p>
         </div>
-        <button 
+        <button
           className="flex items-center gap-2 px-4 py-2 rounded-xl hover:opacity-90 transition-colors"
           style={{ backgroundColor: colors.primary, color: 'white' }}
+          onClick={() => openForm()}
+
         >
           <Plus className="w-4 h-4" />
           New Work Order
@@ -318,7 +440,127 @@ export default function WorkOrders() {
             </div>
           )}
         </div>
+
       </div>
+
+      {showFilters && (
+        <div
+          className="rounded-xl border p-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4"
+          style={{ backgroundColor: colors.card, borderColor: colors.border }}
+        >
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium" style={{ color: colors.foreground }}>
+              Status
+            </label>
+            <select
+              value={filters.status}
+              onChange={(event) => handleFilterChange('status', event.target.value)}
+              className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-ring"
+              style={{
+                backgroundColor: colors.background,
+                borderColor: colors.border,
+                color: colors.foreground
+              }}
+            >
+              <option value="">All</option>
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium" style={{ color: colors.foreground }}>
+              Priority
+            </label>
+            <select
+              value={filters.priority}
+              onChange={(event) => handleFilterChange('priority', event.target.value)}
+              className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-ring"
+              style={{
+                backgroundColor: colors.background,
+                borderColor: colors.border,
+                color: colors.foreground
+              }}
+            >
+              <option value="">All</option>
+              {priorityOptions.map((priority) => (
+                <option key={priority} value={priority}>
+                  {priority}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium" style={{ color: colors.foreground }}>
+              Assignee
+            </label>
+            <select
+              value={filters.assignee}
+              onChange={(event) => handleFilterChange('assignee', event.target.value)}
+              className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-ring"
+              style={{
+                backgroundColor: colors.background,
+                borderColor: colors.border,
+                color: colors.foreground
+              }}
+            >
+              <option value="">All</option>
+              {assigneeOptions.map((assignee) => (
+                <option key={assignee} value={assignee}>
+                  {assignee}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium" style={{ color: colors.foreground }}>
+              Created Date
+            </label>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <input
+                type="date"
+                value={filters.dateFrom}
+                onChange={(event) => handleFilterChange('dateFrom', event.target.value)}
+                className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-ring"
+                style={{
+                  backgroundColor: colors.background,
+                  borderColor: colors.border,
+                  color: colors.foreground
+                }}
+              />
+              <input
+                type="date"
+                value={filters.dateTo}
+                onChange={(event) => handleFilterChange('dateTo', event.target.value)}
+                className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-ring"
+                style={{
+                  backgroundColor: colors.background,
+                  borderColor: colors.border,
+                  color: colors.foreground
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="md:col-span-2 xl:col-span-4 flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              className="px-4 py-2 border rounded-xl text-sm hover:bg-opacity-80 transition-colors"
+              style={{ borderColor: colors.border, color: colors.foreground }}
+              onClick={() =>
+                setFilters({ status: '', priority: '', assignee: '', dateFrom: '', dateTo: '' })
+              }
+            >
+              Reset Filters
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Work Orders List */}
       <div className="space-y-4">
@@ -327,76 +569,101 @@ export default function WorkOrders() {
             key={wo.id}
             className="rounded-xl border p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
+
           >
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-2">
-                  <h3 className="text-lg font-semibold" style={{ color: colors.foreground }}>
-                    {wo.id}
-                  </h3>
-                  <span 
-                    className="px-2 py-1 text-xs rounded-full"
-                    style={{ 
-                      backgroundColor: `${getStatusColor(wo.status)}20`,
-                      color: getStatusColor(wo.status)
-                    }}
-                  >
-                    {wo.status}
-                  </span>
-                  <span 
-                    className="px-2 py-1 text-xs rounded-full flex items-center gap-1"
-                    style={{ 
-                      backgroundColor: `${getPriorityColor(wo.priority)}20`,
-                      color: getPriorityColor(wo.priority)
-                    }}
-                  >
-                    {wo.priority === 'Urgent' && <AlertTriangle className="w-3 h-3" />}
-                    {wo.priority}
-                  </span>
+            No work orders found.
+          </div>
+        ) : (
+          workOrders.map((wo) => (
+            <div
+              key={wo.id}
+              className="rounded-xl border p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+              style={{ backgroundColor: colors.card, borderColor: colors.border }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h3 className="text-lg font-semibold" style={{ color: colors.foreground }}>
+                      {wo.id}
+                    </h3>
+                    <span
+                      className="px-2 py-1 text-xs rounded-full"
+                      style={{
+                        backgroundColor: `${getStatusColor(wo.status)}20`,
+                        color: getStatusColor(wo.status)
+                      }}
+                    >
+                      {wo.status}
+                    </span>
+                    <span
+                      className="px-2 py-1 text-xs rounded-full flex items-center gap-1"
+                      style={{
+                        backgroundColor: `${getPriorityColor(wo.priority)}20`,
+                        color: getPriorityColor(wo.priority)
+                      }}
+                    >
+                      {wo.priority === 'Urgent' && <AlertTriangle className="w-3 h-3" />}
+                      {wo.priority}
+                    </span>
+
+                  </div>
+
+                  <h4 className="font-medium mb-2" style={{ color: colors.foreground }}>
+                    {wo.title}
+                  </h4>
+
+                  <p className="text-sm mb-3" style={{ color: colors.mutedForeground }}>
+                    {wo.description}
+                  </p>
+
+                  <div className="flex items-center gap-6 text-sm" style={{ color: colors.mutedForeground }}>
+                    <div className="flex items-center gap-1">
+                      <ClipboardList className="w-4 h-4" />
+                      Asset: {wo.asset}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <User className="w-4 h-4" />
+                      {wo.assignee}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Calendar className="w-4 h-4" />
+                      Due: {wo.dueDate}
+                    </div>
+                  </div>
                 </div>
-                
-                <h4 className="font-medium mb-2" style={{ color: colors.foreground }}>
-                  {wo.title}
-                </h4>
-                
-                <p className="text-sm mb-3" style={{ color: colors.mutedForeground }}>
-                  {wo.description}
-                </p>
-                
-                <div className="flex items-center gap-6 text-sm" style={{ color: colors.mutedForeground }}>
-                  <div className="flex items-center gap-1">
-                    <ClipboardList className="w-4 h-4" />
-                    Asset: {wo.asset}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <User className="w-4 h-4" />
-                    {wo.assignee}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Calendar className="w-4 h-4" />
-                    Due: {wo.dueDate}
-                  </div>
+
+                <div className="flex gap-2">
+                  <button
+                    className="px-3 py-1 border rounded-lg hover:bg-opacity-80 transition-colors text-sm"
+                    style={{ borderColor: colors.border, color: colors.foreground }}
+                    onClick={() => handleView(wo.id)}
+                  >
+                    View
+                  </button>
+                  <button
+                    className="px-3 py-1 rounded-lg hover:opacity-90 transition-colors text-sm"
+                    style={{ backgroundColor: colors.primary, color: 'white' }}
+                    onClick={() => handleUpdate(wo.id)}
+                  >
+                    Update
+                  </button>
                 </div>
-              </div>
-              
-              <div className="flex gap-2">
-                <button 
-                  className="px-3 py-1 border rounded-lg hover:bg-opacity-80 transition-colors text-sm"
-                  style={{ borderColor: colors.border, color: colors.foreground }}
-                >
-                  View
-                </button>
-                <button 
-                  className="px-3 py-1 rounded-lg hover:opacity-90 transition-colors text-sm"
-                  style={{ backgroundColor: colors.primary, color: 'white' }}
-                >
-                  Update
-                </button>
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
+
+      {isFormOpen && (
+        <WorkOrderForm
+          workOrderId={selectedWorkOrderId ?? undefined}
+          onClose={closeForm}
+          onSuccess={() => {
+            refetch();
+
+          }}
+        />
+      )}
     </div>
   );
 }
