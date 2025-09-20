@@ -14,6 +14,8 @@ const workOrderSchema = z.object({
     errorMap: () => ({ message: 'Select a priority' }),
   }),
   assetId: z.string().min(1, 'Asset is required'),
+  lineName: z.string().min(1, 'Line name is required'),
+  stationNumber: z.string().min(1, 'Station number is required'),
   assignees: z
     .array(z.string().min(1, 'Assignee is required'))
     .min(1, 'Add at least one assignee'),
@@ -36,6 +38,8 @@ export function WorkOrderForm({ onClose, onSuccess }) {
       description: '',
       priority: 'medium',
       assetId: '',
+      lineName: '',
+      stationNumber: '',
       assignees: [''],
       checklists: [{ text: '', note: '' }],
     },
@@ -93,6 +97,8 @@ export function WorkOrderForm({ onClose, onSuccess }) {
       description: values.description,
       priority: values.priority,
       assetId: values.assetId,
+      lineName: values.lineName,
+      stationNumber: values.stationNumber,
       assignees: values.assignees.filter((id) => id.trim().length > 0),
       checklists: values.checklists
         .filter((item) => item.text.trim().length > 0)
@@ -162,6 +168,22 @@ export function WorkOrderForm({ onClose, onSuccess }) {
           <Input placeholder="Asset identifier" {...register('assetId')} />
           {errors.assetId && (
             <p className="text-sm text-red-600">{errors.assetId.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">Line Name</label>
+          <Input placeholder="Associated line" {...register('lineName')} />
+          {errors.lineName && (
+            <p className="text-sm text-red-600">{errors.lineName.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">Station Number</label>
+          <Input placeholder="Station identifier" {...register('stationNumber')} />
+          {errors.stationNumber && (
+            <p className="text-sm text-red-600">{errors.stationNumber.message}</p>
           )}
         </div>
       </div>

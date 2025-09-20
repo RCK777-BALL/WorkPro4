@@ -208,6 +208,8 @@ model WorkOrder {
   id             String           @id @default(cuid())
   tenantId       String           @map("tenant_id")
   assetId        String?          @map("asset_id")
+  lineName       String?          @map("line_name")
+  stationNumber  String?          @map("station_number")
   title          String
   description    String?
   priority       WorkOrderPriority @default(medium)

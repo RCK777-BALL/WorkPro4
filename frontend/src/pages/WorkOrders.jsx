@@ -3,7 +3,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   Calendar,
+  Factory,
   Filter,
+  Hash,
   Plus,
   Search,
   X,
@@ -286,11 +288,23 @@ export function WorkOrders() {
                     </p>
                   )}
 
-                  <div className="flex items-center space-x-6 text-sm text-gray-500">
+                  <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-500">
                     {workOrder.assetName && (
                       <div className="flex items-center">
                         <Wrench className="w-4 h-4 mr-1" />
                         {workOrder.assetName}
+                      </div>
+                    )}
+                    {workOrder.lineName && (
+                      <div className="flex items-center">
+                        <Factory className="w-4 h-4 mr-1" />
+                        Line: {workOrder.lineName}
+                      </div>
+                    )}
+                    {workOrder.stationNumber && (
+                      <div className="flex items-center">
+                        <Hash className="w-4 h-4 mr-1" />
+                        Station: {workOrder.stationNumber}
                       </div>
                     )}
                     <div className="flex items-center">
