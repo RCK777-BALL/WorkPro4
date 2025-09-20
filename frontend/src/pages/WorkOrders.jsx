@@ -13,22 +13,55 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { api } from '@/lib/api';
 import { formatDate, getPriorityColor, getStatusColor } from '@/lib/utils';
+
+const createInitialFilterState = () => ({
+  priority: '',
+  assignee: '',
+  from: '',
+  to: '',
+});
 
 export function WorkOrders() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filterValues, setFilterValues] = useState(createInitialFilterState);
+  const [appliedFilters, setAppliedFilters] = useState(createInitialFilterState);
 
   const {
     data,
     isLoading,
   } = useQuery({
-    queryKey: ['work-orders', { search, status: statusFilter }],
+    queryKey: [
+      'work-orders',
+      {
+        search,
+        status: statusFilter,
+        priority: appliedFilters.priority,
+        assignee: appliedFilters.assignee,
+        from: appliedFilters.from,
+        to: appliedFilters.to,
+      },
+    ],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (search) params.set('q', search);
       if (statusFilter) params.set('status', statusFilter);
+      if (appliedFilters.priority)
+        params.set('priority', appliedFilters.priority);
+      if (appliedFilters.assignee)
+        params.set('assignee', appliedFilters.assignee);
+      if (appliedFilters.from) params.set('from', appliedFilters.from);
+      if (appliedFilters.to) params.set('to', appliedFilters.to);
 
       const result = await api.get(`/work-orders?${params}`);
       return result.data;
@@ -103,11 +136,114 @@ export function WorkOrders() {
             className="pl-10"
           />
         </div>
-        <Button variant="outline" className="flex items-center">
+        <Button
+          variant="outline"
+          className="flex items-center"
+          onClick={() => setFiltersOpen((open) => !open)}
+        >
           <Filter className="w-4 h-4 mr-2" />
           Filters
         </Button>
       </div>
+
+      {filtersOpen && (
+        <Card className="border-dashed">
+          <CardContent className="p-6 space-y-6">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">
+                  Priority
+                </label>
+                <Select
+                  value={filterValues.priority || undefined}
+                  onValueChange={(value) =>
+                    setFilterValues((prev) => ({ ...prev, priority: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Any priority" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="urgent">Urgent</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">
+                  Assignee
+                </label>
+                <Input
+                  placeholder="Search by assignee"
+                  value={filterValues.assignee}
+                  onChange={(e) =>
+                    setFilterValues((prev) => ({
+                      ...prev,
+                      assignee: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">
+                  From date
+                </label>
+                <Input
+                  type="date"
+                  value={filterValues.from}
+                  onChange={(e) =>
+                    setFilterValues((prev) => ({
+                      ...prev,
+                      from: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">
+                  To date
+                </label>
+                <Input
+                  type="date"
+                  value={filterValues.to}
+                  onChange={(e) =>
+                    setFilterValues((prev) => ({
+                      ...prev,
+                      to: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  const resetValues = createInitialFilterState();
+                  setFilterValues(resetValues);
+                  setAppliedFilters(createInitialFilterState());
+                }}
+              >
+                Clear
+              </Button>
+              <Button
+                onClick={() => {
+                  setAppliedFilters({ ...filterValues });
+                  setFiltersOpen(false);
+                }}
+              >
+                Apply Filters
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Work Orders List */}
       <div className="space-y-4">
