@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ClipboardList, Plus, Search, Filter, User, Calendar, AlertTriangle } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../lib/api';
 import { mockWorkOrders, type MockWorkOrder } from '../lib/mockWorkOrders';
@@ -12,30 +12,8 @@ export default function WorkOrders() {
   const [showCreate, setShowCreate] = useState(false);
   const queryClient = useQueryClient();
   const { colors } = useTheme();
-  const navigate = useNavigate();
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
-  const { data: workOrders = mockWorkOrders, isLoading, refetch } = useQuery<MockWorkOrder[]>({
-    queryKey: ['work-orders'],
-    queryFn: async () => {
-      try {
-        const result = await api.get<MockWorkOrder[]>('/work-orders');
-        if (!result || !Array.isArray(result) || result.length === 0) {
-          return mockWorkOrders;
-        }
-
-        return result.map((item) => ({
-          ...item,
-          priority: item.priority ?? 'Medium',
-          status: item.status ?? 'Open'
-        }));
-      } catch {
-        return mockWorkOrders;
-      }
-    }
-
-  });
 
   const statusStats = [
     { label: 'Open', count: 24, color: colors.info },
@@ -66,28 +44,10 @@ export default function WorkOrders() {
     }
   };
 
-  const handleViewWorkOrder = (id: string) => {
-    navigate(`/work-orders/${id}`);
-  };
+  const filteredWorkOrders = statusFilter
+    ? workOrders.filter((wo) => wo.status === statusFilter)
+    : workOrders;
 
-  const handleUpdateWorkOrder = (id: string) => {
-    setSelectedWorkOrderId(id);
-    setIsFormOpen(true);
-  };
-
-  const handleNewWorkOrder = () => {
-    setSelectedWorkOrderId(null);
-    setIsFormOpen(true);
-  };
-
-  const handleCloseForm = () => {
-    setIsFormOpen(false);
-    setSelectedWorkOrderId(null);
-  };
-
-  const handleFormSuccess = () => {
-    refetch();
-  };
 
   return (
     <div className="space-y-6">
@@ -112,16 +72,24 @@ export default function WorkOrders() {
 
       {/* Status Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {statusStats.map((stat, index) => (
-          <div 
-            key={index}
-            className="rounded-xl border p-4 shadow-sm text-center hover:shadow-md transition-shadow cursor-pointer"
-            style={{ backgroundColor: colors.card, borderColor: colors.border }}
-          >
-            <div className="text-2xl font-bold" style={{ color: stat.color }}>{stat.count}</div>
-            <div className="text-sm" style={{ color: colors.mutedForeground }}>{stat.label}</div>
-          </div>
-        ))}
+        {statusStats.map((stat, index) => {
+          const isActive = statusFilter === stat.label;
+
+          return (
+            <div
+              key={index}
+              onClick={() => setStatusFilter((prev) => (prev === stat.label ? null : stat.label))}
+              className="rounded-xl border p-4 shadow-sm text-center hover:shadow-md transition-shadow cursor-pointer"
+              style={{
+                backgroundColor: isActive ? `${stat.color}20` : colors.card,
+                borderColor: isActive ? stat.color : colors.border
+              }}
+            >
+              <div className="text-2xl font-bold" style={{ color: stat.color }}>{stat.count}</div>
+              <div className="text-sm" style={{ color: colors.mutedForeground }}>{stat.label}</div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Search and Filters */}
@@ -153,25 +121,8 @@ export default function WorkOrders() {
 
       {/* Work Orders List */}
       <div className="space-y-4">
-        {isLoading && (
-          <div
-            className="rounded-xl border p-6 text-center"
-            style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.mutedForeground }}
-          >
-            Loading work orders...
-          </div>
-        )}
+        {filteredWorkOrders.map((wo) => (
 
-        {!isLoading && workOrders.length === 0 && (
-          <div
-            className="rounded-xl border p-6 text-center"
-            style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.mutedForeground }}
-          >
-            No work orders found.
-          </div>
-        )}
-
-        {workOrders.map((wo) => (
           <div
             key={wo.id}
             className="rounded-xl border p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
