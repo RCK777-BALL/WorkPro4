@@ -12,8 +12,10 @@ const createMockPrisma = () => ({
 
 let mockPrisma = createMockPrisma();
 
-vi.mock('@prisma/client', () => ({
-  PrismaClient: vi.fn(() => mockPrisma),
+vi.mock('../../db', () => ({
+  get prisma() {
+    return mockPrisma;
+  },
 }));
 
 vi.mock('../../middleware/auth', () => ({
@@ -85,8 +87,8 @@ describe('inventory-related routes', () => {
     });
 
     const response = json.mock.calls[0][0];
-    expect(response.data.partsCount).toBe(6);
-    expect(response.data.stockHealth).toBeCloseTo(66.7, 1);
+    expect(response.data.inventory.totalParts).toBe(6);
+    expect(response.data.inventory.stockHealth).toBeCloseTo(66.7, 1);
   });
 
   it('filters parts below minimum stock level when requested', async () => {
