@@ -1,13 +1,16 @@
-import mongoose from 'mongoose';
+import { PrismaClient } from '@prisma/client';
 
-export async function connectDB(uri: string, dbName?: string) {
-  try {
-    await mongoose.connect(uri, {
-      dbName: dbName ?? process.env.DB_NAME,
-    });
-    console.log('🗄️ Connected to MongoDB');
-  } catch (error) {
-    console.error('❌ Failed to connect to MongoDB');
-    throw error;
-  }
+declare global {
+  // eslint-disable-next-line no-var
+  var prisma: PrismaClient | undefined;
+}
+
+export const prisma: PrismaClient = globalThis.prisma ?? new PrismaClient();
+
+if (process.env.NODE_ENV !== 'production') {
+  globalThis.prisma = prisma;
+}
+
+export async function verifyDatabaseConnection() {
+  await prisma.$connect();
 }
