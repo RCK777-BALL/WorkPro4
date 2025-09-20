@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Calendar,
   Filter,
   Plus,
   Search,
+  X,
   User,
   Wrench,
 } from 'lucide-react';
@@ -13,12 +14,15 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { WorkOrderForm } from '@/components/work-orders/WorkOrderForm';
 import { api } from '@/lib/api';
 import { formatDate, getPriorityColor, getStatusColor } from '@/lib/utils';
 
 export function WorkOrders() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
+  const queryClient = useQueryClient();
 
   const {
     data,
@@ -62,7 +66,7 @@ export function WorkOrders() {
           <h1 className="text-3xl font-bold text-gray-900">Work Orders</h1>
           <p className="text-gray-500">Manage and track maintenance work orders</p>
         </div>
-        <Button className="flex items-center">
+        <Button className="flex items-center" onClick={() => setShowCreate(true)}>
           <Plus className="w-4 h-4 mr-2" />
           New Work Order
         </Button>
@@ -199,12 +203,44 @@ export function WorkOrders() {
                 ? 'Try adjusting your search or filter criteria'
                 : 'Get started by creating your first work order'}
             </p>
-            <Button>
+            <Button onClick={() => setShowCreate(true)}>
               <Plus className="w-4 h-4 mr-2" />
               New Work Order
             </Button>
           </CardContent>
         </Card>
+      )}
+
+      {showCreate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between border-b px-6 py-4">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Create Work Order</h2>
+                <p className="text-sm text-gray-500">
+                  Provide the details below to add a new work order.
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setShowCreate(false)}
+                className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto px-6 py-4">
+              <WorkOrderForm
+                onClose={() => setShowCreate(false)}
+                onSuccess={() => {
+                  setShowCreate(false);
+                  queryClient.invalidateQueries({ queryKey: ['work-orders'] });
+                }}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
