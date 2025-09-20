@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import { requestLogger } from './middleware/requestLogger';
 import { errorHandler } from './middleware/errorHandler';
 import { prisma, verifyDatabaseConnection } from './db';
+import { ensureJwtSecrets } from './config/auth';
 
 // Routes
 import authRoutes from './routes/auth';
@@ -84,6 +85,14 @@ app.use('*', (req, res) => {
 });
 
 async function start() {
+  try {
+    ensureJwtSecrets();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error validating JWT configuration';
+    console.error(`❌ ${message}`);
+    process.exit(1);
+  }
+
   const databaseUrl = process.env.DATABASE_URL?.trim();
 
   if (!databaseUrl) {

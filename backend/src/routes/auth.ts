@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
 import { ok, fail, asyncHandler } from '../utils/response';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { getJwtSecret } from '../config/auth';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -30,7 +31,7 @@ router.post('/login', asyncHandler(async (req, res) => {
 
   const token = jwt.sign(
     { userId: user.id, tenantId: user.tenantId },
-    process.env.JWT_SECRET!,
+    getJwtSecret(),
     { expiresIn: '24h' }
   );
 

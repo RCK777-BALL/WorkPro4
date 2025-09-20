@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 import { fail } from '../utils/response';
+import { getJwtSecret } from '../config/auth';
 
 const prisma = new PrismaClient();
 
@@ -23,7 +24,7 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
     return fail(res, 401, 'Access token required');
   }
 
-  jwt.verify(token, process.env.JWT_SECRET!, async (err: any, decoded: any) => {
+  jwt.verify(token, getJwtSecret(), async (err: any, decoded: any) => {
     if (err) {
       return fail(res, 403, 'Invalid or expired token');
     }
