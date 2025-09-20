@@ -44,6 +44,7 @@ export default function WorkOrderDetails() {
     }
   }, [colors.error, colors.info, colors.mutedForeground, colors.success, colors.warning, workOrder]);
 
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -63,6 +64,7 @@ export default function WorkOrderDetails() {
         >
           Loading work order details...
         </div>
+
       </div>
     );
   }
@@ -85,6 +87,7 @@ export default function WorkOrderDetails() {
           style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.mutedForeground }}
         >
           Work order not found.
+
         </div>
       </div>
     );
@@ -159,6 +162,7 @@ export default function WorkOrderDetails() {
             </div>
             <p className="mt-2 text-sm" style={{ color: colors.mutedForeground }}>
               {workOrder.instructions}
+
             </p>
           </div>
         )}
