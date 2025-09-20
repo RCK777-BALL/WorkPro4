@@ -10,6 +10,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Assets from './pages/Assets';
 import WorkOrders from './pages/WorkOrders';
+import WorkOrderDetails from './pages/WorkOrderDetails';
 import PM from './pages/PM';
 import Teams from './pages/Teams';
 import Inventory from './pages/Inventory';
@@ -30,6 +31,7 @@ export default function App() {
               <Route index element={<Dashboard />} />
               <Route path="assets" element={<Assets />} />
               <Route path="work-orders" element={<WorkOrders />} />
+              <Route path="work-orders/:id" element={<WorkOrderDetails />} />
               <Route path="pm" element={<PM />} />
               <Route path="teams" element={<Teams />} />
               <Route path="inventory" element={<Inventory />} />
