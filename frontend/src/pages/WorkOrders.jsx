@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   Calendar,
@@ -10,6 +10,8 @@ import {
   User,
   Wrench,
 } from 'lucide-react';
+
+import { WorkOrderForm } from '@/components/work-orders/WorkOrderForm';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -44,12 +46,15 @@ export function WorkOrders() {
   const [tempFilters, setTempFilters] = useState(() => ({
     ...INITIAL_ADVANCED_FILTERS,
   }));
+  const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
     if (isFiltersOpen) {
       setTempFilters({ ...advancedFilters });
     }
   }, [isFiltersOpen, advancedFilters]);
+
+  const queryClient = useQueryClient();
 
 
   const {
