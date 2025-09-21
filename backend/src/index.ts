@@ -52,7 +52,8 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/health/db', async (_req, res) => {
   try {
-    await prisma.$runCommandRaw({ ping: 1 });
+    // Use a lightweight SQL query to validate DB connectivity (works for SQL providers)
+    await prisma.$queryRaw`SELECT 1`;
     res.json({ ok: true });
   } catch (error) {
     console.error('❌ Database health check failed', error);
