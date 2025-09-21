@@ -12,7 +12,7 @@ A comprehensive, production-ready CMMS (Computerized Maintenance Management Syst
 - **Inventory Management** - Parts catalog with barcode support and automatic reordering
 - **Purchase Order System** - Complete procurement workflow with vendor management
 - **Real-time Dashboard** - KPIs, sparkline charts, and activity monitoring
-- **Add-on SDK** - Extensible plugin system with server hooks and UI extensions
+- **Extensible Modules** - Well-structured service layer for introducing new domain features
 
 ### Advanced Features
 - **QR Code Integration** - Asset tagging and quick work order access
@@ -25,7 +25,7 @@ A comprehensive, production-ready CMMS (Computerized Maintenance Management Syst
 ## 🏗️ Architecture
 
 ### Tech Stack
-- **Backend**: Node.js, Express, TypeScript, Prisma, PostgreSQL, Redis (in `/backend`)
+- **Backend**: Node.js, Express, TypeScript, Prisma, MongoDB, Redis (in `/backend`)
 - **Frontend**: React, TypeScript, TanStack Query, Tailwind CSS, shadcn/ui (root `src/`)
 - **Real-time**: Socket.IO for live updates
 - **Queue System**: BullMQ for background jobs
@@ -54,12 +54,12 @@ workpro-cmms/
 ```bash
 git clone <repository>
 cd workpro-cmms
-npm run install:all
+pnpm install
 ```
 
 2. **Start the database and services:**
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 3. **Set up the database:**
@@ -67,74 +67,45 @@ docker-compose up -d
 # Copy environment file
 cp backend/.env.example backend/.env
 
-# Synchronize the database schema
-cd backend && npm run db:push
+# Push the Prisma schema to MongoDB
+pnpm --filter backend db:push
+
 
 # Seed with demo data
-npm run db:seed
+pnpm --filter backend db:seed
 ```
 
-The backend reads its Postgres connection string from the `DATABASE_URL` value in `backend/.env`. Copying the example file gives you a local development URL (`postgresql://postgres:password@localhost:5432/workpro_dev`); update this value if you are connecting to a different database instance.
+The backend reads its MongoDB connection string from the `DATABASE_URL` value in `backend/.env`. Copying the example file seeds it with a local development URL (`mongodb://localhost:27017/workpro_dev`); update this value if you need to target a different MongoDB deployment or credentials.
 
 4. **Start development servers:**
 ```bash
-npm run dev:all
+pnpm dev:all
 ```
 
-This starts both the backend server (localhost:5010) and frontend app (localhost:5173). To run only the frontend, use `npm run dev`.
+This starts both the backend server (localhost:5010) and frontend app (localhost:5173). To run only the frontend, use `pnpm dev`.
 
 The API exposes a lightweight readiness probe at `http://localhost:5010/api/health` and a database-specific check at `http://localhost:5010/health/db`.
 
-> ℹ️ Configure the frontend API base URL by setting `VITE_API_URL=http://localhost:5010/api` in the root `.env` file. After changing environment variables, restart your `npm run dev`/`npm run dev:all` process so Vite picks up the updates.
+> ℹ️ Configure the frontend API base URL by setting `VITE_API_URL=http://localhost:5010/api` in the root `.env` file. After changing environment variables, restart your `pnpm dev`/`pnpm dev:all` process so Vite picks up the updates.
 
 ### Production Build
 ```bash
-npm run build
+pnpm build
+pnpm --filter backend build
 ```
 
 ## 📊 Database Schema
 
-The system uses PostgreSQL with Prisma ORM. Key entities include:
+The system uses MongoDB with Prisma's MongoDB connector. The schema lives in `backend/prisma/schema.prisma` and maps directly to the document structures stored in your database. Key collections include:
 
-- **Tenants** - Multi-tenant isolation
-- **Users** - Authentication and role management
+- **Tenants** - Multi-tenant isolation with per-tenant relationships across the data model
+- **Users** - Authentication, role management, and audit authorship tracking
 - **Assets** - Equipment hierarchy and maintenance history
-- **WorkOrders** - Maintenance requests and execution tracking
-- **PMTasks** - Preventive maintenance scheduling
-- **Parts** - Inventory and stock management
-- **PurchaseOrders** - Procurement workflow
-- **AuditLogs** - Complete activity trail
-
-## 🔌 Add-on System
-
-WorkPro includes a powerful SDK for building custom extensions:
-
-### Server Hooks
-```typescript
-registerAddon({
-  id: 'my-addon',
-  name: 'My Custom Add-on',
-  hooks: {
-    afterCreate: async (entity, data, result, ctx) => {
-      // React to entity creation
-    },
-    beforeUpdate: async (entity, id, data, ctx) => {
-      // Modify data before update
-      return modifiedData;
-    },
-  },
-});
-```
-
-### UI Extensions
-```typescript
-registerUiExtension({
-  id: 'my-ui-extension',
-  navItems: [{ label: 'My Feature', href: '/my-feature' }],
-  pageTabs: [{ entity: 'asset', label: 'Custom Tab', render: MyComponent }],
-  commands: [{ id: 'my-command', label: 'Do Something', handler: myHandler }],
-});
-```
+- **WorkOrders** - Maintenance requests and execution tracking with creator references
+- **PMTasks** - Preventive maintenance scheduling rules and generated tasks
+- **Parts** - Inventory levels with vendor relationships
+- **PurchaseOrders** - Procurement workflow and approvals
+- **AuditLogs** - Complete activity trail for compliance
 
 ## 🔐 Security & Compliance
 
@@ -174,12 +145,12 @@ pnpm lint
 
 ### Docker Deployment
 ```bash
-# Build images
-docker build -t workpro-api ./apps/api
-docker build -t workpro-web ./apps/web
+# Build images (ensure Dockerfiles exist in these directories)
+docker build -t workpro-backend ./backend
+docker build -t workpro-frontend .
 
-# Run with docker-compose
-docker-compose -f docker-compose.prod.yml up -d
+# Run with docker compose
+docker compose -f docker-compose.yml up -d
 ```
 
 ### Environment Variables
@@ -187,7 +158,7 @@ Key environment variables for production:
 
 ```bash
 # Database
-DATABASE_URL="postgresql://user:pass@localhost:5432/workpro"
+DATABASE_URL="mongodb://user:pass@localhost:27017/workpro"
 
 # Auth
 JWT_SECRET="your-secret-key"
