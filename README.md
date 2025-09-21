@@ -67,8 +67,8 @@ docker-compose up -d
 # Copy environment file
 cp backend/.env.example backend/.env
 
-# Run migrations
-cd backend && npm run db:migrate
+# Synchronize the database schema
+cd backend && npm run db:push
 
 # Seed with demo data
 npm run db:seed
