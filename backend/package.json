@@ -11,8 +11,9 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
+
     "db:seed": "tsx src/scripts/seed.ts",
-    "db:reset": "prisma migrate reset --force",
+    "db:reset": "prisma db push --force-reset",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write src"
   },

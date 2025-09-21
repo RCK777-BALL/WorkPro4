@@ -70,6 +70,7 @@ cp backend/.env.example backend/.env
 # Push the Prisma schema to MongoDB
 pnpm --filter backend db:push
 
+
 # Seed with demo data
 pnpm --filter backend db:seed
 ```
