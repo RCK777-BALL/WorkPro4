@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
-interface ThemeColors {
+export interface ThemeColors {
   primary: string;
   secondary: string;
   accent: string;
@@ -61,59 +61,110 @@ const defaultDarkColors: ThemeColors = {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+function safeSetItem(key: string, value: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage write failures.
+  }
+}
+
+export function syncThemeToEnvironment(isDark: boolean, colors: ThemeColors) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  safeSetItem('wp3.theme.mode', isDark ? 'dark' : 'light');
+  const root = document.documentElement;
+  root.classList.toggle('dark', isDark);
+
+  Object.entries(colors).forEach(([key, value]) => {
+    root.style.setProperty(`--color-${key}`, value);
+  });
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [isDark, setIsDark] = useState(() => {
-    const saved = localStorage.getItem('wp3.theme.mode');
-    return saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    try {
+      const saved = window.localStorage.getItem('wp3.theme.mode');
+      if (saved) {
+        return saved === 'dark';
+      }
+    } catch {
+      // Ignore storage access errors and fall back to defaults.
+    }
+
+    if (typeof window.matchMedia === 'function') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+
+    return false;
   });
 
   const [lightColors, setLightColors] = useState<ThemeColors>(() => {
-    const saved = localStorage.getItem('wp3.theme.light-colors');
-    return saved ? JSON.parse(saved) : defaultLightColors;
+    if (typeof window === 'undefined') {
+      return defaultLightColors;
+    }
+
+    try {
+      const saved = window.localStorage.getItem('wp3.theme.light-colors');
+      return saved ? JSON.parse(saved) : defaultLightColors;
+    } catch {
+      return defaultLightColors;
+    }
   });
 
   const [darkColors, setDarkColors] = useState<ThemeColors>(() => {
-    const saved = localStorage.getItem('wp3.theme.dark-colors');
-    return saved ? JSON.parse(saved) : defaultDarkColors;
+    if (typeof window === 'undefined') {
+      return defaultDarkColors;
+    }
+
+    try {
+      const saved = window.localStorage.getItem('wp3.theme.dark-colors');
+      return saved ? JSON.parse(saved) : defaultDarkColors;
+    } catch {
+      return defaultDarkColors;
+    }
   });
 
   const colors = isDark ? darkColors : lightColors;
 
   const toggleTheme = () => {
-    setIsDark(!isDark);
+    setIsDark((prev) => !prev);
   };
 
   const updateColors = (newColors: Partial<ThemeColors>) => {
     if (isDark) {
       const updated = { ...darkColors, ...newColors };
       setDarkColors(updated);
-      localStorage.setItem('wp3.theme.dark-colors', JSON.stringify(updated));
+      safeSetItem('wp3.theme.dark-colors', JSON.stringify(updated));
     } else {
       const updated = { ...lightColors, ...newColors };
       setLightColors(updated);
-      localStorage.setItem('wp3.theme.light-colors', JSON.stringify(updated));
+      safeSetItem('wp3.theme.light-colors', JSON.stringify(updated));
     }
   };
 
   const resetColors = () => {
     if (isDark) {
       setDarkColors(defaultDarkColors);
-      localStorage.setItem('wp3.theme.dark-colors', JSON.stringify(defaultDarkColors));
+      safeSetItem('wp3.theme.dark-colors', JSON.stringify(defaultDarkColors));
     } else {
       setLightColors(defaultLightColors);
-      localStorage.setItem('wp3.theme.light-colors', JSON.stringify(defaultLightColors));
+      safeSetItem('wp3.theme.light-colors', JSON.stringify(defaultLightColors));
     }
   };
 
   useEffect(() => {
-    localStorage.setItem('wp3.theme.mode', isDark ? 'dark' : 'light');
-    document.documentElement.classList.toggle('dark', isDark);
-    
-    // Apply CSS custom properties
-    const root = document.documentElement;
-    Object.entries(colors).forEach(([key, value]) => {
-      root.style.setProperty(`--color-${key}`, value);
-    });
+    syncThemeToEnvironment(isDark, colors);
   }, [isDark, colors]);
 
   return (
