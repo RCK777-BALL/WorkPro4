@@ -1,4 +1,24 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const API_PATH = '/api';
+
+const buildApiBaseUrl = (rawUrl) => {
+  if (!rawUrl || typeof rawUrl !== 'string') {
+    return API_PATH;
+  }
+
+  const trimmedUrl = rawUrl.replace(/\/+$/, '');
+
+  if (!trimmedUrl) {
+    return API_PATH;
+  }
+
+  if (trimmedUrl.endsWith(API_PATH)) {
+    return trimmedUrl;
+  }
+
+  return `${trimmedUrl}${API_PATH}`;
+};
+
+const API_BASE_URL = buildApiBaseUrl(import.meta.env.VITE_API_URL);
 
 class ApiClient {
   constructor(baseURL) {
