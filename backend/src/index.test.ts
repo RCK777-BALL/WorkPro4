@@ -13,6 +13,7 @@ describe('server startup', () => {
     vi.resetModules();
     verifyDatabaseConnection.mockClear();
     delete process.env.DATABASE_URL;
+    process.env.DATABASE_URL = '';
   });
 
   afterEach(() => {
