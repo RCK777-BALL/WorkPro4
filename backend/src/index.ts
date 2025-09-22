@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import path from 'path';
+import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -16,6 +17,12 @@ import assetRoutes from './routes/assets';
 import partRoutes from './routes/parts';
 import vendorRoutes from './routes/vendors';
 import searchRoutes from './routes/search';
+
+const envPath = path.resolve(__dirname, '../.env');
+
+// Load environment variables from backend/.env while still allowing real environment
+// variables to take precedence when they are already defined.
+const dotenvResult = dotenv.config({ path: envPath });
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5010;
@@ -94,7 +101,8 @@ async function start() {
     process.exit(1);
   }
 
-  const databaseUrl = process.env.DATABASE_URL?.trim();
+  const databaseUrl =
+    process.env.DATABASE_URL?.trim() ?? dotenvResult.parsed?.DATABASE_URL?.trim();
 
   if (!databaseUrl) {
     console.error('❌ DATABASE_URL environment variable is required. Shutting down.');
