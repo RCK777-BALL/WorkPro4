@@ -63,6 +63,7 @@ interface MockPurchaseOrder {
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5010/api';
+const TOKEN_STORAGE_KEY = 'auth_token';
 
 export interface ApiResult<T> {
   data: T | null;
@@ -73,21 +74,69 @@ export interface ApiResult<T> {
   } | null;
 }
 
-class ApiClient {
+export class ApiClient {
+  private static memoryToken: string | null = null;
+
+  private static getStorage(): Storage | null {
+    if (typeof window === 'undefined' || !('localStorage' in window)) {
+      return null;
+    }
+
+    try {
+      return window.localStorage;
+    } catch {
+      return null;
+    }
+  }
+
   private token: string | null = null;
 
   constructor() {
-    this.token = localStorage.getItem('auth_token');
+    const storage = ApiClient.getStorage();
+
+    if (storage) {
+      try {
+        this.token = storage.getItem(TOKEN_STORAGE_KEY);
+        ApiClient.memoryToken = this.token;
+        return;
+      } catch {
+        // Fall through to in-memory storage when localStorage access fails
+      }
+    }
+
+    this.token = ApiClient.memoryToken;
   }
 
   setToken(token: string) {
     this.token = token;
-    localStorage.setItem('auth_token', token);
+    ApiClient.memoryToken = token;
+
+    const storage = ApiClient.getStorage();
+    if (!storage) {
+      return;
+    }
+
+    try {
+      storage.setItem(TOKEN_STORAGE_KEY, token);
+    } catch {
+      // Ignore storage write errors to keep client usable in non-browser environments
+    }
   }
 
   clearToken() {
     this.token = null;
-    localStorage.removeItem('auth_token');
+    ApiClient.memoryToken = null;
+
+    const storage = ApiClient.getStorage();
+    if (!storage) {
+      return;
+    }
+
+    try {
+      storage.removeItem(TOKEN_STORAGE_KEY);
+    } catch {
+      // Ignore storage removal errors in restricted environments
+    }
   }
 
   private async request<T>(
