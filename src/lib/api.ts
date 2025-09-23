@@ -62,7 +62,23 @@ interface MockPurchaseOrder {
   updatedAt: string;
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5010/api';
+export const normalizeApiBaseUrl = (value: string | undefined | null): string => {
+  const trimmedValue = value?.trim() ?? '';
+
+  if (!trimmedValue) {
+    return 'http://localhost:5010/api';
+  }
+
+  const withoutTrailingSlashes = trimmedValue.replace(/\/+$/u, '');
+
+  if (withoutTrailingSlashes.endsWith('/api')) {
+    return withoutTrailingSlashes;
+  }
+
+  return `${withoutTrailingSlashes}/api`;
+};
+
+const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_URL);
 const TOKEN_STORAGE_KEY = 'auth_token';
 
 export interface ApiResult<T> {
