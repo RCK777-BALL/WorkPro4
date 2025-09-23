@@ -1,5 +1,38 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
+describe('normalizeApiBaseUrl', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('falls back to the default url when the value is empty or whitespace', async () => {
+    const { normalizeApiBaseUrl } = await import('./api');
+
+    expect(normalizeApiBaseUrl(undefined)).toBe('http://localhost:5010/api');
+    expect(normalizeApiBaseUrl(null)).toBe('http://localhost:5010/api');
+    expect(normalizeApiBaseUrl('   ')).toBe('http://localhost:5010/api');
+  });
+
+  it('appends /api when not present', async () => {
+    const { normalizeApiBaseUrl } = await import('./api');
+
+    expect(normalizeApiBaseUrl('https://example.com')).toBe('https://example.com/api');
+  });
+
+  it('trims trailing slashes before appending /api', async () => {
+    const { normalizeApiBaseUrl } = await import('./api');
+
+    expect(normalizeApiBaseUrl('https://example.com///')).toBe('https://example.com/api');
+  });
+
+  it('preserves existing /api suffix and trims trailing slash and whitespace', async () => {
+    const { normalizeApiBaseUrl } = await import('./api');
+
+    expect(normalizeApiBaseUrl(' https://example.com/api ')).toBe('https://example.com/api');
+    expect(normalizeApiBaseUrl('https://example.com/api/')).toBe('https://example.com/api');
+  });
+});
+
 const deleteGlobal = (key: 'localStorage' | 'window') => {
   if (key in globalThis) {
     // @ts-expect-error - cleaning up test globals
