@@ -1,14 +1,15 @@
 const API_PATH = '/api';
+const DEFAULT_API_BASE = 'http://localhost:5010/api';
 
 const buildApiBaseUrl = (rawUrl) => {
   if (!rawUrl || typeof rawUrl !== 'string') {
-    return API_PATH;
+    return DEFAULT_API_BASE;
   }
 
-  const trimmedUrl = rawUrl.replace(/\/+$/, '');
+  const trimmedUrl = rawUrl.trim().replace(/\/+$/, '');
 
   if (!trimmedUrl) {
-    return API_PATH;
+    return DEFAULT_API_BASE;
   }
 
   if (trimmedUrl.endsWith(API_PATH)) {
@@ -18,7 +19,7 @@ const buildApiBaseUrl = (rawUrl) => {
   return `${trimmedUrl}${API_PATH}`;
 };
 
-const API_BASE_URL = buildApiBaseUrl(import.meta.env.VITE_API_URL);
+const API_BASE_URL = buildApiBaseUrl(import.meta.env.VITE_API_URL) || DEFAULT_API_BASE;
 
 class ApiClient {
   constructor(baseURL) {
