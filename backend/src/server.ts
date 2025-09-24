@@ -1,105 +1,115 @@
-// /backend/src/server.ts
-import "dotenv/config";
-import express, { type NextFunction, type Request, type Response } from "express";
-import cors from "cors";
-import { connectMongo } from "./config/mongo";
+import http from 'http';
+import { URL } from 'url';
+import { loadEnv } from './config/env';
+import { connectMongo } from './config/mongo';
+import { handleLogin } from './routes/authRoutes';
 
-// ---- Configuration ----
+loadEnv();
+
 const PORT = Number(process.env.PORT || 5010);
-const NODE_ENV = process.env.NODE_ENV || "development";
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "http://localhost:5173";
+const ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
+const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// ---- Create App ----
-export const app = express();
-
-// Basic middleware
-app.use(
-  cors({
-    origin: FRONTEND_ORIGIN,
-    credentials: true,
-  })
-);
-app.use(express.json({ limit: "1mb" }));
-app.use(express.urlencoded({ extended: true }));
-
-// Dev request logging without extra deps
-if (NODE_ENV !== "production") {
-  app.use((req, _res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
-    next();
-  });
+function setCorsHeaders(res: http.ServerResponse): void {
+  res.setHeader('Access-Control-Allow-Origin', ORIGIN);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
 }
 
-// ---- Health & Utility Routes ----
-app.get("/api/health", (_req, res) => {
-  res.json({
-    ok: true,
-    env: NODE_ENV,
-    time: new Date().toISOString(),
-    uptimeSec: Math.round(process.uptime()),
-  });
-});
-
-app.get("/api/version", (_req, res) => {
-  // If you want to pull this from package.json, enable resolveJsonModule and import it.
-  res.json({ app: "WorkPro4 API", version: process.env.APP_VERSION ?? "0.1.0" });
-});
-
-// ---- Example API namespaces (plug in your routers here) ----
-// import authRouter from "./routes/authRoutes";
-// import workOrdersRouter from "./routes/workOrdersRoutes";
-// app.use("/api/auth", authRouter);
-// app.use("/api/work-orders", workOrdersRouter);
-
-// ---- 404 for unknown API routes ----
-app.use("/api", (_req, res) => {
-  res.status(404).json({ error: { code: 404, message: "API route not found" } });
-});
-
-// ---- Error Handler (typed & safe) ----
-interface HttpError extends Error {
-  status?: number;
-  statusCode?: number;
-  details?: unknown;
+function sendJson(res: http.ServerResponse, status: number, payload: unknown): void {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify(payload));
 }
 
-app.use((err: HttpError, _req: Request, res: Response, _next: NextFunction) => {
-  const status = err.status ?? err.statusCode ?? 500;
-  const message = err.message || "Internal Server Error";
-  const payload: { error: { code: number; message: string; details?: unknown } } = {
-    error: { code: status, message },
-  };
-  if (err.details) payload.error.details = err.details;
-
-  if (NODE_ENV !== "production") {
-    console.error("[error]", err);
+async function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  let totalLength = 0;
+  for await (const chunk of req) {
+    const bufferChunk = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalLength += bufferChunk.length;
+    if (totalLength > 1_000_000) {
+      throw new Error('Payload too large');
+    }
+    chunks.push(bufferChunk);
   }
-  res.status(status).json(payload);
-});
 
-// ---- Bootstrapping ----
-async function bootstrap() {
+  if (chunks.length === 0) {
+    return {};
+  }
+
+  const raw = Buffer.concat(chunks).toString('utf8');
+  if (!raw) {
+    return {};
+  }
+
   try {
-    // Connect to Mongo first
-    await connectMongo();
-
-    // Start server
-    app.listen(PORT, () => {
-      console.log(`API listening on http://localhost:${PORT}`);
-      console.log(`CORS allowed origin: ${FRONTEND_ORIGIN}`);
-    });
-  } catch (err) {
-    console.error("[bootstrap] failed to start server:", err);
-    process.exit(1);
+    return JSON.parse(raw);
+  } catch {
+    throw new Error('Invalid JSON payload');
   }
 }
 
-// Global safety nets
-process.on("unhandledRejection", (reason) => {
-  console.error("[unhandledRejection]", reason);
-});
-process.on("uncaughtException", (err) => {
-  console.error("[uncaughtException]", err);
-});
+export async function start(): Promise<void> {
+  await connectMongo();
 
-bootstrap();
+  const server = http.createServer(async (req, res) => {
+    setCorsHeaders(res);
+
+    if (!req.url) {
+      sendJson(res, 404, { error: { code: 404, message: 'Not found' } });
+      return;
+    }
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+
+    try {
+      if (url.pathname === '/api/health' && req.method === 'GET') {
+        sendJson(res, 200, { ok: true, time: new Date().toISOString() });
+        return;
+      }
+
+      if (url.pathname === '/api/auth/login' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const result = await handleLogin(body);
+        sendJson(res, result.status, result.body);
+        return;
+      }
+
+      if (url.pathname.startsWith('/api')) {
+        sendJson(res, 404, { error: { code: 404, message: 'API route not found' } });
+        return;
+      }
+
+      sendJson(res, 404, { error: { code: 404, message: 'Route not found' } });
+    } catch (error) {
+      if (NODE_ENV !== 'production') {
+        console.error('[error]', error);
+      }
+      const message = error instanceof Error ? error.message : 'Internal Server Error';
+      const status = message === 'Invalid JSON payload' || message === 'Payload too large' ? 400 : 500;
+      sendJson(res, status, { error: { code: status, message } });
+    }
+  });
+
+  server.listen(PORT, () => {
+    console.log(`API listening on http://localhost:${PORT}`);
+    console.log(`CORS origin: ${ORIGIN}`);
+  });
+}
+
+if (require.main === module) {
+  start().catch((error) => {
+    console.error('Failed to start server', error);
+    process.exit(1);
+  });
+}
+
+export default { start };
