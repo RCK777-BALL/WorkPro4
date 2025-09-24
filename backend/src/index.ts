@@ -150,7 +150,7 @@ async function ensureDemoUsers() {
     },
   });
 
-  const defaultPassword = bcrypt.hashSync('password', 10);
+  const defaultPassword = bcrypt.hashSync('Password123', 10);
 
   const users = await Promise.all([
     prisma.user.create({
@@ -185,7 +185,7 @@ async function ensureDemoUsers() {
   console.log('✅ Created demo tenant:', tenant.name);
   console.log('✅ Created demo users:', users.map((user) => user.email).join(', '));
   console.log('Demo login credentials:');
-  console.log('  • admin@demo.com / password');
-  console.log('  • planner@demo.com / password');
-  console.log('  • tech@demo.com / password');
+  console.log('  • admin@demo.com / Password123');
+  console.log('  • planner@demo.com / Password123');
+  console.log('  • tech@demo.com / Password123');
 }
