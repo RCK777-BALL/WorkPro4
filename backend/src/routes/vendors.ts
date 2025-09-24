@@ -49,7 +49,7 @@ router.post('/', requireRoles(['planner', 'supervisor', 'admin']), asyncHandler(
   const vendor = await prisma.vendor.create({
     data: {
       name: data.name,
-      contactJson: data.contact ?? Prisma.JsonNull,
+      contactJson: data.contact ?? null,
       tenantId,
     },
   });
@@ -82,7 +82,7 @@ router.put('/:id', requireRoles(['planner', 'supervisor', 'admin']), asyncHandle
   const updateData: any = {};
   if (data.name) updateData.name = data.name;
   if (data.contact !== undefined) {
-    updateData.contactJson = data.contact ?? Prisma.JsonNull;
+    updateData.contactJson = data.contact ?? null;
   }
 
   const vendor = await prisma.vendor.update({

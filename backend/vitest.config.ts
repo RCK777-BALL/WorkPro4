@@ -5,6 +5,6 @@ export default defineConfig({
     environment: 'node',
   },
   css: {
-    postcss: null,
+    postcss: undefined,
   },
 });
