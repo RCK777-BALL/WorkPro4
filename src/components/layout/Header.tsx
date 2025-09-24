@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { 
+import { useNavigate } from 'react-router-dom';
+import {
   Palette,
-  Menu, 
-  Search, 
+  Menu,
+  Search,
   Plus, 
   Bell, 
   User, 
@@ -14,16 +15,33 @@ import {
 import { cn } from '../../lib/utils';
 import { useTheme } from '../../contexts/ThemeContext';
 import { ThemeCustomizer } from '../ThemeCustomizer';
+import { useAuth } from '../../hooks/useAuth';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
 }
 
 export function Header({ onToggleSidebar }: HeaderProps) {
-  const { isDark, colors } = useTheme();
+  const { colors } = useTheme();
   const [searchFocused, setSearchFocused] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [themeCustomizerOpen, setThemeCustomizerOpen] = useState(false);
+  const navigate = useNavigate();
+  const { user, isAuthenticated, logout } = useAuth();
+
+  const displayName = user?.name?.trim() || 'Guest User';
+  const displayEmail = user?.email?.trim() || 'Not signed in';
+
+  const handleLogin = () => {
+    setUserMenuOpen(false);
+    navigate('/login');
+  };
+
+  const handleLogout = () => {
+    logout();
+    setUserMenuOpen(false);
+    navigate('/login');
+  };
 
   // Global search shortcut
   useEffect(() => {
@@ -154,45 +172,50 @@ export function Header({ onToggleSidebar }: HeaderProps) {
                   style={{ backgroundColor: colors.card, borderColor: colors.border }}
                 >
                   <div className="p-2">
-                    <div 
+                    <div
                       className="px-3 py-2 text-sm border-b mb-2"
                       style={{ color: colors.mutedForeground, borderColor: colors.border }}
                     >
-                      <div className="font-medium" style={{ color: colors.foreground }}>John Doe</div>
-                      <div>john@workpro3.com</div>
+                      <div className="font-medium" style={{ color: colors.foreground }}>{displayName}</div>
+                      <div>{displayEmail}</div>
                     </div>
-                    <button
-                      onClick={() => {
-                        window.location.href = '/login';
-                      }}
-                      className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg transition-colors hover:opacity-80"
-                      style={{ color: colors.foreground }}
-                    >
-                      <LogIn className="w-4 h-4" />
-                      Login
-                    </button>
-                    <button
-                      className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg transition-colors hover:opacity-80"
-                      style={{ color: colors.foreground }}
-                    >
-                      <User className="w-4 h-4" />
-                      Profile
-                    </button>
-                    <button 
-                      className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg transition-colors hover:opacity-80"
-                      style={{ color: colors.foreground }}
-                    >
-                      <Settings className="w-4 h-4" />
-                      Settings
-                    </button>
-                    <hr className="my-2" style={{ borderColor: colors.border }} />
-                    <button 
-                      className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg transition-colors hover:opacity-80"
-                      style={{ color: colors.error }}
-                    >
-                      <LogOut className="w-4 h-4" />
-                      Logout
-                    </button>
+                    {!isAuthenticated && (
+                      <button
+                        onClick={handleLogin}
+                        className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg transition-colors hover:opacity-80"
+                        style={{ color: colors.foreground }}
+                      >
+                        <LogIn className="w-4 h-4" />
+                        Login
+                      </button>
+                    )}
+                    {isAuthenticated && (
+                      <>
+                        <button
+                          className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg transition-colors hover:opacity-80"
+                          style={{ color: colors.foreground }}
+                        >
+                          <User className="w-4 h-4" />
+                          Profile
+                        </button>
+                        <button
+                          className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg transition-colors hover:opacity-80"
+                          style={{ color: colors.foreground }}
+                        >
+                          <Settings className="w-4 h-4" />
+                          Settings
+                        </button>
+                        <hr className="my-2" style={{ borderColor: colors.border }} />
+                        <button
+                          onClick={handleLogout}
+                          className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg transition-colors hover:opacity-80"
+                          style={{ color: colors.error }}
+                        >
+                          <LogOut className="w-4 h-4" />
+                          Logout
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </>
@@ -202,10 +225,10 @@ export function Header({ onToggleSidebar }: HeaderProps) {
       </div>
     </header>
 
-      <ThemeCustomizer 
-        isOpen={themeCustomizerOpen}
-        onClose={() => setThemeCustomizerOpen(false)}
-      />
+    <ThemeCustomizer
+      isOpen={themeCustomizerOpen}
+      onClose={() => setThemeCustomizerOpen(false)}
+    />
     </>
   );
 }
