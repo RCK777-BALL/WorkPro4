@@ -40,6 +40,7 @@ export default function App() {
               <Route path="documents" element={<Documents />} />
               <Route path="analytics" element={<Analytics />} />
               <Route path="settings" element={<Settings />} />
+              <Route path="*" element={<NotFound />} />
             </Route>
           </Routes>
         </ErrorBoundary>
