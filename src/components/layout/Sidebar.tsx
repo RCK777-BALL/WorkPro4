@@ -22,7 +22,7 @@ interface SidebarProps {
 }
 
 const navItems: NavItem[] = [
-  { label: 'Dashboard', to: '/dashboard', icon: <LayoutDashboard /> },
+  { label: 'Dashboard', to: '/', icon: <LayoutDashboard /> },
   { label: 'Assets', to: '/assets', icon: <Boxes /> },
   { label: 'Work Orders', to: '/work-orders', icon: <ClipboardList /> },
   { label: 'Preventive Maintenance', to: '/pm', icon: <CalendarCog /> },
