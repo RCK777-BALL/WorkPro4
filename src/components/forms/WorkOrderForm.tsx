@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { api } from '../../lib/api';
@@ -35,11 +35,24 @@ interface WorkOrderFormProps {
   onSuccess?: () => void;
 }
 
+type ExistingWorkOrder = {
+  title?: string | null;
+  description?: string | null;
+  priority?: 'low' | 'medium' | 'high' | 'urgent' | null;
+  assetId?: string | null;
+  assignees?: unknown;
+  checklists?: Array<{
+    text?: string | null;
+    note?: string | null;
+    [key: string]: unknown;
+  }> | null;
+};
+
 export function WorkOrderForm({ workOrderId, onClose, onSuccess }: WorkOrderFormProps) {
   const [checklistItems, setChecklistItems] = useState<{ text: string; note?: string }[]>([]);
   const queryClient = useQueryClient();
   
-  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<WorkOrderFormData>({
+  const { register, handleSubmit, setValue, reset, watch, formState: { errors } } = useForm<WorkOrderFormData>({
     defaultValues: {
       priority: 'medium',
       assignees: [],
@@ -85,6 +98,33 @@ export function WorkOrderForm({ workOrderId, onClose, onSuccess }: WorkOrderForm
     }
   });
 
+  useEffect(() => {
+    if (!existingWorkOrder) return;
+
+    const sanitizedAssignees = Array.isArray(existingWorkOrder.assignees)
+      ? existingWorkOrder.assignees.filter((assignee: unknown): assignee is string => typeof assignee === 'string')
+      : [];
+
+    const sanitizedChecklists = Array.isArray(existingWorkOrder.checklists)
+      ? existingWorkOrder.checklists.map((item: any) => ({
+          text: typeof item?.text === 'string' ? item.text : '',
+          note: typeof item?.note === 'string' ? item.note : ''
+        }))
+      : [];
+
+    reset({
+      title: existingWorkOrder.title ?? '',
+      description: existingWorkOrder.description ?? '',
+      priority: existingWorkOrder.priority ?? 'medium',
+      assetId: existingWorkOrder.assetId ?? '',
+      assignees: sanitizedAssignees,
+      checklists: sanitizedChecklists
+    });
+
+    setValue('checklists', sanitizedChecklists);
+    setChecklistItems(sanitizedChecklists);
+  }, [existingWorkOrder, reset, setValue]);
+
   // Fetch users for assignment
   const { data: users = [] } = useQuery({
     queryKey: ['users'],
@@ -104,12 +144,12 @@ export function WorkOrderForm({ workOrderId, onClose, onSuccess }: WorkOrderForm
   });
 
   // Fetch existing work order if editing
-  const { data: existingWorkOrder } = useQuery({
+  const { data: existingWorkOrder } = useQuery<ExistingWorkOrder | null>({
     queryKey: ['work-order', workOrderId],
-    queryFn: async () => {
+    queryFn: async (): Promise<ExistingWorkOrder | null> => {
       if (!workOrderId) return null;
       try {
-        return await api.get(`/work-orders/${workOrderId}`);
+        return await api.get<ExistingWorkOrder>(`/work-orders/${workOrderId}`);
       } catch {
         return null;
       }
