@@ -20,7 +20,7 @@ async function main() {
     data: {
       tenantId: tenant.id,
       email: 'admin@demo.com',
-      passwordHash: bcrypt.hashSync('password', 10),
+      passwordHash: bcrypt.hashSync('Password123', 10),
       name: 'Admin User',
       roles: ['admin', 'supervisor', 'planner', 'tech'],
     },
@@ -30,7 +30,7 @@ async function main() {
     data: {
       tenantId: tenant.id,
       email: 'planner@demo.com',
-      passwordHash: bcrypt.hashSync('password', 10),
+      passwordHash: bcrypt.hashSync('Password123', 10),
       name: 'Maintenance Planner',
       roles: ['planner', 'tech'],
     },
@@ -40,7 +40,7 @@ async function main() {
     data: {
       tenantId: tenant.id,
       email: 'tech@demo.com',
-      passwordHash: bcrypt.hashSync('password', 10),
+      passwordHash: bcrypt.hashSync('Password123', 10),
       name: 'Maintenance Tech',
       roles: ['tech'],
     },
@@ -321,9 +321,9 @@ async function main() {
 
   console.log('🎉 Seeding completed!');
   console.log('\nDemo credentials:');
-  console.log('Admin: admin@demo.com / password');
-  console.log('Planner: planner@demo.com / password');
-  console.log('Tech: tech@demo.com / password');
+  console.log('Admin: admin@demo.com / Password123');
+  console.log('Planner: planner@demo.com / Password123');
+  console.log('Tech: tech@demo.com / Password123');
 }
 
 main()

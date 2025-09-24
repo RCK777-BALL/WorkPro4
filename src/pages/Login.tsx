@@ -258,9 +258,9 @@ export default function Login() {
           <div className="mt-6 p-4 rounded-lg" style={{ backgroundColor: colors.muted }}>
             <h4 className="text-sm font-medium mb-2" style={{ color: colors.foreground }}>Demo Credentials:</h4>
             <div className="text-xs space-y-1" style={{ color: colors.mutedForeground }}>
-              <div>Admin: admin@demo.com / password</div>
-              <div>Planner: planner@demo.com / password</div>
-              <div>Tech: tech@demo.com / password</div>
+              <div>Admin: admin@demo.com / Password123</div>
+              <div>Planner: planner@demo.com / Password123</div>
+              <div>Tech: tech@demo.com / Password123</div>
             </div>
           </div>
         </div>
