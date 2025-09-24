@@ -1,35 +1,42 @@
-import { Routes, Route } from 'react-router-dom';
+import { Suspense, lazy } from 'react';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
-import { ThemeProvider } from './contexts/ThemeContext';
-import { Layout } from './components/layout/Layout';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
 import ErrorBoundary from './components/common/ErrorBoundary';
+import AppShell from './components/layout/AppShell';
 
-// Import pages
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import Assets from './pages/Assets';
-import WorkOrders from './pages/WorkOrders';
-import WorkOrderDetails from './pages/WorkOrderDetails';
-import PM from './pages/PM';
-import Teams from './pages/Teams';
-import Inventory from './pages/Inventory';
-import Vendors from './pages/Vendors';
-import Documents from './pages/Documents';
-import Analytics from './pages/Analytics';
-import Settings from './pages/Settings';
-import NotFound from './pages/NotFound';
+const Login = lazy(() => import('./pages/Login'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Assets = lazy(() => import('./pages/Assets'));
+const WorkOrders = lazy(() => import('./pages/WorkOrders'));
+const WorkOrderDetails = lazy(() => import('./pages/WorkOrderDetails'));
+const PM = lazy(() => import('./pages/PM'));
+const Teams = lazy(() => import('./pages/Teams'));
+const Inventory = lazy(() => import('./pages/Inventory'));
+const Vendors = lazy(() => import('./pages/Vendors'));
+const Documents = lazy(() => import('./pages/Documents'));
+const Analytics = lazy(() => import('./pages/Analytics'));
+const Settings = lazy(() => import('./pages/Settings'));
+const NotFound = lazy(() => import('./pages/NotFound'));
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <ErrorBoundary>
+        <Suspense fallback={<div className="grid min-h-screen place-items-center text-mutedfg">Loading...</div>}>
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-              <Route index element={<Dashboard />} />
+            <Route
+              path="/"
+              element={(
+                <ProtectedRoute>
+                  <AppShell />
+                </ProtectedRoute>
+              )}
+            >
+              <Route index element={<Navigate to="/dashboard" replace />} />
+              <Route path="dashboard" element={<Dashboard />} />
               <Route path="assets" element={<Assets />} />
               <Route path="work-orders" element={<WorkOrders />} />
               <Route path="work-orders/:id" element={<WorkOrderDetails />} />
@@ -40,12 +47,11 @@ export default function App() {
               <Route path="documents" element={<Documents />} />
               <Route path="analytics" element={<Analytics />} />
               <Route path="settings" element={<Settings />} />
-              <Route path="*" element={<NotFound />} />
             </Route>
+            <Route path="*" element={<NotFound />} />
           </Routes>
-        </ErrorBoundary>
-
-      </QueryClientProvider>
-    </ThemeProvider>
+        </Suspense>
+      </ErrorBoundary>
+    </QueryClientProvider>
   );
 }

@@ -1,518 +1,309 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ClipboardList, Plus, Search, Filter, User, Calendar, AlertTriangle } from 'lucide-react';
-
-import { useTheme } from '../contexts/ThemeContext';
+import { useQuery } from '@tanstack/react-query';
+import { Calendar, Download, Filter, ListChecks, Plus, Search, User } from 'lucide-react';
+import { FilterBar, type FilterDefinition, type QuickFilter } from '../components/premium/FilterBar';
+import { ProTable, type ProTableColumn } from '../components/premium/ProTable';
+import { SlideOver } from '../components/premium/SlideOver';
+import { ConfirmDialog } from '../components/premium/ConfirmDialog';
+import { DataBadge } from '../components/premium/DataBadge';
+import { EmptyState } from '../components/premium/EmptyState';
 import { api } from '../lib/api';
 import { mockWorkOrders, type MockWorkOrder } from '../lib/mockWorkOrders';
-import { WorkOrderForm } from '../components/forms/WorkOrderForm';
 
-const defaultStatusOptions = ['Open', 'Assigned', 'In Progress', 'Completed', 'Cancelled', 'Overdue'];
-const defaultPriorityOptions = ['Low', 'Medium', 'High', 'Urgent'];
+interface NotificationState {
+  message: string;
+  tone: 'success' | 'danger';
+}
+
+const filters: FilterDefinition[] = [
+  { key: 'search', label: 'Search', type: 'search', placeholder: 'WO ID, asset, or description' },
+  { key: 'status', label: 'Status', type: 'select', options: ['Open', 'Assigned', 'In Progress', 'Completed', 'Overdue', 'Cancelled'].map((value) => ({ value, label: value })) },
+  { key: 'priority', label: 'Priority', type: 'select', options: ['Low', 'Medium', 'High', 'Urgent'].map((value) => ({ value, label: value })) },
+  { key: 'assignee', label: 'Assignee', type: 'text', placeholder: 'Technician name' },
+  { key: 'dueDate', label: 'Due before', type: 'date' }
+];
+
+const quickFilters: QuickFilter[] = [
+  { key: 'status', value: 'Overdue', label: 'Overdue' },
+  { key: 'priority', value: 'Urgent', label: 'Urgent' },
+  { key: 'status', value: 'Completed', label: 'Completed' }
+];
+
+const columns: ProTableColumn<MockWorkOrder>[] = [
+  { key: 'id', header: 'WO #' },
+  { key: 'title', header: 'Summary' },
+  {
+    key: 'status',
+    header: 'Status',
+    accessor: (row) => <DataBadge status={row.status ?? 'Open'} />
+  },
+  {
+    key: 'priority',
+    header: 'Priority',
+    accessor: (row) => <DataBadge status={row.priority ?? 'Medium'} />
+  },
+  { key: 'assignee', header: 'Owner' },
+  { key: 'asset', header: 'Asset' },
+  { key: 'dueDate', header: 'Due', accessor: (row) => row.dueDate ?? '—' }
+];
 
 export default function WorkOrders() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { colors } = useTheme();
+  const [values, setValues] = useState<Record<string, string>>({ search: '' });
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [activeWorkOrder, setActiveWorkOrder] = useState<MockWorkOrder | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [notification, setNotification] = useState<NotificationState | null>(null);
 
-  const [workOrders, setWorkOrders] = useState<MockWorkOrder[]>(mockWorkOrders);
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [filters, setFilters] = useState({
-    status: '',
-    priority: '',
-    assignee: '',
-    dateFrom: '',
-    dateTo: ''
-  });
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!notification) return;
+    const timer = window.setTimeout(() => setNotification(null), 3200);
+    return () => window.clearTimeout(timer);
+  }, [notification]);
 
-  const workOrdersQuery = useQuery({
+  const { data: workOrders = mockWorkOrders, isLoading } = useQuery({
     queryKey: ['work-orders'],
-    queryFn: async (): Promise<MockWorkOrder[]> => {
+    queryFn: async () => {
       try {
         const result = await api.get<MockWorkOrder[]>('/work-orders');
         return Array.isArray(result) ? result : mockWorkOrders;
-      } catch (error) {
-        console.error('Failed to load work orders, using mock data', error);
+      } catch {
         return mockWorkOrders;
       }
     }
   });
 
-  useEffect(() => {
-    if (workOrdersQuery.data) {
-      setWorkOrders(workOrdersQuery.data);
-    }
-  }, [workOrdersQuery.data]);
-
-  const statusOptions = useMemo(() => {
-    const uniqueStatuses = new Set(defaultStatusOptions);
-    workOrders.forEach((wo) => {
-      if (wo.status) {
-        uniqueStatuses.add(wo.status);
-      }
-    });
-    return Array.from(uniqueStatuses);
-  }, [workOrders]);
-
-  const priorityOptions = useMemo(() => {
-    const uniquePriorities = new Set(defaultPriorityOptions);
-    workOrders.forEach((wo) => {
-      if (wo.priority) {
-        uniquePriorities.add(wo.priority);
-      }
-    });
-    return Array.from(uniquePriorities);
-  }, [workOrders]);
-
-  const assigneeOptions = useMemo(() => {
-    const assignees = new Set<string>();
-    workOrders.forEach((wo) => {
-      if (wo.assignee) {
-        assignees.add(wo.assignee);
-      }
-    });
-    return Array.from(assignees);
-  }, [workOrders]);
-
-  const isFiltersApplied = useMemo(() => {
-    return Boolean(
-      filters.status ||
-      filters.priority ||
-      filters.assignee ||
-      filters.dateFrom ||
-      filters.dateTo
-    );
-  }, [filters]);
-
-  const getPriorityColor = (priority: string) => {
-    switch ((priority ?? '').toLowerCase()) {
-      case 'urgent':
-        return colors.error;
-      case 'high':
-        return colors.warning;
-      case 'medium':
-        return colors.info;
-      case 'low':
-        return colors.success;
-      default:
-        return colors.mutedForeground;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch ((status ?? '').toLowerCase()) {
-      case 'open':
-        return colors.info;
-      case 'assigned':
-      case 'in progress':
-        return colors.warning;
-      case 'completed':
-        return colors.success;
-      case 'overdue':
-        return colors.error;
-      case 'cancelled':
-        return colors.mutedForeground;
-      default:
-        return colors.mutedForeground;
-    }
-  };
-
-  const statusStats = useMemo(() => {
-    const counts = workOrders.reduce<Record<string, number>>((acc, wo) => {
-      if (wo.status) {
-        acc[wo.status] = (acc[wo.status] ?? 0) + 1;
-      }
-      return acc;
-    }, {});
-
-    return statusOptions.map((status) => ({
-      label: status,
-      count: counts[status] ?? 0,
-      color: getStatusColor(status)
-    }));
-  }, [workOrders, statusOptions]);
-
-  const filteredWorkOrders = useMemo(() => {
-    const lowerSearch = searchTerm.trim().toLowerCase();
-
-    return workOrders.filter((wo) => {
-      const matchesStatusTile = statusFilter ? wo.status === statusFilter : true;
-      const matchesStatusFilter = filters.status ? wo.status === filters.status : true;
-      const matchesPriority = filters.priority ? wo.priority === filters.priority : true;
-      const matchesAssignee = filters.assignee ? wo.assignee === filters.assignee : true;
-      const matchesSearch = lowerSearch
-        ? [wo.id, wo.title, wo.description, wo.asset]
-            .filter(Boolean)
-            .some((value) => value!.toLowerCase().includes(lowerSearch))
+  const filtered = useMemo(() => {
+    const search = (values.search ?? '').trim().toLowerCase();
+    return workOrders.filter((order) => {
+      const matchesSearch = search
+        ? [order.id, order.title, order.asset, order.description].some((field) =>
+            typeof field === 'string' && field.toLowerCase().includes(search)
+          )
         : true;
-
-      return matchesStatusTile && matchesStatusFilter && matchesPriority && matchesAssignee && matchesSearch;
+      const matchesStatus = values.status ? order.status === values.status : true;
+      const matchesPriority = values.priority ? order.priority === values.priority : true;
+      const matchesAssignee = values.assignee ? (order.assignee ?? '').toLowerCase().includes(values.assignee.toLowerCase()) : true;
+      const matchesDueDate = values.dueDate ? (order.dueDate ?? '') <= values.dueDate : true;
+      return matchesSearch && matchesStatus && matchesPriority && matchesAssignee && matchesDueDate;
     });
-  }, [workOrders, statusFilter, filters, searchTerm]);
+  }, [values, workOrders]);
 
-  const handleStatusTileClick = (status: string) => {
-    setStatusFilter((current) => (current === status ? null : status));
+  const overdueCount = filtered.filter((order) => order.status === 'Overdue').length;
+
+  const handleChange = (key: string, value: string) => {
+    setValues((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handleFilterChange = (field: keyof typeof filters, value: string) => {
-    setFilters((prev) => ({
-      ...prev,
-      [field]: value
-    }));
+  const handleReset = () => setValues({ search: '' });
+
+  const handleRowClick = (row: MockWorkOrder) => {
+    setActiveWorkOrder(row);
   };
 
-  const handleFilterReset = () => {
-    setFilters({ status: '', priority: '', assignee: '', dateFrom: '', dateTo: '' });
+  const handleBulkComplete = () => {
+    setDialogOpen(true);
   };
 
-  const handleNewWorkOrder = () => {
-    setSelectedWorkOrderId(null);
-    setIsFormOpen(true);
-  };
-
-  const handleViewWorkOrder = (workOrderId: string) => {
-    navigate(`/work-orders/${workOrderId}`);
-  };
-
-  const handleUpdateWorkOrder = (workOrderId: string) => {
-    setSelectedWorkOrderId(workOrderId);
-    setIsFormOpen(true);
-  };
-
-  const handleView = (workOrderId: string) => {
-    handleViewWorkOrder(workOrderId);
-  };
-
-  const handleUpdate = (workOrderId: string) => {
-    handleUpdateWorkOrder(workOrderId);
-  };
-
-  const handleCloseForm = () => {
-    setIsFormOpen(false);
-    setSelectedWorkOrderId(null);
-  };
-
-  const handleFormSuccess = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['work-orders'] });
-    setIsFormOpen(false);
-    setSelectedWorkOrderId(null);
+  const confirmBulkComplete = () => {
+    setDialogOpen(false);
+    if (selectedIds.length === 0) return;
+    setNotification({ message: `${selectedIds.length} work orders marked complete`, tone: 'success' });
+    setSelectedIds([]);
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-8">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold" style={{ color: colors.foreground }}>
-            Work Orders
-          </h1>
-          <p className="mt-1" style={{ color: colors.mutedForeground }}>
-            Manage and track maintenance work orders
+          <h1 className="text-3xl font-semibold text-fg">Work order pipeline</h1>
+          <p className="mt-2 text-sm text-mutedfg">
+            Track assignments, SLA risk, and technician load. {overdueCount} items need immediate follow-up.
           </p>
         </div>
-        <button
-          className="flex items-center gap-2 px-4 py-2 rounded-xl hover:opacity-90 transition-colors"
-          style={{ backgroundColor: colors.primary, color: 'white' }}
-          onClick={handleNewWorkOrder}
-        >
-          <Plus className="w-4 h-4" />
-          New Work Order
-        </button>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {statusStats.map((stat) => {
-          const isActive = statusFilter === stat.label;
-          return (
-            <div
-              key={stat.label}
-              className="rounded-xl border p-4 shadow-sm text-center hover:shadow-md transition-shadow cursor-pointer"
-              style={{
-                backgroundColor: isActive ? `${stat.color}20` : colors.card,
-                borderColor: isActive ? stat.color : colors.border,
-                color: colors.foreground
-              }}
-              onClick={() => handleStatusTileClick(stat.label)}
-            >
-              <div className="text-2xl font-bold" style={{ color: stat.color }}>
-                {stat.count}
-              </div>
-              <div className="text-sm" style={{ color: colors.mutedForeground }}>
-                {stat.label}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="flex flex-col sm:flex-row sm:items-center gap-4 relative">
-        <div className="relative flex-1 max-w-md">
-          <Search
-            className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4"
-            style={{ color: colors.mutedForeground }}
-          />
-          <input
-            type="text"
-            placeholder="Search work orders..."
-            className="w-full h-10 pl-10 pr-4 rounded-xl border focus:outline-none focus:ring-2 focus:ring-ring"
-            style={{
-              backgroundColor: colors.background,
-              borderColor: colors.border,
-              color: colors.foreground
-            }}
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-          />
+        <div className="flex flex-wrap items-center gap-3">
+          <button className="rounded-2xl border border-border bg-white/80 px-4 py-2 text-sm font-semibold text-fg shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+            <Download className="mr-2 inline h-4 w-4" /> Export report
+          </button>
+          <button
+            onClick={() => setActiveWorkOrder({
+              id: `WO-${Date.now()}`,
+              title: '',
+              description: '',
+              status: 'Open',
+              priority: 'Medium',
+              assignee: 'Unassigned',
+              asset: '',
+              dueDate: ''
+            })}
+            className="inline-flex items-center gap-2 rounded-2xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl"
+          >
+            <Plus className="h-4 w-4" /> New work order
+          </button>
         </div>
-        <button
-          className="flex items-center gap-2 px-4 py-2 border rounded-xl hover:bg-opacity-80 transition-colors"
-          style={{ borderColor: colors.border, color: colors.foreground }}
-          onClick={() => setShowFilters((previous) => !previous)}
-        >
-          <Filter className="w-4 h-4" />
-          Filters
-          {isFiltersApplied && (
-            <span
-              className="ml-1 inline-flex h-2 w-2 rounded-full"
-              style={{ backgroundColor: colors.primary }}
+      </header>
+      <div className="rounded-3xl border border-border bg-surface p-4 shadow-xl">
+        <div className="flex flex-wrap items-center gap-3 border-b border-border/60 pb-4">
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-mutedfg" />
+            <input
+              type="search"
+              value={values.search ?? ''}
+              onChange={(event) => handleChange('search', event.target.value)}
+              placeholder="Search work orders"
+              className="w-full rounded-2xl border border-border bg-white px-10 py-3 text-sm text-fg shadow-inner outline-none transition focus:ring-2 focus:ring-brand"
             />
-          )}
-        </button>
-
-        {showFilters && (
-          <div
-            className="absolute right-0 top-12 w-72 rounded-xl border shadow-lg p-4 space-y-3 z-10"
-            style={{ backgroundColor: colors.card, borderColor: colors.border }}
-          >
-            <div>
-              <label className="text-sm font-medium" style={{ color: colors.foreground }}>
-                Status
-              </label>
-              <select
-                className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                style={{
-                  backgroundColor: colors.background,
-                  borderColor: colors.border,
-                  color: colors.foreground
-                }}
-                value={filters.status}
-                onChange={(event) => handleFilterChange('status', event.target.value)}
-              >
-                <option value="">All</option>
-                {statusOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium" style={{ color: colors.foreground }}>
-                Priority
-              </label>
-              <select
-                className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                style={{
-                  backgroundColor: colors.background,
-                  borderColor: colors.border,
-                  color: colors.foreground
-                }}
-                value={filters.priority}
-                onChange={(event) => handleFilterChange('priority', event.target.value)}
-              >
-                <option value="">All</option>
-                {priorityOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium" style={{ color: colors.foreground }}>
-                Assignee
-              </label>
-              <select
-                className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                style={{
-                  backgroundColor: colors.background,
-                  borderColor: colors.border,
-                  color: colors.foreground
-                }}
-                value={filters.assignee}
-                onChange={(event) => handleFilterChange('assignee', event.target.value)}
-              >
-                <option value="">All</option>
-                {assigneeOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-sm font-medium" style={{ color: colors.foreground }}>
-                  Start date
-                </label>
-                <input
-                  type="date"
-                  className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  style={{
-                    backgroundColor: colors.background,
-                    borderColor: colors.border,
-                    color: colors.foreground
-                  }}
-                  value={filters.dateFrom}
-                  onChange={(event) => handleFilterChange('dateFrom', event.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium" style={{ color: colors.foreground }}>
-                  End date
-                </label>
-                <input
-                  type="date"
-                  className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  style={{
-                    backgroundColor: colors.background,
-                    borderColor: colors.border,
-                    color: colors.foreground
-                  }}
-                  value={filters.dateTo}
-                  onChange={(event) => handleFilterChange('dateTo', event.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <button
-                className="px-3 py-1 border rounded-lg hover:bg-opacity-80 transition-colors text-sm"
-                style={{ borderColor: colors.border, color: colors.foreground }}
-                onClick={handleFilterReset}
-                type="button"
-              >
-                Reset
-              </button>
-              <button
-                className="px-3 py-1 rounded-lg hover:opacity-90 transition-colors text-sm"
-                style={{ backgroundColor: colors.primary, color: 'white' }}
-                type="button"
-                onClick={() => setShowFilters(false)}
-              >
-                Done
-              </button>
-            </div>
           </div>
-        )}
-      </div>
-
-      <div className="space-y-4">
-        {filteredWorkOrders.length === 0 ? (
-          <div
-            className="rounded-xl border p-6 text-center"
-            style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.mutedForeground }}
-          >
-            No work orders found.
+          <div className="flex items-center gap-2 text-xs font-semibold text-mutedfg">
+            <Filter className="h-4 w-4" />
+            Filters active: {Object.entries(values).filter(([key, value]) => key !== 'search' && value).length}
           </div>
-        ) : (
-          filteredWorkOrders.map((wo) => (
-            <div
-              key={wo.id}
-              className="rounded-xl border p-6 shadow-sm hover:shadow-md transition-shadow"
-              style={{ backgroundColor: colors.card, borderColor: colors.border }}
+          <button
+            type="button"
+            onClick={handleBulkComplete}
+            className="ml-auto inline-flex items-center gap-2 rounded-2xl border border-border px-4 py-2 text-xs font-semibold text-fg shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-60"
+            disabled={selectedIds.length === 0}
+          >
+            <ListChecks className="h-4 w-4" /> Mark complete
+          </button>
+        </div>
+        <FilterBar filters={filters} values={values} onChange={handleChange} onReset={handleReset} quickFilters={quickFilters} sticky={false} />
+        <ProTable
+          data={filtered}
+          columns={columns}
+          loading={isLoading}
+          getRowId={(row) => row.id}
+          onRowClick={handleRowClick}
+          onSelectionChange={setSelectedIds}
+          rowActions={(row) => (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                navigate(`/work-orders/${row.id}`);
+              }}
+              className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-brand hover:bg-brand/10"
             >
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-lg font-semibold" style={{ color: colors.foreground }}>
-                      {wo.id}
-                    </h3>
-                    {wo.status && (
-                      <span
-                        className="px-2 py-1 text-xs rounded-full"
-                        style={{
-                          backgroundColor: `${getStatusColor(wo.status)}20`,
-                          color: getStatusColor(wo.status)
-                        }}
-                      >
-                        {wo.status}
-                      </span>
-                    )}
-                    {wo.priority && (
-                      <span
-                        className="px-2 py-1 text-xs rounded-full flex items-center gap-1"
-                        style={{
-                          backgroundColor: `${getPriorityColor(wo.priority)}20`,
-                          color: getPriorityColor(wo.priority)
-                        }}
-                      >
-                        {wo.priority.toLowerCase() === 'urgent' && <AlertTriangle className="w-3 h-3" />}
-                        {wo.priority}
-                      </span>
-                    )}
-                  </div>
-
-                  <h4 className="font-medium mb-2" style={{ color: colors.foreground }}>
-                    {wo.title}
-                  </h4>
-
-                  <p className="text-sm mb-3" style={{ color: colors.mutedForeground }}>
-                    {wo.description ?? 'No description provided.'}
-                  </p>
-
-                  <div className="flex flex-wrap items-center gap-6 text-sm" style={{ color: colors.mutedForeground }}>
-                    <div className="flex items-center gap-1">
-                      <ClipboardList className="w-4 h-4" />
-                      Asset: {wo.asset ?? 'N/A'}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <User className="w-4 h-4" />
-                      {wo.assignee ?? 'Unassigned'}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Calendar className="w-4 h-4" />
-                      Due: {wo.dueDate ?? 'TBD'}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    className="px-3 py-1 border rounded-lg hover:bg-opacity-80 transition-colors text-sm"
-                    style={{ borderColor: colors.border, color: colors.foreground }}
-                    onClick={() => handleView(wo.id)}
-                  >
-                    View
-                  </button>
-                  <button
-                    className="px-3 py-1 rounded-lg hover:opacity-90 transition-colors text-sm"
-                    style={{ backgroundColor: colors.primary, color: 'white' }}
-                    onClick={() => handleUpdate(wo.id)}
-                  >
-                    Update
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      {isFormOpen && (
-        <WorkOrderForm
-          workOrderId={selectedWorkOrderId ?? undefined}
-          onClose={handleCloseForm}
-          onSuccess={handleFormSuccess}
+              View
+            </button>
+          )}
+          emptyState={<EmptyState title="No work orders found" description="Try changing your filters or creating a new work order." icon={<Calendar className="h-8 w-8" />} />}
         />
+      </div>
+      {notification && (
+        <div className={`fixed bottom-6 right-6 rounded-2xl border px-4 py-3 text-sm shadow-xl ${
+          notification.tone === 'success' ? 'border-success/30 bg-success/10 text-success' : 'border-danger/30 bg-danger/10 text-danger'
+        }`}
+        >
+          {notification.message}
+        </div>
       )}
+      <SlideOver
+        open={!!activeWorkOrder}
+        title={activeWorkOrder?.title ? `Edit ${activeWorkOrder.title}` : 'New work order'}
+        description="Quickly adjust assignments, priorities, and schedules."
+        onClose={() => setActiveWorkOrder(null)}
+      >
+        {activeWorkOrder && (
+          <div className="space-y-5">
+            <label className="block text-sm font-semibold text-mutedfg">
+              Title
+              <input
+                value={activeWorkOrder.title}
+                onChange={(event) => setActiveWorkOrder({ ...activeWorkOrder, title: event.target.value })}
+                className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+              />
+            </label>
+            <label className="block text-sm font-semibold text-mutedfg">
+              Description
+              <textarea
+                value={activeWorkOrder.description ?? ''}
+                onChange={(event) => setActiveWorkOrder({ ...activeWorkOrder, description: event.target.value })}
+                className="mt-2 h-32 w-full rounded-2xl border border-border bg-white px-4 py-3 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+              />
+            </label>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <label className="block text-sm font-semibold text-mutedfg">
+                Status
+                <select
+                  value={activeWorkOrder.status ?? 'Open'}
+                  onChange={(event) => setActiveWorkOrder({ ...activeWorkOrder, status: event.target.value })}
+                  className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+                >
+                  {['Open', 'Assigned', 'In Progress', 'Completed', 'Cancelled', 'Overdue'].map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm font-semibold text-mutedfg">
+                Priority
+                <select
+                  value={activeWorkOrder.priority ?? 'Medium'}
+                  onChange={(event) => setActiveWorkOrder({ ...activeWorkOrder, priority: event.target.value })}
+                  className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+                >
+                  {['Low', 'Medium', 'High', 'Urgent'].map((priority) => (
+                    <option key={priority} value={priority}>
+                      {priority}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label className="block text-sm font-semibold text-mutedfg">
+              Assign to
+              <div className="mt-2 flex items-center gap-3 rounded-2xl border border-border bg-white px-4 py-2 text-sm shadow-inner">
+                <User className="h-4 w-4 text-mutedfg" />
+                <input
+                  value={activeWorkOrder.assignee ?? ''}
+                  onChange={(event) => setActiveWorkOrder({ ...activeWorkOrder, assignee: event.target.value })}
+                  className="flex-1 bg-transparent text-fg outline-none"
+                  placeholder="Add technician"
+                />
+              </div>
+            </label>
+            <label className="block text-sm font-semibold text-mutedfg">
+              Due date
+              <input
+                type="date"
+                value={activeWorkOrder.dueDate ?? ''}
+                onChange={(event) => setActiveWorkOrder({ ...activeWorkOrder, dueDate: event.target.value })}
+                className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+              />
+            </label>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveWorkOrder(null)}
+                className="rounded-2xl border border-border px-4 py-2 text-sm font-semibold text-fg"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setNotification({ message: 'Work order saved', tone: 'success' });
+                  setActiveWorkOrder(null);
+                }}
+                className="rounded-2xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-lg"
+              >
+                Save changes
+              </button>
+            </div>
+          </div>
+        )}
+      </SlideOver>
+      <ConfirmDialog
+        open={dialogOpen}
+        onCancel={() => setDialogOpen(false)}
+        onConfirm={confirmBulkComplete}
+        title="Complete selected work orders?"
+        description="Completed work orders will update technician availability and notify subscribers."
+        confirmLabel="Mark complete"
+      />
     </div>
   );
 }

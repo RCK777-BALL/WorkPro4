@@ -1,0 +1,13 @@
+@import "./tokens.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+:root.dark { color-scheme: dark; }
+
+html, body, #root { height: 100%; background: var(--bg); color: var(--fg); }
+.card { border-radius: var(--radius); box-shadow: var(--shadow-lg); background: white; }
+.dark .card { background: color-mix(in oklab, var(--bg) 85%, white 15%); }
+.btn-primary { background: var(--brand-2); color: white; }
+.btn-primary:hover { filter: brightness(1.05); }

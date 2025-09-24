@@ -188,6 +188,22 @@ AWS_SECRET_ACCESS_KEY="your-secret"
 - **API rate limiting** - Protection against abuse
 - **CDN ready** - Static asset optimization
 
+## 🧑‍💻 Frontend workflow
+
+- Start the Vite dev server: `pnpm dev` (frontend runs on `http://localhost:5173`).
+- Launch the Express API: `pnpm --filter backend dev` (API runs on `http://localhost:5010`).
+- For production builds run `pnpm build` and `pnpm preview` to verify the optimized bundle.
+
+### Extending the design system
+
+1. **Add a brand color**
+   - Update `src/styles/tokens.css` with a new OKLCH variable (for example `--brand-3`).
+   - Map that variable inside `tailwind.config.ts` under `theme.extend.colors` to generate Tailwind utilities.
+   - Use the generated utility class (e.g. `bg-brand-3`) or reference the CSS variable directly in components.
+2. **Create a new status badge**
+   - Add a new entry to `variants` in `src/components/premium/DataBadge.tsx` with background/text classes.
+   - Render the badge anywhere by calling `<DataBadge status="your-status" />`.
+
 ## 🤝 Contributing
 
 1. Fork the repository

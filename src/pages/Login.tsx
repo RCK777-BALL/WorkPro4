@@ -1,269 +1,158 @@
-import { useEffect, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Building2, Shield, Users, Wrench } from 'lucide-react';
-import { useTheme } from '../contexts/ThemeContext';
+import { Eye, EyeOff, Lock, Mail, ShieldCheck, Sparkles, Wrench } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 export default function Login() {
-  const [showPassword, setShowPassword] = useState(false);
+  const navigate = useNavigate();
+  const { login, isLoading, error } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const navigate = useNavigate();
-  const { colors } = useTheme();
-  const { login, isLoading, error: authError } = useAuth();
+  const [remember, setRemember] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
+  const [formError, setFormError] = useState('');
 
   useEffect(() => {
-    setError(authError ?? '');
-  }, [authError]);
+    if (error) {
+      setFormError(error);
+    }
+  }, [error]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setFormError('');
     try {
-      await login({ email, password });
+      await login({ email, password, remember });
       navigate('/');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setFormError(err instanceof Error ? err.message : 'Unable to sign in.');
     }
   };
 
   return (
-    <div 
-      className="min-h-screen flex"
-      style={{ backgroundColor: colors.background }}
-    >
-      {/* Left Side - Branding */}
-      <div 
-        className="hidden lg:flex lg:w-1/2 relative overflow-hidden"
-        style={{ backgroundColor: colors.primary }}
-      >
-        <div className="absolute inset-0 bg-black/10"></div>
-        <div className="relative z-10 flex flex-col justify-center px-12 text-white">
-          <div className="mb-8">
-            <div className="flex items-center mb-6">
-              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center mr-4">
-                <Wrench className="w-7 h-7" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_top,_#eef2ff,_#f8fafc)] px-4 py-12 dark:bg-[radial-gradient(circle_at_top,_#0c1220,_#111827)]">
+      <div className="absolute inset-0 -z-10 opacity-70" aria-hidden>
+        <div className="absolute -left-24 top-16 h-72 w-72 rounded-full bg-brand/20 blur-3xl" />
+        <div className="absolute -right-10 bottom-10 h-64 w-64 rounded-full bg-accent/20 blur-3xl" />
+      </div>
+      <div className="grid w-full max-w-5xl grid-cols-1 gap-10 rounded-[32px] border border-white/40 bg-white/70 p-10 shadow-[0_40px_90px_-50px_rgba(80,80,120,0.6)] backdrop-blur-xl transition dark:border-border/60 dark:bg-bg/80 lg:grid-cols-[1.1fr_0.9fr]">
+        <section className="flex flex-col justify-between rounded-3xl bg-gradient-to-br from-brand/10 via-brand/5 to-transparent p-8">
+          <div>
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand text-white shadow-xl">
+                <Wrench size={28} />
               </div>
               <div>
-                <h1 className="text-3xl font-bold">WorkPro3</h1>
-                <p className="text-white/80">CMMS Platform</p>
+                <p className="text-sm font-semibold uppercase tracking-widest text-brand">WorkPro4 CMMS</p>
+                <h1 className="text-3xl font-semibold text-fg">Precision Maintenance for Modern Ops</h1>
               </div>
             </div>
-            
-            <h2 className="text-4xl font-bold mb-4 leading-tight">
-              Streamline Your<br />
-              Maintenance Operations
-            </h2>
-            <p className="text-xl text-white/80 mb-12 leading-relaxed">
-              Complete maintenance management solution for modern facilities. 
-              Track assets, manage work orders, and optimize your operations.
+            <p className="mt-6 max-w-md text-sm text-mutedfg">
+              Trusted by enterprise facility teams to orchestrate work orders, monitor assets, and keep technicians synchronized in real time.
             </p>
           </div>
-
-          <div className="space-y-6">
-            <div className="flex items-center">
-              <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center mr-4">
-                <Building2 className="w-5 h-5" />
-              </div>
+          <div className="mt-10 space-y-5 text-sm text-fg">
+            <div className="flex items-start gap-3 rounded-2xl border border-border/60 bg-white/60 p-4 shadow-sm dark:bg-muted/60">
+              <ShieldCheck className="mt-1 h-5 w-5 text-brand" />
               <div>
-                <h3 className="font-semibold">Asset Management</h3>
-                <p className="text-white/80 text-sm">Complete asset lifecycle tracking</p>
+                <p className="font-semibold">ISO-compliant access controls</p>
+                <p className="text-mutedfg">Role-based permissions, audit-ready logs, and SSO that keeps your org secure.</p>
               </div>
             </div>
-            
-            <div className="flex items-center">
-              <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center mr-4">
-                <Shield className="w-5 h-5" />
-              </div>
+            <div className="flex items-start gap-3 rounded-2xl border border-border/60 bg-white/60 p-4 shadow-sm dark:bg-muted/60">
+              <Sparkles className="mt-1 h-5 w-5 text-accent" />
               <div>
-                <h3 className="font-semibold">Preventive Maintenance</h3>
-                <p className="text-white/80 text-sm">Automated scheduling and tracking</p>
-              </div>
-            </div>
-            
-            <div className="flex items-center">
-              <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center mr-4">
-                <Users className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-semibold">Team Collaboration</h3>
-                <p className="text-white/80 text-sm">Real-time updates and notifications</p>
+                <p className="font-semibold">AI-assisted scheduling</p>
+                <p className="text-mutedfg">Predictive insights to automatically prioritize work and reduce downtime.</p>
               </div>
             </div>
           </div>
-        </div>
-        
-        {/* Decorative elements */}
-        <div className="absolute top-20 right-20 w-32 h-32 bg-white/10 rounded-full blur-xl"></div>
-        <div className="absolute bottom-20 right-32 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-        <div className="absolute top-1/2 right-10 w-16 h-16 bg-white/10 rounded-full blur-xl"></div>
-      </div>
-
-      {/* Right Side - Login Form */}
-      <div className="flex-1 flex items-center justify-center px-6 py-12">
-        <div className="w-full max-w-md">
-          <div className="text-center mb-8">
-            <div className="lg:hidden flex items-center justify-center mb-6">
-              <div 
-                className="w-12 h-12 rounded-xl flex items-center justify-center mr-3"
-                style={{ backgroundColor: colors.primary }}
-              >
-                <Wrench className="w-7 h-7 text-white" />
-              </div>
-              <div className="text-left">
-                <h1 className="text-2xl font-bold" style={{ color: colors.foreground }}>WorkPro3</h1>
-                <p className="text-sm" style={{ color: colors.mutedForeground }}>CMMS Platform</p>
-              </div>
-            </div>
-            
-            <h2 className="text-3xl font-bold mb-2" style={{ color: colors.foreground }}>Welcome back</h2>
-            <p style={{ color: colors.mutedForeground }}>Sign in to your account to continue</p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label 
-                htmlFor="email" 
-                className="block text-sm font-medium mb-2"
-                style={{ color: colors.foreground }}
-              >
-                Email address
+        </section>
+        <section className="flex flex-col justify-center rounded-3xl border border-border/60 bg-white/90 p-8 shadow-xl dark:bg-bg/90">
+          <form className="space-y-6" onSubmit={handleSubmit}>
+            <header>
+              <p className="text-xs font-semibold uppercase tracking-widest text-mutedfg">Sign in</p>
+              <h2 className="mt-2 text-2xl font-semibold text-fg">Welcome back, let’s keep work moving</h2>
+            </header>
+            <div className="space-y-4">
+              <label className="flex flex-col gap-2 text-sm font-semibold text-mutedfg">
+                Email
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-mutedfg" />
+                  <input
+                    required
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    autoComplete="email"
+                    className="w-full rounded-2xl border border-border bg-white px-10 py-3 text-sm text-fg shadow-inner outline-none transition focus:ring-2 focus:ring-brand"
+                    placeholder="you@company.com"
+                  />
+                </div>
               </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-offset-2 transition-colors"
-                style={{ 
-                  backgroundColor: colors.background,
-                  borderColor: colors.border,
-                  color: colors.foreground,
-                  focusRingColor: colors.primary
-                }}
-                placeholder="Enter your email"
-              />
-            </div>
-
-            <div>
-              <label 
-                htmlFor="password" 
-                className="block text-sm font-medium mb-2"
-                style={{ color: colors.foreground }}
-              >
+              <label className="flex flex-col gap-2 text-sm font-semibold text-mutedfg">
                 Password
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-mutedfg" />
+                  <input
+                    required
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    autoComplete="current-password"
+                    className="w-full rounded-2xl border border-border bg-white px-10 py-3 text-sm text-fg shadow-inner outline-none transition focus:ring-2 focus:ring-brand"
+                    placeholder="Super secure password"
+                  />
+                  <button
+                    type="button"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-muted text-mutedfg transition hover:text-fg"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="w-full px-4 py-3 pr-12 border rounded-lg focus:ring-2 focus:ring-offset-2 transition-colors"
-                  style={{ 
-                    backgroundColor: colors.background,
-                    borderColor: colors.border,
-                    color: colors.foreground
-                  }}
-                  placeholder="Enter your password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors hover:opacity-70"
-                  style={{ color: colors.mutedForeground }}
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
             </div>
-
-            <div className="flex items-center justify-between">
-              <label className="flex items-center">
+            <div className="flex items-center justify-between text-sm text-mutedfg">
+              <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  className="w-4 h-4 rounded focus:ring-2"
-                  style={{ 
-                    accentColor: colors.primary,
-                    borderColor: colors.border
-                  }}
+                  checked={remember}
+                  onChange={(event) => setRemember(event.target.checked)}
+                  className="h-4 w-4 rounded border-border text-brand focus:ring-brand"
                 />
-                <span className="ml-2 text-sm" style={{ color: colors.mutedForeground }}>Remember me</span>
+                Remember me
               </label>
-              <a 
-                href="#" 
-                className="text-sm font-medium hover:opacity-80"
-                style={{ color: colors.primary }}
-              >
+              <a href="#" className="font-semibold text-brand transition hover:text-brand/80">
                 Forgot password?
               </a>
             </div>
-
-            {error && (
-              <div 
-                className="border rounded-lg p-3 text-sm"
-                style={{ 
-                  backgroundColor: `${colors.error}10`,
-                  borderColor: colors.error,
-                  color: colors.error
-                }}
-              >
-                {error}
+            {formError && (
+              <div className="rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+                {formError}
               </div>
             )}
-
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 px-4 rounded-lg font-medium focus:ring-2 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ 
-                backgroundColor: colors.primary,
-                color: 'white'
-              }}
+              className="btn-primary inline-flex w-full items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold tracking-wide shadow-lg transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isLoading ? (
-                <div className="flex items-center justify-center">
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></div>
-                  Signing in...
-                </div>
-              ) : (
-                'Sign in'
-              )}
+              {isLoading ? 'Signing in…' : 'Sign in to dashboard'}
             </button>
-          </form>
-
-          <div className="mt-8 text-center">
-            <p style={{ color: colors.mutedForeground }}>
-              Don't have an account?{' '}
-              <a href="#" className="font-medium hover:opacity-80" style={{ color: colors.primary }}>
-                Contact your administrator
+            <p className="text-center text-xs text-mutedfg">
+              By continuing you agree to our{' '}
+              <a href="#" className="font-semibold text-brand hover:text-brand/80">
+                Terms
+              </a>{' '}
+              and{' '}
+              <a href="#" className="font-semibold text-brand hover:text-brand/80">
+                Privacy Policy
               </a>
+              .
             </p>
-          </div>
-
-          <div className="mt-8 pt-6" style={{ borderTop: `1px solid ${colors.border}` }}>
-            <p className="text-xs text-center" style={{ color: colors.mutedForeground }}>
-              By signing in, you agree to our{' '}
-              <a href="#" className="hover:opacity-80" style={{ color: colors.primary }}>Terms of Service</a>
-              {' '}and{' '}
-              <a href="#" className="hover:opacity-80" style={{ color: colors.primary }}>Privacy Policy</a>
-            </p>
-          </div>
-
-          {/* Demo Credentials */}
-          <div className="mt-6 p-4 rounded-lg" style={{ backgroundColor: colors.muted }}>
-            <h4 className="text-sm font-medium mb-2" style={{ color: colors.foreground }}>Demo Credentials:</h4>
-            <div className="text-xs space-y-1" style={{ color: colors.mutedForeground }}>
-              <div>Admin: admin@demo.com / Password123</div>
-              <div>Planner: planner@demo.com / Password123</div>
-              <div>Tech: tech@demo.com / Password123</div>
-            </div>
-          </div>
-        </div>
+          </form>
+        </section>
       </div>
     </div>
   );

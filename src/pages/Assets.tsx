@@ -1,183 +1,352 @@
-import { Boxes, Plus, Search, Filter, Building2, MapPin, Calendar, DollarSign } from 'lucide-react';
-import { useTheme } from '../contexts/ThemeContext';
+import { useMemo, useState } from 'react';
+import { Building2, Filter, LayoutGrid, List, MapPin, Plus, Search, SlidersHorizontal, Wrench } from 'lucide-react';
+import { DataBadge } from '../components/premium/DataBadge';
+import { SlideOver } from '../components/premium/SlideOver';
+import { ProTable, type ProTableColumn } from '../components/premium/ProTable';
+import { FilterBar, type FilterDefinition } from '../components/premium/FilterBar';
+
+interface AssetRecord {
+  id: string;
+  name: string;
+  code: string;
+  status: 'Operational' | 'Maintenance' | 'Down';
+  site: string;
+  area: string;
+  owner: string;
+  criticality: 'Low' | 'Medium' | 'High';
+  nextService: string;
+}
+
+const columns: ProTableColumn<AssetRecord>[] = [
+  { key: 'code', header: 'Tag' },
+  { key: 'name', header: 'Asset' },
+  { key: 'site', header: 'Site' },
+  { key: 'area', header: 'Area' },
+  { key: 'owner', header: 'Owner' },
+  { key: 'criticality', header: 'Criticality', accessor: (row) => <DataBadge status={row.criticality} /> },
+  { key: 'status', header: 'Status', accessor: (row) => <DataBadge status={row.status} /> },
+  { key: 'nextService', header: 'Next service' }
+];
+
+const filters: FilterDefinition[] = [
+  { key: 'site', label: 'Site', type: 'select', options: ['Plant 1', 'Plant 2', 'Corporate HQ'].map((value) => ({ value, label: value })) },
+  { key: 'status', label: 'Status', type: 'select', options: ['Operational', 'Maintenance', 'Down'].map((value) => ({ value, label: value })) },
+  { key: 'criticality', label: 'Criticality', type: 'select', options: ['Low', 'Medium', 'High'].map((value) => ({ value, label: value })) },
+  { key: 'owner', label: 'Owner', type: 'text', placeholder: 'Team or technician' }
+];
+
+const assets: AssetRecord[] = [
+  { id: '1', code: 'PUMP-001', name: 'Main Water Pump', status: 'Operational', site: 'Plant 1', area: 'Mechanical', owner: 'Utilities', criticality: 'High', nextService: '2024-06-17' },
+  { id: '2', code: 'CONV-204', name: 'Line 2 Conveyor', status: 'Maintenance', site: 'Plant 1', area: 'Production', owner: 'Line 2', criticality: 'High', nextService: 'In progress' },
+  { id: '3', code: 'HVAC-18', name: 'Roof HVAC Unit', status: 'Down', site: 'Plant 2', area: 'Roof', owner: 'Facilities', criticality: 'Medium', nextService: 'Overdue' },
+  { id: '4', code: 'COMP-06', name: 'Air Compressor', status: 'Operational', site: 'Plant 2', area: 'Utilities', owner: 'Utilities', criticality: 'High', nextService: '2024-07-04' },
+  { id: '5', code: 'GEN-11', name: 'Backup Generator', status: 'Operational', site: 'Corporate HQ', area: 'Basement', owner: 'Facilities', criticality: 'High', nextService: '2024-06-30' }
+];
+
+const tree = [
+  {
+    label: 'Plant 1',
+    count: 124,
+    children: [
+      { label: 'Production', count: 68 },
+      { label: 'Utilities', count: 32 },
+      { label: 'Packaging', count: 24 }
+    ]
+  },
+  {
+    label: 'Plant 2',
+    count: 72,
+    children: [
+      { label: 'Production', count: 40 },
+      { label: 'Utilities', count: 20 },
+      { label: 'Warehouse', count: 12 }
+    ]
+  },
+  {
+    label: 'Corporate HQ',
+    count: 38,
+    children: [
+      { label: 'Facilities', count: 18 },
+      { label: 'Security', count: 6 },
+      { label: 'IT Infrastructure', count: 14 }
+    ]
+  }
+];
 
 export default function Assets() {
-  const { colors } = useTheme();
+  const [values, setValues] = useState<Record<string, string>>({ search: '' });
+  const [view, setView] = useState<'table' | 'cards'>('table');
+  const [showDrawer, setShowDrawer] = useState(false);
+  const [draft, setDraft] = useState<AssetRecord>({
+    id: '',
+    code: '',
+    name: '',
+    status: 'Operational',
+    site: '',
+    area: '',
+    owner: '',
+    criticality: 'Medium',
+    nextService: ''
+  });
 
-  const assetStats = [
-    { label: 'Total Assets', value: '234', color: colors.primary },
-    { label: 'Operational', value: '198', color: colors.success },
-    { label: 'Under Maintenance', value: '12', color: colors.warning },
-    { label: 'Down', value: '3', color: colors.error }
-  ];
-
-  const assets = [
-    {
-      id: '1',
-      code: 'PUMP-001',
-      name: 'Main Water Pump',
-      status: 'Operational',
-      location: 'Building A - Mechanical Room',
-      lastService: '2 days ago',
-      nextService: 'In 28 days',
-      value: '$15,000'
-    },
-    {
-      id: '2',
-      code: 'CONV-002',
-      name: 'Production Line Conveyor',
-      status: 'Maintenance',
-      location: 'Building B - Production Floor',
-      lastService: '1 week ago',
-      nextService: 'In progress',
-      value: '$25,000'
-    },
-    {
-      id: '3',
-      code: 'HVAC-003',
-      name: 'HVAC Unit #3',
-      status: 'Down',
-      location: 'Building A - Roof',
-      lastService: '3 days ago',
-      nextService: 'Overdue',
-      value: '$8,000'
-    }
-  ];
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Operational': return colors.success;
-      case 'Maintenance': return colors.warning;
-      case 'Down': return colors.error;
-      default: return colors.mutedForeground;
-    }
-  };
+  const filtered = useMemo(() => {
+    const search = (values.search ?? '').toLowerCase();
+    return assets.filter((asset) => {
+      const matchesSearch = search
+        ? [asset.name, asset.code, asset.owner, asset.area].some((field) => field.toLowerCase().includes(search))
+        : true;
+      const matchesSite = values.site ? asset.site === values.site : true;
+      const matchesStatus = values.status ? asset.status === values.status : true;
+      const matchesCriticality = values.criticality ? asset.criticality === values.criticality : true;
+      const matchesOwner = values.owner ? asset.owner.toLowerCase().includes(values.owner.toLowerCase()) : true;
+      return matchesSearch && matchesSite && matchesStatus && matchesCriticality && matchesOwner;
+    });
+  }, [values]);
 
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold" style={{ color: colors.foreground }}>Assets</h1>
-          <p className="mt-1" style={{ color: colors.mutedForeground }}>
-            Manage your equipment, facilities, and asset hierarchy
-          </p>
-        </div>
-        <button 
-          className="flex items-center gap-2 px-4 py-2 rounded-xl hover:opacity-90 transition-colors"
-          style={{ backgroundColor: colors.primary, color: 'white' }}
-        >
-          <Plus className="w-4 h-4" />
-          New Asset
-        </button>
-      </div>
-
-      {/* Asset Statistics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {assetStats.map((stat, index) => (
-          <div 
-            key={index}
-            className="rounded-xl border p-4 shadow-sm text-center hover:shadow-md transition-shadow"
-            style={{ backgroundColor: colors.card, borderColor: colors.border }}
-          >
-            <div className="text-2xl font-bold" style={{ color: stat.color }}>{stat.value}</div>
-            <div className="text-sm" style={{ color: colors.mutedForeground }}>{stat.label}</div>
+    <div className="grid gap-6 xl:grid-cols-[320px_1fr]">
+      <aside className="space-y-6 rounded-3xl border border-border bg-surface p-6 shadow-xl">
+        <div className="flex items-center gap-3">
+          <Building2 className="h-6 w-6 text-brand" />
+          <div>
+            <h2 className="text-lg font-semibold text-fg">Asset catalog</h2>
+            <p className="text-sm text-mutedfg">Explore locations, tags, and hierarchies.</p>
           </div>
-        ))}
-      </div>
-
-      {/* Search and Filters */}
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-md">
-          <Search 
-            className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" 
-            style={{ color: colors.mutedForeground }}
-          />
+        </div>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-4 top-3 h-4 w-4 text-mutedfg" />
           <input
-            type="text"
-            placeholder="Search assets..."
-            className="w-full h-10 pl-10 pr-4 rounded-xl border focus:outline-none focus:ring-2 focus:ring-ring"
-            style={{ 
-              backgroundColor: colors.background, 
-              borderColor: colors.border,
-              color: colors.foreground
-            }}
+            value={values.search ?? ''}
+            onChange={(event) => setValues((prev) => ({ ...prev, search: event.target.value }))}
+            placeholder="Search assets"
+            className="w-full rounded-2xl border border-border bg-white px-10 py-3 text-sm text-fg shadow-inner outline-none transition focus:ring-2 focus:ring-brand"
           />
         </div>
-        <button 
-          className="flex items-center gap-2 px-4 py-2 border rounded-xl hover:bg-opacity-80 transition-colors"
-          style={{ borderColor: colors.border, color: colors.foreground }}
-        >
-          <Filter className="w-4 h-4" />
-          Filters
+        <button className="w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm font-semibold text-fg shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+          <SlidersHorizontal className="mr-2 inline h-4 w-4" /> Saved views
         </button>
-      </div>
-
-      {/* Asset Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {assets.map((asset) => (
-          <div 
-            key={asset.id}
-            className="rounded-xl border p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-            style={{ backgroundColor: colors.card, borderColor: colors.border }}
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div 
-                className="w-12 h-12 rounded-xl flex items-center justify-center"
-                style={{ backgroundColor: `${colors.primary}20` }}
-              >
-                <Boxes className="w-6 h-6" style={{ color: colors.primary }} />
+        <div className="space-y-4">
+          {tree.map((node) => (
+            <div key={node.label}>
+              <div className="flex items-center justify-between text-sm font-semibold text-fg">
+                <span>{node.label}</span>
+                <span className="rounded-full bg-muted px-3 py-1 text-xs text-mutedfg">{node.count}</span>
               </div>
-              <span 
-                className="px-2 py-1 text-xs rounded-full"
-                style={{ 
-                  backgroundColor: `${getStatusColor(asset.status)}20`,
-                  color: getStatusColor(asset.status)
-                }}
-              >
-                {asset.status}
-              </span>
+              <ul className="mt-3 space-y-2 pl-3 text-sm text-mutedfg">
+                {node.children.map((child) => (
+                  <li key={child.label} className="flex items-center justify-between">
+                    <span>{child.label}</span>
+                    <span>{child.count}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-            
-            <h3 className="text-lg font-semibold mb-1" style={{ color: colors.foreground }}>
-              {asset.name}
-            </h3>
-            <p className="text-sm mb-4" style={{ color: colors.mutedForeground }}>
-              {asset.code}
-            </p>
-            
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4" style={{ color: colors.mutedForeground }} />
-                <span style={{ color: colors.foreground }}>{asset.location}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4" style={{ color: colors.mutedForeground }} />
-                <span style={{ color: colors.foreground }}>Last service: {asset.lastService}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <DollarSign className="w-4 h-4" style={{ color: colors.mutedForeground }} />
-                <span style={{ color: colors.foreground }}>Value: {asset.value}</span>
-              </div>
-            </div>
-            
-            <div className="mt-4 pt-4" style={{ borderTop: `1px solid ${colors.border}` }}>
-              <div className="flex justify-between items-center">
-                <span className="text-sm" style={{ color: colors.mutedForeground }}>Next service:</span>
-                <span 
-                  className="text-sm font-medium"
-                  style={{ 
-                    color: asset.nextService === 'Overdue' ? colors.error : 
-                           asset.nextService === 'In progress' ? colors.warning : colors.success
-                  }}
-                >
-                  {asset.nextService}
-                </span>
-              </div>
-            </div>
+          ))}
+        </div>
+      </aside>
+      <section className="space-y-6">
+        <header className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-semibold text-fg">Assets</h1>
+            <p className="mt-2 text-sm text-mutedfg">Monitor lifecycle state, compliance, and criticality for every asset.</p>
           </div>
-        ))}
-      </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex rounded-full border border-border bg-white/70 p-1 text-xs font-semibold text-mutedfg shadow-inner">
+              <button
+                type="button"
+                className={`flex items-center gap-2 rounded-full px-4 py-1 ${view === 'table' ? 'bg-brand text-white shadow' : ''}`}
+                onClick={() => setView('table')}
+              >
+                <List className="h-4 w-4" /> Table
+              </button>
+              <button
+                type="button"
+                className={`flex items-center gap-2 rounded-full px-4 py-1 ${view === 'cards' ? 'bg-brand text-white shadow' : ''}`}
+                onClick={() => setView('cards')}
+              >
+                <LayoutGrid className="h-4 w-4" /> Cards
+              </button>
+            </div>
+            <button
+              className="inline-flex items-center gap-2 rounded-2xl border border-border px-4 py-2 text-sm font-semibold text-fg shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+            >
+              <Filter className="h-4 w-4" /> Advanced filters
+            </button>
+            <button
+              onClick={() => {
+                setDraft({
+                  id: `AST-${Date.now()}`,
+                  code: '',
+                  name: '',
+                  status: 'Operational',
+                  site: '',
+                  area: '',
+                  owner: '',
+                  criticality: 'Medium',
+                  nextService: ''
+                });
+                setShowDrawer(true);
+              }}
+              className="inline-flex items-center gap-2 rounded-2xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl"
+            >
+              <Plus className="h-4 w-4" /> Quick add asset
+            </button>
+          </div>
+        </header>
+        <FilterBar filters={filters} values={values} onChange={(key, value) => setValues((prev) => ({ ...prev, [key]: value }))} sticky={false} />
+        {view === 'table' ? (
+          <ProTable
+            data={filtered}
+            columns={columns}
+            getRowId={(row) => row.id}
+            onRowClick={(row) => {
+              setDraft(row);
+              setShowDrawer(true);
+            }}
+            rowActions={(row) => (
+              <button type="button" className="rounded-full border border-border px-3 py-1 text-xs text-brand" onClick={(event) => {
+                event.stopPropagation();
+                setDraft(row);
+                setShowDrawer(true);
+              }}>
+                Inspect
+              </button>
+            )}
+            emptyState={<div className="rounded-3xl border border-border bg-surface p-10 text-center text-sm text-mutedfg">No assets match your filters.</div>}
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+            {filtered.map((asset) => (
+              <article key={asset.id} className="rounded-3xl border border-border bg-surface p-6 shadow-xl transition hover:-translate-y-1 hover:shadow-2xl">
+                <div className="flex items-start justify-between">
+                  <div className="rounded-2xl bg-brand/10 p-3 text-brand">
+                    <Wrench className="h-6 w-6" />
+                  </div>
+                  <DataBadge status={asset.status} />
+                </div>
+                <h3 className="mt-4 text-lg font-semibold text-fg">{asset.name}</h3>
+                <p className="text-sm text-mutedfg">{asset.code}</p>
+                <div className="mt-4 space-y-2 text-sm text-mutedfg">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4" />
+                    <span>{asset.site} · {asset.area}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    <span>Owner: {asset.owner}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <List className="h-4 w-4" />
+                    <span>Criticality: {asset.criticality}</span>
+                  </div>
+                </div>
+                <div className="mt-4 flex items-center justify-between rounded-2xl bg-muted/70 px-4 py-3 text-sm text-mutedfg">
+                  <span>Next service</span>
+                  <span className="font-semibold text-fg">{asset.nextService}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+      <SlideOver
+        open={showDrawer}
+        onClose={() => setShowDrawer(false)}
+        title={draft.name ? `Edit ${draft.name}` : 'Register asset'}
+        description="Capture essential meta data to keep your asset registry synchronized."
+      >
+        <form className="space-y-5">
+          <label className="block text-sm font-semibold text-mutedfg">
+            Asset name
+            <input
+              value={draft.name}
+              onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
+              className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+            />
+          </label>
+          <label className="block text-sm font-semibold text-mutedfg">
+            Asset tag
+            <input
+              value={draft.code}
+              onChange={(event) => setDraft((prev) => ({ ...prev, code: event.target.value }))}
+              className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+            />
+          </label>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="block text-sm font-semibold text-mutedfg">
+              Site
+              <input
+                value={draft.site}
+                onChange={(event) => setDraft((prev) => ({ ...prev, site: event.target.value }))}
+                className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+              />
+            </label>
+            <label className="block text-sm font-semibold text-mutedfg">
+              Area
+              <input
+                value={draft.area}
+                onChange={(event) => setDraft((prev) => ({ ...prev, area: event.target.value }))}
+                className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+              />
+            </label>
+          </div>
+          <label className="block text-sm font-semibold text-mutedfg">
+            Owner
+            <input
+              value={draft.owner}
+              onChange={(event) => setDraft((prev) => ({ ...prev, owner: event.target.value }))}
+              className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+            />
+          </label>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="block text-sm font-semibold text-mutedfg">
+              Status
+              <select
+                value={draft.status}
+                onChange={(event) => setDraft((prev) => ({ ...prev, status: event.target.value as AssetRecord['status'] }))}
+                className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+              >
+                {['Operational', 'Maintenance', 'Down'].map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm font-semibold text-mutedfg">
+              Criticality
+              <select
+                value={draft.criticality}
+                onChange={(event) => setDraft((prev) => ({ ...prev, criticality: event.target.value as AssetRecord['criticality'] }))}
+                className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+              >
+                {['Low', 'Medium', 'High'].map((level) => (
+                  <option key={level} value={level}>
+                    {level}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <label className="block text-sm font-semibold text-mutedfg">
+            Next service
+            <input
+              type="date"
+              value={draft.nextService}
+              onChange={(event) => setDraft((prev) => ({ ...prev, nextService: event.target.value }))}
+              className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+            />
+          </label>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={() => setShowDrawer(false)} className="rounded-2xl border border-border px-4 py-2 text-sm font-semibold text-fg">
+              Cancel
+            </button>
+            <button type="button" onClick={() => setShowDrawer(false)} className="rounded-2xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-lg">
+              Save asset
+            </button>
+          </div>
+        </form>
+      </SlideOver>
     </div>
   );
 }

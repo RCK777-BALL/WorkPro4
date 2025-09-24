@@ -1,41 +1,18 @@
+import { ArrowLeft, Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useTheme } from '../contexts/ThemeContext';
 
 export default function NotFound() {
-  const { colors } = useTheme();
-
   return (
-    <div
-      className="flex flex-col items-center justify-center text-center h-full py-24 px-4"
-      style={{ backgroundColor: colors.background }}
-    >
-      <div className="max-w-lg space-y-6">
-        <p className="text-sm font-semibold uppercase tracking-widest" style={{ color: colors.mutedForeground }}>
-          404 Error
-        </p>
-        <h1 className="text-4xl font-bold" style={{ color: colors.foreground }}>
-          We can't find that page
-        </h1>
-        <p className="text-lg" style={{ color: colors.mutedForeground }}>
-          The page you're looking for may have been moved, deleted, or might never have existed.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-3 sm:justify-center">
-          <Link
-            to="/"
-            className="inline-flex items-center justify-center rounded-md px-6 py-3 text-sm font-medium shadow-sm"
-            style={{ backgroundColor: colors.primary, color: colors.cardForeground }}
-          >
-            Go back home
-          </Link>
-          <Link
-            to="/documents"
-            className="inline-flex items-center justify-center rounded-md px-6 py-3 text-sm font-medium border"
-            style={{
-              color: colors.foreground,
-              borderColor: colors.border
-            }}
-          >
-            View documentation
+    <div className="grid min-h-[60vh] place-items-center">
+      <div className="max-w-md space-y-6 text-center">
+        <div className="inline-flex items-center justify-center rounded-full bg-brand/10 p-4 text-brand">
+          <Search className="h-6 w-6" />
+        </div>
+        <h1 className="text-3xl font-semibold text-fg">Page not found</h1>
+        <p className="text-sm text-mutedfg">We couldn’t find the page you were looking for. It may have been moved or archived.</p>
+        <div className="flex justify-center">
+          <Link to="/dashboard" className="inline-flex items-center gap-2 rounded-2xl border border-border px-4 py-2 text-sm font-semibold text-fg">
+            <ArrowLeft className="h-4 w-4" /> Back to dashboard
           </Link>
         </div>
       </div>
