@@ -41,6 +41,7 @@ export default function Login() {
             <div className="flex items-center gap-4">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand text-white shadow-xl">
                 <Wrench size={28} />
+
               </div>
               <div>
                 <p className="text-sm font-semibold uppercase tracking-widest text-brand">WorkPro4 CMMS</p>
@@ -91,6 +92,7 @@ export default function Login() {
                 </div>
               </label>
               <label className="flex flex-col gap-2 text-sm font-semibold text-mutedfg">
+
                 Password
                 <div className="relative">
                   <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-mutedfg" />
@@ -113,6 +115,7 @@ export default function Login() {
                   </button>
                 </div>
               </label>
+
             </div>
             <div className="flex items-center justify-between text-sm text-mutedfg">
               <label className="flex items-center gap-2">
@@ -131,6 +134,7 @@ export default function Login() {
             {formError && (
               <div className="rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
                 {formError}
+
               </div>
             )}
             <button
@@ -139,6 +143,7 @@ export default function Login() {
               className="btn-primary inline-flex w-full items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold tracking-wide shadow-lg transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isLoading ? 'Signing in…' : 'Sign in to dashboard'}
+
             </button>
             <p className="text-center text-xs text-mutedfg">
               By continuing you agree to our{' '}
@@ -153,6 +158,7 @@ export default function Login() {
             </p>
           </form>
         </section>
+
       </div>
     </div>
   );
