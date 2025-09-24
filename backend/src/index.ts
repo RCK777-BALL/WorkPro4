@@ -4,6 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import bcrypt from 'bcryptjs';
 import { requestLogger } from './middleware/requestLogger';
 import { errorHandler } from './middleware/errorHandler';
 import { prisma, verifyDatabaseConnection } from './db';
@@ -119,6 +120,8 @@ async function start() {
     return;
   }
 
+  await ensureDemoUsers();
+
   app.listen(PORT, () => {
     console.log(`🚀 Backend server running on port ${PORT}`);
     console.log(`🩺 Health check: http://localhost:${PORT}/api/health`);
@@ -131,3 +134,58 @@ start().catch((error) => {
   console.error('❌ Failed to start server', error);
   process.exit(1);
 });
+
+async function ensureDemoUsers() {
+  const userCount = await prisma.user.count();
+
+  if (userCount > 0) {
+    return;
+  }
+
+  console.log('👥 No users found in database. Creating demo tenant and credentials...');
+
+  const tenant = await prisma.tenant.create({
+    data: {
+      name: 'Demo Manufacturing Co.',
+    },
+  });
+
+  const defaultPassword = bcrypt.hashSync('password', 10);
+
+  const users = await Promise.all([
+    prisma.user.create({
+      data: {
+        tenantId: tenant.id,
+        email: 'admin@demo.com',
+        passwordHash: defaultPassword,
+        name: 'Admin User',
+        roles: ['admin', 'supervisor', 'planner', 'tech'],
+      },
+    }),
+    prisma.user.create({
+      data: {
+        tenantId: tenant.id,
+        email: 'planner@demo.com',
+        passwordHash: defaultPassword,
+        name: 'Maintenance Planner',
+        roles: ['planner', 'tech'],
+      },
+    }),
+    prisma.user.create({
+      data: {
+        tenantId: tenant.id,
+        email: 'tech@demo.com',
+        passwordHash: defaultPassword,
+        name: 'Maintenance Tech',
+        roles: ['tech'],
+      },
+    }),
+  ]);
+
+  console.log('✅ Created demo tenant:', tenant.name);
+  console.log('✅ Created demo users:', users.map((user) => user.email).join(', '));
+  console.log('Demo login credentials:');
+  console.log('  • admin@demo.com / password');
+  console.log('  • planner@demo.com / password');
+  console.log('  • tech@demo.com / password');
+}
