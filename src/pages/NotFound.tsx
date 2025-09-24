@@ -23,7 +23,7 @@ export default function NotFound() {
           <Link
             to="/"
             className="inline-flex items-center justify-center rounded-md px-6 py-3 text-sm font-medium shadow-sm"
-            style={{ backgroundColor: colors.primary, color: colors.primaryForeground }}
+            style={{ backgroundColor: colors.primary, color: colors.cardForeground }}
           >
             Go back home
           </Link>
