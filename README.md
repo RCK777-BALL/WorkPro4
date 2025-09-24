@@ -71,9 +71,16 @@ cp backend/.env.example backend/.env
 pnpm --filter backend db:push
 
 
-# Seed with demo data
+# (Optional) Seed with full demo data
 pnpm --filter backend db:seed
 ```
+
+> ℹ️ The backend automatically bootstraps a demo tenant and users on startup if the database is empty. You can log in with the
+> following credentials immediately after running the server:
+>
+> - `admin@demo.com / password`
+> - `planner@demo.com / password`
+> - `tech@demo.com / password`
 
 The backend reads its MongoDB connection string from the `DATABASE_URL` value in `backend/.env`. Copying the example file seeds it with a local development URL (`mongodb://localhost:27017/workpro_dev`); update this value if you need to target a different MongoDB deployment or credentials.
 
