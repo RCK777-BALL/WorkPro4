@@ -24,6 +24,11 @@ async function main(): Promise<void> {
     { upsert: true, new: true },
   );
 
+  if (!updated) {
+    await disconnectMongo();
+    throw new Error('[seed] failed to upsert admin user');
+  }
+
   console.log('[seed] admin ready:', { email: updated.email, role: updated.role });
   await disconnectMongo();
 }
