@@ -5,7 +5,28 @@ describe('normalizeApiBaseUrl', () => {
     vi.resetModules();
   });
 
-  it('falls back to the default url when the value is empty or whitespace', async () => {
+  it('falls back to a relative /api path when window is available', async () => {
+    const windowMock = { location: { origin: 'http://localhost:9999' } } as unknown as Window & typeof globalThis;
+
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      enumerable: true,
+      value: windowMock,
+      writable: true,
+    });
+
+    const { normalizeApiBaseUrl } = await import('./api');
+
+    expect(normalizeApiBaseUrl(undefined)).toBe('/api');
+    expect(normalizeApiBaseUrl(null)).toBe('/api');
+    expect(normalizeApiBaseUrl('   ')).toBe('/api');
+
+    deleteGlobal('window');
+  });
+
+  it('falls back to the default url when the value is empty or whitespace without window', async () => {
+    deleteGlobal('window');
+
     const { normalizeApiBaseUrl } = await import('./api');
 
     expect(normalizeApiBaseUrl(undefined)).toBe('http://localhost:5010/api');
@@ -17,6 +38,15 @@ describe('normalizeApiBaseUrl', () => {
     const { normalizeApiBaseUrl } = await import('./api');
 
     expect(normalizeApiBaseUrl('https://example.com')).toBe('https://example.com/api');
+  });
+
+  it('normalizes relative api paths', async () => {
+    const { normalizeApiBaseUrl } = await import('./api');
+
+    expect(normalizeApiBaseUrl('/custom')).toBe('/custom/api');
+    expect(normalizeApiBaseUrl('custom')).toBe('/custom/api');
+    expect(normalizeApiBaseUrl('/custom/api')).toBe('/custom/api');
+    expect(normalizeApiBaseUrl('custom/api')).toBe('/custom/api');
   });
 
   it('trims trailing slashes before appending /api', async () => {
