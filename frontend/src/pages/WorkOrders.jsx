@@ -87,8 +87,8 @@ export function WorkOrders() {
       if (advancedFilters.to) params.set('to', advancedFilters.to);
 
 
-      const result = await api.get(`/work-orders?${params}`);
-      return result.data;
+      const result = await api.get(`/api/work-orders?${params}`);
+      return result?.data ?? result;
     },
   });
 

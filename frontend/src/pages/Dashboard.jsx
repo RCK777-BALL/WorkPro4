@@ -20,24 +20,24 @@ export function Dashboard() {
   const { data: summary } = useQuery({
     queryKey: ['dashboard', 'summary'],
     queryFn: async () => {
-      const result = await api.get('/dashboard/summary');
-      return result.data;
+      const result = await api.get('/api/dashboard/summary');
+      return result?.data ?? result;
     },
   });
 
   const { data: trends } = useQuery({
     queryKey: ['dashboard', 'trends'],
     queryFn: async () => {
-      const result = await api.get('/dashboard/trends');
-      return result.data;
+      const result = await api.get('/api/dashboard/trends');
+      return result?.data ?? result;
     },
   });
 
   const { data: activity } = useQuery({
     queryKey: ['dashboard', 'activity'],
     queryFn: async () => {
-      const result = await api.get('/dashboard/activity');
-      return result.data;
+      const result = await api.get('/api/dashboard/activity');
+      return result?.data ?? result;
     },
   });
 

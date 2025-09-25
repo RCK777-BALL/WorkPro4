@@ -1,72 +1,73 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
-import { api } from '@/lib/api';
+import api from '../lib/api';
+
+const TOKEN_KEY = 'token';
+const USER_KEY = 'user';
+
+function readStoredUser() {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => localStorage.getItem('accessToken'));
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || '');
+  const [user, setUser] = useState(() => readStoredUser());
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    api.setToken(token || null);
-  }, [token]);
-
-  const login = useCallback(async (credentials) => {
-    setIsLoading(true);
-    setError(null);
+  const login = useCallback(async (email, password) => {
+    setLoading(true);
+    setError('');
 
     try {
-      const result = await api.post('/auth/login', credentials);
-
-      if (result?.error) {
-        setError(result.error);
-        return { success: false, error: result.error };
-      }
-
-      const authToken =
-        result?.data?.token ?? result?.token ?? (typeof result?.data === 'string' ? result.data : null);
-
-      if (!authToken) {
-        const fallbackError = {
-          code: 'INVALID_RESPONSE',
-          message: 'Authentication response did not include a token.',
-        };
-        setError(fallbackError);
-        return { success: false, error: fallbackError };
-      }
-
-      api.setToken(authToken);
-      setToken(authToken);
-      return { success: true, token: authToken };
+      const res = await api.post('/api/auth/login', { email, password });
+      localStorage.setItem(TOKEN_KEY, res.token);
+      localStorage.setItem(USER_KEY, JSON.stringify(res.user ?? null));
+      setToken(res.token);
+      setUser(res.user ?? null);
+      return { ok: true, user: res.user };
     } catch (err) {
-      const fallbackError = {
-        code: 'NETWORK_ERROR',
-        message: err.message || 'Unable to complete login request.',
-      };
-      setError(fallbackError);
-      return { success: false, error: fallbackError };
+      if (err?.status === 401) {
+        setError('Invalid email or password.');
+      } else {
+        setError(err?.message || 'Login failed.');
+      }
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+      setToken('');
+      setUser(null);
+      return { ok: false };
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   }, []);
 
   const logout = useCallback(() => {
-    setToken(null);
-    api.setToken(null);
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    setToken('');
+    setUser(null);
+    setError('');
   }, []);
 
   const value = useMemo(
     () => ({
       token,
+      user,
       isAuthenticated: Boolean(token),
       login,
       logout,
-      authError: error,
-      isLoggingIn: isLoading,
+      loading,
+      error,
     }),
-    [token, login, logout, error, isLoading],
+    [token, user, login, logout, loading, error],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -81,3 +82,5 @@ export function useAuth() {
 
   return context;
 }
+
+export default useAuth;

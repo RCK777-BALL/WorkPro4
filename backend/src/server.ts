@@ -1,5 +1,6 @@
 import http from 'http';
 import { URL } from 'url';
+
 import { loadEnv } from './config/env';
 import { connectMongo } from './config/mongo';
 import { handleLogin } from './routes/authRoutes';
@@ -26,6 +27,7 @@ function sendJson(res: http.ServerResponse, status: number, payload: unknown): v
 async function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let totalLength = 0;
+
   for await (const chunk of req) {
     const bufferChunk = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     totalLength += bufferChunk.length;
@@ -91,7 +93,7 @@ export async function start(): Promise<void> {
       sendJson(res, 404, { error: { code: 404, message: 'Route not found' } });
     } catch (error) {
       if (NODE_ENV !== 'production') {
-        console.error('[error]', error);
+        console.error('[server]', error);
       }
       const message = error instanceof Error ? error.message : 'Internal Server Error';
       const status = message === 'Invalid JSON payload' || message === 'Payload too large' ? 400 : 500;
