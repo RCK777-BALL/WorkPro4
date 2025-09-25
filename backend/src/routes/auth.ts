@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
+import bcrypt from '../lib/bcrypt';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { ok, fail, asyncHandler } from '../utils/response';
@@ -25,7 +25,13 @@ router.post('/login', asyncHandler(async (req, res) => {
     },
   });
 
-  if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
+  if (!user) {
+    return fail(res, 401, 'Invalid credentials');
+  }
+
+  const passwordMatches = bcrypt.compareSync(password, user.passwordHash);
+
+  if (!passwordMatches) {
     return fail(res, 401, 'Invalid credentials');
   }
 

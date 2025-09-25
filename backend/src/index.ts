@@ -4,7 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import bcrypt from 'bcryptjs';
+import bcrypt from './lib/bcrypt';
 import { requestLogger } from './middleware/requestLogger';
 import { errorHandler } from './middleware/errorHandler';
 import { prisma, verifyDatabaseConnection } from './db';
@@ -150,7 +150,7 @@ async function ensureDemoUsers() {
     },
   });
 
-  const defaultPassword = bcrypt.hashSync('Password123', 10);
+  const defaultPassword = bcrypt.hashSync('Password123');
 
   const users = await Promise.all([
     prisma.user.create({
