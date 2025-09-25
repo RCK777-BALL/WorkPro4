@@ -24,7 +24,6 @@ export async function handleLogin(requestBody: unknown): Promise<LoginResult> {
     const password = String(passwordRaw);
 
     const user = await User.findOne({ email });
-
     if (!user) {
       return {
         status: 401,
@@ -33,7 +32,6 @@ export async function handleLogin(requestBody: unknown): Promise<LoginResult> {
     }
 
     const passwordMatches = await bcrypt.compare(password, user.passwordHash);
-
     if (!passwordMatches) {
       return {
         status: 401,
@@ -42,24 +40,15 @@ export async function handleLogin(requestBody: unknown): Promise<LoginResult> {
     }
 
     const secret = process.env.JWT_SECRET;
-
     if (!secret) {
       return {
         status: 500,
-        body: {
-          error: {
-            code: 500,
-            message: 'Server misconfigured: missing JWT_SECRET',
-          },
-        },
+        body: { error: { code: 500, message: 'Server misconfigured' } },
       };
     }
 
-    const token = jwt.sign(
-      { sub: user.id, role: user.role, email: user.email },
-      secret,
-      { expiresIn: '1d' },
-    );
+    const tokenPayload = { sub: user.id, email: user.email, role: user.role };
+    const token = jwt.sign(tokenPayload, secret, { expiresIn: '1d' });
 
     return {
       status: 200,
@@ -74,14 +63,12 @@ export async function handleLogin(requestBody: unknown): Promise<LoginResult> {
       },
     };
   } catch (error) {
+    console.error('[auth] login failed', error);
     return {
       status: 500,
-      body: {
-        error: {
-          code: 500,
-          message: 'Internal Server Error',
-        },
-      },
+      body: { error: { code: 500, message: 'Internal Server Error' } },
     };
   }
 }
+
+export default { handleLogin };

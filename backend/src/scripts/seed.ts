@@ -1,6 +1,7 @@
-import { loadEnv } from '../config/env';
 import bcrypt from '../lib/bcrypt';
+
 import { connectMongo, disconnectMongo } from '../config/mongo';
+import { loadEnv } from '../config/env';
 import User from '../models/User';
 
 async function main(): Promise<void> {
@@ -8,10 +9,9 @@ async function main(): Promise<void> {
   await connectMongo();
 
   const email = 'admin@demo.com';
-  const password = 'Admin@123';
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await bcrypt.hash('Admin@123', 10);
 
-  const updated = await User.findOneAndUpdate(
+  const doc = await User.findOneAndUpdate(
     { email },
     {
       $set: {
@@ -24,12 +24,11 @@ async function main(): Promise<void> {
     { upsert: true, new: true },
   );
 
-  if (!updated) {
-    await disconnectMongo();
-    throw new Error('[seed] failed to upsert admin user');
+  if (!doc) {
+    throw new Error('[seed] failed to prepare admin user');
   }
 
-  console.log('[seed] admin ready:', { email: updated.email, role: updated.role });
+  console.log('[seed] admin ready:', doc.email);
   await disconnectMongo();
 }
 

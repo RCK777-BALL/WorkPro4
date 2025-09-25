@@ -1,127 +1,32 @@
-const API_PATH = '/api';
-const DEFAULT_API_BASE = 'http://localhost:5010/api';
+const BASE = import.meta?.env?.VITE_API_URL || 'http://localhost:5010';
 
-const buildApiBaseUrl = (rawUrl) => {
-  if (!rawUrl || typeof rawUrl !== 'string') {
-    return DEFAULT_API_BASE;
+async function request(path, options = {}) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    ...options,
+  });
+
+  const contentType = res.headers.get('content-type') || '';
+  const isJson = contentType.includes('application/json');
+  const data = isJson ? await res.json().catch(() => ({})) : null;
+
+  if (!res.ok) {
+    const message = data?.error?.message || `HTTP ${res.status}`;
+    const error = new Error(message);
+    error.status = res.status;
+    error.data = data;
+    throw error;
   }
 
-  const trimmedUrl = rawUrl.trim().replace(/\/+$/, '');
-
-  if (!trimmedUrl) {
-    return DEFAULT_API_BASE;
-  }
-
-  if (trimmedUrl.endsWith(API_PATH)) {
-    return trimmedUrl;
-  }
-
-  return `${trimmedUrl}${API_PATH}`;
-};
-
-const API_BASE_URL = buildApiBaseUrl(import.meta.env.VITE_API_URL) || DEFAULT_API_BASE;
-
-class ApiClient {
-  constructor(baseURL) {
-    this.baseURL = baseURL;
-    this.token = localStorage.getItem('accessToken');
-  }
-
-  setToken(token) {
-    this.token = token;
-    if (token) {
-      localStorage.setItem('accessToken', token);
-    } else {
-      localStorage.removeItem('accessToken');
-    }
-  }
-
-  async request(endpoint, options = {}) {
-    const url = `${this.baseURL}${endpoint}`;
-    const { headers: headersInit, body, json, ...restOptions } = options;
-    const headers = new Headers(headersInit);
-
-    if (this.token) {
-      headers.set('Authorization', `Bearer ${this.token}`);
-    }
-
-    const shouldTreatAsJson = (value) => {
-      if (value === undefined || value === null) {
-        return false;
-      }
-
-      if (typeof value !== 'object') {
-        return false;
-      }
-
-      const isSpecialType =
-        (typeof FormData !== 'undefined' && value instanceof FormData) ||
-        (typeof Blob !== 'undefined' && value instanceof Blob) ||
-        (typeof ArrayBuffer !== 'undefined' && value instanceof ArrayBuffer) ||
-        (typeof URLSearchParams !== 'undefined' && value instanceof URLSearchParams);
-
-      if (isSpecialType) {
-        return false;
-      }
-
-      return true;
-    };
-
-    let requestBody = body;
-
-    if (json !== undefined) {
-      headers.set('Content-Type', 'application/json');
-      requestBody = json === undefined ? undefined : JSON.stringify(json);
-    } else if (shouldTreatAsJson(body)) {
-      headers.set('Content-Type', 'application/json');
-      requestBody = JSON.stringify(body);
-    }
-
-    try {
-      const response = await fetch(url, { ...restOptions, headers, body: requestBody });
-      const result = await response.json();
-
-      if (!response.ok) {
-        return result;
-      }
-
-      return result;
-    } catch (error) {
-      return {
-        data: null,
-        error: {
-          code: 'NETWORK_ERROR',
-          message: 'Network request failed',
-        },
-      };
-    }
-  }
-
-  get(endpoint) {
-    return this.request(endpoint, { method: 'GET' });
-  }
-
-  post(endpoint, data) {
-    const hasData = data !== undefined;
-    return this.request(endpoint, {
-      method: 'POST',
-      ...(hasData ? { json: data } : {}),
-    });
-  }
-
-  put(endpoint, data) {
-    const hasData = data !== undefined;
-    return this.request(endpoint, {
-      method: 'PUT',
-      ...(hasData ? { json: data } : {}),
-    });
-  }
-
-  delete(endpoint) {
-    return this.request(endpoint, { method: 'DELETE' });
-  }
+  return data;
 }
 
-const api = new ApiClient(API_BASE_URL);
+export const api = {
+  get: (path) => request(path),
+  post: (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) }),
+  put: (path, body) => request(path, { method: 'PUT', body: JSON.stringify(body) }),
+  del: (path) => request(path, { method: 'DELETE' }),
+};
 
-export { ApiClient, api };
+export default api;

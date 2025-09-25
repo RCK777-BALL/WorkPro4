@@ -48,6 +48,7 @@ function App() {
               }
             >
               <Route index element={<Dashboard />} />
+              <Route path="dashboard" element={<Dashboard />} />
               <Route path="work-orders" element={<WorkOrders />} />
               <Route path="pm" element={<PreventiveMaintenance />} />
               <Route path="assets" element={<Assets />} />

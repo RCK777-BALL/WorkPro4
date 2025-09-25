@@ -108,16 +108,17 @@ export function WorkOrderForm({ onClose, onSuccess }) {
         })),
     };
 
-    const result = await api.post('/work-orders', payload);
-
-    if (result?.error) {
-      handleApiErrors(result.error);
-      return;
-    }
-
-    reset();
-    if (typeof onSuccess === 'function') {
-      onSuccess(result?.data);
+    try {
+      const result = await api.post('/api/work-orders', payload);
+      reset();
+      if (typeof onSuccess === 'function') {
+        onSuccess(result?.data ?? result);
+      }
+    } catch (error) {
+      const payloadError = error?.data?.error ?? {
+        message: error?.message || 'Unable to create work order',
+      };
+      handleApiErrors(payloadError);
     }
   });
 
