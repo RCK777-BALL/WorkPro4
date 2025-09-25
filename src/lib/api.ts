@@ -66,16 +66,30 @@ export const normalizeApiBaseUrl = (value: string | undefined | null): string =>
   const trimmedValue = value?.trim() ?? '';
 
   if (!trimmedValue) {
+    if (typeof window !== 'undefined' && typeof window.location !== 'undefined') {
+      return '/api';
+    }
+
     return 'http://localhost:5010/api';
   }
 
   const withoutTrailingSlashes = trimmedValue.replace(/\/+$/u, '');
 
-  if (withoutTrailingSlashes.endsWith('/api')) {
-    return withoutTrailingSlashes;
+  if (/^https?:\/\//iu.test(withoutTrailingSlashes)) {
+    return withoutTrailingSlashes.endsWith('/api')
+      ? withoutTrailingSlashes
+      : `${withoutTrailingSlashes}/api`;
   }
 
-  return `${withoutTrailingSlashes}/api`;
+  const withLeadingSlash = withoutTrailingSlashes.startsWith('/')
+    ? withoutTrailingSlashes
+    : `/${withoutTrailingSlashes}`;
+
+  if (withLeadingSlash.endsWith('/api')) {
+    return withLeadingSlash;
+  }
+
+  return `${withLeadingSlash}/api`;
 };
 
 const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_URL);
