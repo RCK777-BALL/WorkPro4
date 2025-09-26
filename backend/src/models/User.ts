@@ -1,6 +1,7 @@
 import mongoose, { Schema, type Document } from '../lib/mongoose';
 
 export interface UserDoc extends Document {
+  [key: string]: unknown;
   email: string;
   passwordHash: string;
   name?: string;
