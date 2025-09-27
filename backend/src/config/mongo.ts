@@ -6,6 +6,7 @@ export async function connectMongo(): Promise<void> {
   const url = process.env.DATABASE_URL?.trim() || process.env.MONGO_URL?.trim();
   if (!url) {
     throw new Error('Missing DATABASE_URL (or legacy MONGO_URL) in environment');
+
   }
   await mongoose.connect(url);
   const { name, host } = mongoose.connection;
