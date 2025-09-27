@@ -5,7 +5,8 @@ mongoose.set('strictQuery', true);
 export async function connectMongo(): Promise<void> {
   const url = process.env.DATABASE_URL ?? process.env.MONGO_URL;
   if (!url) {
-    throw new Error('Missing DATABASE_URL (or legacy MONGO_URL) in environment');
+    throw new Error('Missing DATABASE_URL in environment');
+
   }
   await mongoose.connect(url);
   const { name, host } = mongoose.connection;
