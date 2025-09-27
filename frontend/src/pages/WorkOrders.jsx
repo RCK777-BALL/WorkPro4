@@ -94,7 +94,35 @@ export function WorkOrders() {
 
   const workOrders = Array.isArray(data) ? data : data?.workOrders || [];
 
-  const statusCounts = workOrders.reduce((acc, wo) => {
+  const normalizedWorkOrders = workOrders.map((workOrder) => {
+    const assigneeNames = Array.isArray(workOrder?.assigneeNames)
+      ? workOrder.assigneeNames
+      : Array.isArray(workOrder?.assignees)
+      ? workOrder.assignees
+      : [];
+
+    const assetName =
+      workOrder?.assetName ||
+      workOrder?.asset?.name ||
+      workOrder?.asset?.code ||
+      workOrder?.assetId ||
+      '';
+
+    return {
+      ...workOrder,
+      title: workOrder?.title || '',
+      description: workOrder?.description || '',
+      status: workOrder?.status || 'requested',
+      priority: workOrder?.priority || 'medium',
+      assigneeNames,
+      assetName,
+      requestedByName: workOrder?.requestedByName || workOrder?.createdByName || 'System',
+      createdAt:
+        workOrder?.createdAt || workOrder?.created_at || new Date().toISOString(),
+    };
+  });
+
+  const statusCounts = normalizedWorkOrders.reduce((acc, wo) => {
     acc[wo.status] = (acc[wo.status] || 0) + 1;
     return acc;
   }, {});
@@ -262,7 +290,7 @@ export function WorkOrders() {
 
       {/* Work Orders List */}
       <div className="space-y-4">
-        {workOrders.map((workOrder) => (
+        {normalizedWorkOrders.map((workOrder) => (
           <Card
             key={workOrder.id}
             className="hover:shadow-md transition-shadow cursor-pointer"
@@ -350,7 +378,7 @@ export function WorkOrders() {
         ))}
       </div>
 
-      {workOrders.length === 0 && (
+      {normalizedWorkOrders.length === 0 && (
         <Card>
           <CardContent className="p-12 text-center">
             <Wrench className="w-12 h-12 text-gray-400 mx-auto mb-4" />
