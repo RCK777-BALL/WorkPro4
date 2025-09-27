@@ -3,12 +3,43 @@ version: '3.8'
 services:
   mongodb:
     image: mongo:6
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     environment:
       MONGO_INITDB_DATABASE: workpro_dev
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ ping: 1 })' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+
+  mongodb-init:
+    image: mongo:6
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["bash", "-c"]
+    command: >-
+      mongosh --host mongodb:27017 --quiet --eval '
+        try {
+          const status = rs.status();
+          if (status.ok === 1) {
+            console.log("Replica set already initialized");
+          }
+        } catch (error) {
+          if (error.codeName === "NotYetInitialized" || error.code === 94) {
+            rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "mongodb:27017" }] });
+            console.log("Replica set initiated");
+          } else {
+            console.error("Unexpected error while checking replica set status", error);
+            throw error;
+          }
+        }
+      '
 
   redis:
     image: redis:7-alpine
