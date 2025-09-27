@@ -14,7 +14,7 @@ import { ensureJwtSecrets } from './config/auth';
 // Routes
 import authRoutes from './routes/auth';
 import summaryRoutes from './routes/summary';
-import workOrderRoutes from './routes/workOrders';
+import workOrderRoutes from './routes/simpleWorkOrders';
 import assetRoutes from './routes/assets';
 import partRoutes from './routes/parts';
 import vendorRoutes from './routes/vendors';
