@@ -7,7 +7,6 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { prisma } from '../db';
 import { getJwtSecret } from '../config/auth';
 
-
 const router = Router();
 
 const loginSchema = z.object({
@@ -20,9 +19,6 @@ router.post('/login', asyncHandler(async (req, res) => {
 
   const user = await prisma.user.findUnique({
     where: { email },
-    include: {
-      tenant: true,
-    },
   });
 
   if (!user) {
@@ -36,7 +32,7 @@ router.post('/login', asyncHandler(async (req, res) => {
   }
 
   const token = jwt.sign(
-    { userId: user.id, tenantId: user.tenantId },
+    { userId: user.id },
     getJwtSecret(),
     { expiresIn: '24h' }
   );
@@ -45,7 +41,6 @@ router.post('/login', asyncHandler(async (req, res) => {
     token,
     user: {
       id: user.id,
-      tenantId: user.tenantId,
       email: user.email,
       name: user.name,
       roles: user.roles,
@@ -58,9 +53,6 @@ router.post('/login', asyncHandler(async (req, res) => {
 router.get('/me', authenticateToken, asyncHandler(async (req: AuthRequest, res) => {
   const user = await prisma.user.findUnique({
     where: { id: req.user!.id },
-    include: {
-      tenant: true,
-    },
   });
 
   if (!user) {
@@ -69,7 +61,6 @@ router.get('/me', authenticateToken, asyncHandler(async (req: AuthRequest, res) 
 
   return ok(res, {
     id: user.id,
-    tenantId: user.tenantId,
     email: user.email,
     name: user.name,
     roles: user.roles,
