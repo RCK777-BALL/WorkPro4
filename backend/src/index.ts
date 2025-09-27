@@ -51,24 +51,24 @@ app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);
 
 // Health check
-app.get('/health', (_req, res) => {
-  res.json({ ok: true });
-});
-
-app.get('/api/health', (_req, res) => {
-  res.json({ ok: true });
-});
-
-app.get('/health/db', async (_req, res) => {
+async function handleHealthCheck(_req: express.Request, res: express.Response) {
   try {
-    // Issue a MongoDB ping command to validate connectivity
-    await prisma.$runCommandRaw({ ping: 1 });
+    await verifyDatabaseConnection();
     res.json({ ok: true });
   } catch (error) {
-    console.error('❌ MongoDB health check failed', error);
-    res.status(503).json({ ok: false });
+    const message = error instanceof Error ? error.message : 'Unknown database error';
+    console.error('❌ Health check failed to reach database:', message, error);
+
+    res.status(500).json({
+      ok: false,
+      error: 'Database connection failed',
+    });
   }
-});
+}
+
+app.get('/health', handleHealthCheck);
+app.get('/api/health', handleHealthCheck);
+app.get('/health/db', handleHealthCheck);
 
 // API routes
 app.use('/api/auth', authRoutes);
