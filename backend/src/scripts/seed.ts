@@ -1,39 +1,70 @@
 import bcrypt from '../lib/bcrypt';
-
-import { connectMongo, disconnectMongo } from '../config/mongo';
 import { loadEnv } from '../config/env';
-import User from '../models/User';
+import { prisma } from 'src/db';
 
 async function main(): Promise<void> {
   loadEnv();
-  await connectMongo();
+  await prisma.$connect();
 
-  const email = 'admin@demo.com';
+  const tenantName = 'Demo Tenant';
+  const adminEmail = 'admin@demo.com';
   const passwordHash = await bcrypt.hash('Admin@123', 10);
 
-  const doc = await User.findOneAndUpdate(
-    { email },
-    {
-      $set: {
-        email,
-        passwordHash,
-        role: 'admin',
-        name: 'Admin',
-      },
-    },
-    { upsert: true, new: true },
-  );
+  const tenant =
+    (await prisma.tenant.findFirst({ where: { name: tenantName } })) ??
+    (await prisma.tenant.create({ data: { name: tenantName } }));
 
-  if (!doc) {
-    throw new Error('[seed] failed to prepare admin user');
+  const adminUser = await prisma.user.upsert({
+    where: { email: adminEmail },
+    update: {
+      name: 'Admin',
+      roles: ['admin'],
+      passwordHash,
+      tenantId: tenant.id,
+    },
+    create: {
+      tenantId: tenant.id,
+      email: adminEmail,
+      name: 'Admin',
+      roles: ['admin'],
+      passwordHash,
+    },
+  });
+
+  const existingWorkOrder = await prisma.workOrder.findFirst({
+    where: {
+      tenantId: tenant.id,
+      title: 'Demo Work Order',
+    },
+  });
+
+  if (existingWorkOrder) {
+    console.log('[seed] demo work order already exists:', existingWorkOrder.id);
+    return;
   }
 
-  console.log('[seed] admin ready:', doc.email);
-  await disconnectMongo();
+  const workOrder = await prisma.workOrder.create({
+    data: {
+      tenantId: tenant.id,
+      title: 'Demo Work Order',
+      description: 'Inspect the demo asset and confirm it is running.',
+      priority: 'medium',
+      status: 'requested',
+      assignees: [adminUser.id],
+      createdBy: adminUser.id,
+    },
+  });
+
+  console.log('[seed] tenant ready:', tenant.name);
+  console.log('[seed] admin ready:', adminUser.email);
+  console.log('[seed] work order created:', workOrder.id);
 }
 
-main().catch(async (error) => {
-  console.error('[seed] error', error);
-  await disconnectMongo();
-  process.exit(1);
-});
+main()
+  .catch((error) => {
+    console.error('[seed] error', error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
