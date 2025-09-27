@@ -42,4 +42,15 @@ After the database is ready you can start the backend with:
 npm run --prefix backend dev
 ```
 
-The server seeds the default tenant when the target database is empty and logs progress to the console.
+### Seeding demo data with Prisma
+
+The backend now ships with a Prisma-based seed script that provisions a demo tenant, ensures the default admin user exists, and
+creates a sample work order linked to that account. Run it any time you need to populate a fresh database:
+
+```bash
+npm run --prefix backend db:seed
+```
+
+The script reads environment variables via `src/config/env`, reuses the shared Prisma client from `src/db`, and exits cleanly
+after disconnecting. Rerunning the seed is safe—the tenant and admin user are idempotent, and the work order is only created
+when it does not already exist.
