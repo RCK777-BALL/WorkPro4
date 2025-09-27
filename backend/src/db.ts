@@ -1,6 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 
-function sanitizeDatabaseUrl(rawUrl: string | undefined) {
+export function sanitizeDatabaseUrl(rawUrl: string | undefined) {
   if (!rawUrl) {
     return undefined;
   }
@@ -29,7 +29,21 @@ function sanitizeDatabaseUrl(rawUrl: string | undefined) {
   return trimmedUrl;
 }
 
-const databaseUrl = sanitizeDatabaseUrl(process.env.DATABASE_URL);
+function getPrismaClientOptions(): Prisma.PrismaClientOptions | undefined {
+  const databaseUrl = sanitizeDatabaseUrl(process.env.DATABASE_URL);
+
+  if (!databaseUrl) {
+    return undefined;
+  }
+
+  return {
+    datasources: {
+      db: {
+        url: databaseUrl,
+      },
+    },
+  };
+}
 
 declare global {
   // eslint-disable-next-line no-var
@@ -38,17 +52,7 @@ declare global {
 
 export const prisma: PrismaClient =
   globalThis.prisma ??
-  new PrismaClient(
-    databaseUrl
-      ? {
-          datasources: {
-            db: {
-              url: databaseUrl,
-            },
-          },
-        }
-      : undefined,
-  );
+  new PrismaClient(getPrismaClientOptions());
 
 if (process.env.NODE_ENV !== 'production') {
   globalThis.prisma = prisma;

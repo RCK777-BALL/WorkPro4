@@ -20,11 +20,12 @@ import partRoutes from './routes/parts';
 import vendorRoutes from './routes/vendors';
 import searchRoutes from './routes/search';
 
+
 const envPath = path.resolve(__dirname, '../.env');
 
 // Load environment variables from backend/.env while still allowing real environment
 // variables to take precedence when they are already defined.
-const dotenvResult = dotenv.config({ path: envPath });
+dotenv.config({ path: envPath });
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5010;
@@ -72,13 +73,7 @@ app.get('/health/db', async (_req, res) => {
 
 // API routes
 app.use('/api/auth', authRoutes);
-app.use('/api/summary', summaryRoutes);
-app.use('/api/dashboard', summaryRoutes);
 app.use('/api/work-orders', workOrderRoutes);
-app.use('/api/assets', assetRoutes);
-app.use('/api/parts', partRoutes);
-app.use('/api/vendors', vendorRoutes);
-app.use('/api/search', searchRoutes);
 
 // Error handling
 app.use(errorHandler);
@@ -103,8 +98,7 @@ async function start() {
     process.exit(1);
   }
 
-  const databaseUrl =
-    process.env.DATABASE_URL?.trim() ?? dotenvResult.parsed?.DATABASE_URL?.trim();
+  const databaseUrl = process.env.DATABASE_URL?.trim();
 
   if (!databaseUrl) {
     console.error('❌ DATABASE_URL environment variable is required. Shutting down.');
@@ -174,38 +168,29 @@ async function ensureDemoUsers() {
     return;
   }
 
-  console.log('👥 No users found in database. Creating demo tenant and credentials...');
-
-  const tenant = await prisma.tenant.create({
-    data: {
-      name: 'Demo Manufacturing Co.',
-    },
-  });
+  console.log('👥 No users found in database. Creating demo users...');
 
   const defaultPassword = bcrypt.hashSync('Password123');
 
   const users = await Promise.all([
     prisma.user.create({
       data: {
-        tenantId: tenant.id,
         email: 'admin@demo.com',
         passwordHash: defaultPassword,
         name: 'Admin User',
-        roles: ['admin', 'supervisor', 'planner', 'tech'],
+        roles: ['admin'],
       },
     }),
     prisma.user.create({
       data: {
-        tenantId: tenant.id,
         email: 'planner@demo.com',
         passwordHash: defaultPassword,
         name: 'Maintenance Planner',
-        roles: ['planner', 'tech'],
+        roles: ['planner'],
       },
     }),
     prisma.user.create({
       data: {
-        tenantId: tenant.id,
         email: 'tech@demo.com',
         passwordHash: defaultPassword,
         name: 'Maintenance Tech',
@@ -214,7 +199,6 @@ async function ensureDemoUsers() {
     }),
   ]);
 
-  console.log('✅ Created demo tenant:', tenant.name);
   console.log('✅ Created demo users:', users.map((user) => user.email).join(', '));
   console.log('Demo login credentials:');
   console.log('  • admin@demo.com / Password123');

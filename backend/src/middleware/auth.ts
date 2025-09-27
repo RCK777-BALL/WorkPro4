@@ -1,15 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
 import { fail } from '../utils/response';
 import { getJwtSecret } from '../config/auth';
-
-const prisma = new PrismaClient();
+import { prisma } from '../db';
 
 export interface AuthRequest extends Request {
   user?: {
     id: string;
-    tenantId: string;
     email: string;
     name: string;
     roles: string[];
@@ -34,7 +31,6 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
         where: { id: decoded.userId },
         select: {
           id: true,
-          tenantId: true,
           email: true,
           name: true,
           roles: true,
