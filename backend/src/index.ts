@@ -7,6 +7,7 @@ import rateLimit from 'express-rate-limit';
 import bcrypt from './lib/bcrypt';
 import { requestLogger } from './middleware/requestLogger';
 import { errorHandler } from './middleware/errorHandler';
+import { Prisma } from '@prisma/client';
 import { prisma, verifyDatabaseConnection } from './db';
 import { ensureJwtSecrets } from './config/auth';
 
@@ -116,6 +117,13 @@ async function start() {
     console.log('🗄️ Connected to database');
   } catch (error) {
     console.error('❌ Failed to connect to database', error);
+
+    if (isReplicaSetPrimaryError(error)) {
+      console.error(
+        '💡 MongoDB replica set primary not found. Initialize a replica set or remove the `replicaSet` parameter so direct connections are allowed.',
+      );
+    }
+
     process.exit(1);
     return;
   }
@@ -134,6 +142,30 @@ start().catch((error) => {
   console.error('❌ Failed to start server', error);
   process.exit(1);
 });
+
+function isReplicaSetPrimaryError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === 'P2010' || error.message.includes('ReplicaSetNoPrimary')) {
+      return true;
+    }
+  }
+
+  if (error instanceof Error && error.message.includes('ReplicaSetNoPrimary')) {
+    return true;
+  }
+
+  // Check nested causes for forwarded driver errors
+  const cause = (error as { cause?: unknown }).cause;
+  if (cause) {
+    return isReplicaSetPrimaryError(cause);
+  }
+
+  return false;
+}
 
 async function ensureDemoUsers() {
   const userCount = await prisma.user.count();

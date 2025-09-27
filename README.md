@@ -84,9 +84,9 @@ pnpm --filter backend db:seed
 > - `planner@demo.com / Password123`
 > - `tech@demo.com / Password123`
 
-The backend reads its MongoDB connection string from the `DATABASE_URL` value in `backend/.env`. Copying the example file seeds it with a local development URL (`mongodb://localhost:27017/workpro4?replicaSet=rs0`); update this value if you need to target a different MongoDB deployment, credentials, or replica set name.
+The backend reads its MongoDB connection string from the `DATABASE_URL` value in `backend/.env`. Copying the example file seeds it with a local development URL (`mongodb://localhost:27017/workpro4?replicaSet=rs0`); update this value if you need to target a different MongoDB deployment, credentials, or replica set name. If you're connecting to a standalone MongoDB instance, remove the `replicaSet` query parameter and the backend will automatically opt-in to `directConnection=true` for you.
 
-> Not using Docker? Ensure your local MongoDB runs with replica sets enabled: start `mongod` with `--replSet rs0` (and a bind address that matches your environment), then run `mongosh --eval 'rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "localhost:27017" }] })'` once to initialize. Update `DATABASE_URL` so the `replicaSet` parameter matches your configuration.
+> Not using Docker? Ensure your local MongoDB runs with replica sets enabled: start `mongod` with `--replSet rs0` (and a bind address that matches your environment), then run `mongosh --eval 'rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "localhost:27017" }] })'` once to initialize. Update `DATABASE_URL` so the `replicaSet` parameter matches your configuration. Prefer to skip replica sets? Remove the parameter and the backend will fall back to a direct connection automatically.
 
 4. **Start development servers:**
 ```bash
