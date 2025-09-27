@@ -162,44 +162,52 @@ function isReplicaSetPrimaryError(error: unknown): boolean {
 }
 
 async function ensureDemoUsers() {
-  const userCount = await prisma.user.count();
+  const tenantName = 'Demo Tenant';
 
-  if (userCount > 0) {
-    return;
-  }
-
-  console.log('👥 No users found in database. Creating demo users...');
+  const tenant =
+    (await prisma.tenant.findFirst({ where: { name: tenantName } })) ??
+    (await prisma.tenant.create({ data: { name: tenantName } }));
 
   const defaultPassword = bcrypt.hashSync('Password123');
 
-  const users = await Promise.all([
-    prisma.user.create({
-      data: {
-        email: 'admin@demo.com',
-        passwordHash: defaultPassword,
-        name: 'Admin User',
-        roles: ['admin'],
-      },
-    }),
-    prisma.user.create({
-      data: {
-        email: 'planner@demo.com',
-        passwordHash: defaultPassword,
-        name: 'Maintenance Planner',
-        roles: ['planner'],
-      },
-    }),
-    prisma.user.create({
-      data: {
-        email: 'tech@demo.com',
-        passwordHash: defaultPassword,
-        name: 'Maintenance Tech',
-        roles: ['tech'],
-      },
-    }),
-  ]);
+  const demoUsers: Array<{ email: string; name: string; roles: string[] }> = [
+    { email: 'admin@demo.com', name: 'Admin User', roles: ['admin'] },
+    { email: 'planner@demo.com', name: 'Maintenance Planner', roles: ['planner'] },
+    { email: 'tech@demo.com', name: 'Maintenance Tech', roles: ['tech'] },
+  ];
 
-  console.log('✅ Created demo users:', users.map((user) => user.email).join(', '));
+  const createdUsers: string[] = [];
+
+  for (const demoUser of demoUsers) {
+    const existingUser = await prisma.user.findUnique({ where: { email: demoUser.email } });
+
+    await prisma.user.upsert({
+      where: { email: demoUser.email },
+      update: {
+        name: demoUser.name,
+        roles: demoUser.roles,
+        tenant: { connect: { id: tenant.id } },
+      },
+      create: {
+        email: demoUser.email,
+        passwordHash: defaultPassword,
+        name: demoUser.name,
+        roles: demoUser.roles,
+        tenant: { connect: { id: tenant.id } },
+      },
+    });
+
+    if (!existingUser) {
+      createdUsers.push(demoUser.email);
+    }
+  }
+
+  if (createdUsers.length > 0) {
+    console.log('✅ Created demo users:', createdUsers.join(', '));
+  } else {
+    console.log('ℹ️ Demo users already exist.');
+  }
+
   console.log('Demo login credentials:');
   console.log('  • admin@demo.com / Password123');
   console.log('  • planner@demo.com / Password123');
