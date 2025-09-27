@@ -2,41 +2,48 @@
 
 The backend server automatically loads environment variables from `backend/.env` on startup using `dotenv`. Variables already present in your shell or hosting platform continue to take precedence, so you can override any default by exporting it before starting the process.
 
-## MongoDB replica set is required
+## MongoDB connection strategies
 
-Prisma's MongoDB connector expects a replica set, even for local development. The default `DATABASE_URL` shipped with this repository points to `mongodb://localhost:27017/workpro4?replicaSet=rs0`. Make sure any MongoDB instance you connect to exposes the same replica-set name (or update the query string accordingly).
+The backend reads its MongoDB connection string from the `DATABASE_URL` environment variable. Copying `backend/.env.example` seeds the file with a standalone URI (`mongodb://localhost:27017/workpro4?directConnection=true`) so new contributors can connect to a single-node MongoDB instance without enabling replica sets. If you switch to a different deployment model, update the URI accordingly before starting the server.
 
-### Recommended: Docker-based services
+### Option A – Standalone or single-node MongoDB (default)
 
-Use the project's `docker-compose.yml` to start MongoDB (with the replica set enabled) along with the supporting services:
+Use the default URI when you run MongoDB locally without replica sets—for example via Homebrew, Chocolatey, Docker Desktop, or `mongod --config /path/to/mongod.conf`. Ensure the instance listens on `localhost:27017` and then run:
+
+```bash
+cp backend/.env.example backend/.env
+pnpm --filter backend db:push
+```
+
+The backend automatically enables `directConnection=true` for this mode and seeds demo data when the database is empty. No replica-set flags are required.
+
+### Option B – Local replica set (Docker Compose or manual setup)
+
+If you prefer transactions or want parity with production-like environments, switch to a replica-set connection string:
+
+```bash
+DATABASE_URL=mongodb://localhost:27017/workpro4?replicaSet=rs0
+```
+
+You can start the project's Docker services to enable this configuration:
 
 ```bash
 docker compose up -d
 ```
 
-The `mongodb-init` helper container waits for MongoDB to pass its health check and then runs:
+The included `mongodb-init` helper waits for MongoDB to become healthy and then runs `rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "mongodb:27017" }] })` so Prisma can connect immediately. For a manual setup, start `mongod` with `--replSet rs0` and initialise it with the `mongosh --eval 'rs.initiate(...)'` command shown above.
 
-```javascript
-rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "mongodb:27017" }] })
+### Option C – MongoDB Atlas or another managed cluster
+
+Paste the SRV or standard connection string provided by your managed service:
+
+```bash
+DATABASE_URL="mongodb+srv://<user>:<password>@<cluster-host>/workpro4?retryWrites=true&w=majority"
 ```
 
-This ensures the replica set exists before the backend boots and attempts to seed the demo tenant.
+Remember to configure IP allow lists, TLS certificates, and credentials as required by your provider. After updating the URI, rerun `pnpm --filter backend db:push` to sync the Prisma schema.
 
-### Using an existing MongoDB installation
-
-If you prefer running MongoDB directly on your machine:
-
-1. Start `mongod` with replica-set flags, e.g.
-   ```bash
-   mongod --replSet rs0 --bind_ip localhost,127.0.0.1
-   ```
-2. Open a shell and initialize the replica set once:
-   ```bash
-   mongosh --eval 'rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "localhost:27017" }] })'
-   ```
-3. Update `backend/.env` so that `DATABASE_URL` references the correct host, port, database, and `replicaSet` name.
-
-After the database is ready you can start the backend with:
+Once the database is reachable you can start the backend with:
 
 ```bash
 npm run --prefix backend dev
