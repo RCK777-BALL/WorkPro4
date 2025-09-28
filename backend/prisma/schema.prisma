@@ -46,7 +46,7 @@ model Tenant {
 model Asset {
   id       String @id @map("_id") @default(auto()) @db.ObjectId
   tenantId String @map("tenant_id") @db.ObjectId
-  code     String
+  code     String?
   name     String
 
   tenant     Tenant     @relation(fields: [tenantId], references: [id])
@@ -76,20 +76,6 @@ model User {
   updatedAt DateTime @updatedAt
 
   @@map("users")
-}
-
-model Asset {
-  id         String      @id @map("_id") @default(auto()) @db.ObjectId
-  tenantId   String      @map("tenant_id") @db.ObjectId
-  tenant     Tenant      @relation(fields: [tenantId], references: [id])
-  code       String?
-  name       String
-  workOrders WorkOrder[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("assets")
 }
 
 model WorkOrder {
