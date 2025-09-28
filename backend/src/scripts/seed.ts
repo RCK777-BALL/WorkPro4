@@ -1,3 +1,5 @@
+import type { Tenant, User } from '@prisma/client';
+
 import bcrypt from '../lib/bcrypt';
 import { loadEnv } from '../config/env';
 import { prisma } from '../db';
@@ -10,63 +12,151 @@ async function main(): Promise<void> {
   const adminEmail = 'admin@demo.com';
   const passwordHash = await bcrypt.hash('Admin@123', 10);
 
-  const tenantSlug = 'demo-tenant';
-  const tenant =
-    (await prisma.tenant.findUnique({ where: { name: tenantName } }))
-      ? await prisma.tenant.update({ where: { name: tenantName }, data: { slug: tenantSlug } })
-      : await prisma.tenant.create({ data: { name: tenantName, slug: tenantSlug } });
+  const { tenant, created: tenantCreated } = await ensureTenantNoTxn(tenantName);
+  const {
+    user: adminUser,
+    created: adminCreated,
+    updated: adminUpdated,
+  } = await ensureAdminNoTxn({
+    email: adminEmail,
+    name: 'Admin',
+    passwordHash,
+    roles: ['admin'],
+    tenantId: tenant.id,
 
-  const adminUser = await prisma.user.upsert({
-    where: { email: adminEmail },
-    update: {
-      name: 'Admin',
-      role: 'admin',
-      passwordHash,
-      tenantId: tenant.id,
-    },
-    create: {
-      tenantId: tenant.id,
-      email: adminEmail,
-      name: 'Admin',
-      role: 'admin',
-      passwordHash,
-    },
   });
 
+  const workOrderTitle = 'Demo Work Order';
   const existingWorkOrder = await prisma.workOrder.findFirst({
     where: {
       tenantId: tenant.id,
-      title: 'Demo Work Order',
+      title: workOrderTitle,
     },
   });
 
-  if (existingWorkOrder) {
-    console.log('[seed] demo work order already exists:', existingWorkOrder.id);
-    return;
+  let workOrderCreated = false;
+  let workOrder = existingWorkOrder;
+
+  if (!workOrder) {
+    workOrder = await prisma.workOrder.create({
+      data: {
+        tenantId: tenant.id,
+        title: workOrderTitle,
+        description: 'Inspect the demo asset and confirm it is running.',
+        priority: 'medium',
+        status: 'requested',
+        assignees: [adminUser.id],
+        createdBy: adminUser.id,
+      },
+    });
+    workOrderCreated = true;
   }
 
-  const workOrder = await prisma.workOrder.create({
-    data: {
-      tenantId: tenant.id,
-      title: 'Demo Work Order',
-      description: 'Inspect the demo asset and confirm it is running.',
-      priority: 'medium',
-      status: 'requested',
-      assignees: [adminUser.id],
-      createdBy: adminUser.id,
-    },
-  });
+  if (tenantCreated) {
+    console.log('✅ Created demo tenant:', tenant.name);
+  } else {
+    console.log('ℹ️ Demo tenant already exists:', tenant.name);
+  }
 
-  console.log('[seed] tenant ready:', tenant.name);
-  console.log('[seed] admin ready:', adminUser.email);
-  console.log('[seed] work order created:', workOrder.id);
+  if (adminCreated) {
+    console.log('✅ Created demo admin user:', adminUser.email);
+  } else if (adminUpdated) {
+    console.log('♻️ Updated demo admin user:', adminUser.email);
+  } else {
+    console.log('ℹ️ Demo admin user already up to date:', adminUser.email);
+  }
+
+  if (workOrderCreated) {
+    console.log('✅ Created demo work order:', workOrder.title);
+  } else {
+    console.log('ℹ️ Demo work order already exists:', workOrder.title);
+  }
+
+  console.log('Demo login credentials:');
+  console.log('  • admin@demo.com / Admin@123');
 }
 
 main()
   .catch((error) => {
-    console.error('[seed] error', error);
+    console.error('❌ Seed failed', error);
     process.exitCode = 1;
   })
   .finally(async () => {
     await prisma.$disconnect();
   });
+
+async function ensureTenantNoTxn(tenantName: string): Promise<{ tenant: Tenant; created: boolean }> {
+  const existingTenant = await prisma.tenant.findUnique({ where: { name: tenantName } });
+
+  if (existingTenant) {
+    return { tenant: existingTenant, created: false };
+  }
+
+  const tenant = await prisma.tenant.create({ data: { name: tenantName } });
+  return { tenant, created: true };
+}
+
+type EnsureAdminParams = {
+  email: string;
+  name: string;
+  passwordHash: string;
+  roles: string[];
+  tenantId: string;
+};
+
+type EnsureAdminResult = {
+  user: User;
+  created: boolean;
+  updated: boolean;
+};
+
+async function ensureAdminNoTxn(params: EnsureAdminParams): Promise<EnsureAdminResult> {
+  const { email, name, passwordHash, roles, tenantId } = params;
+  const existingUser = await prisma.user.findUnique({ where: { email } });
+
+  if (!existingUser) {
+    const user = await prisma.user.create({
+      data: {
+        email,
+        name,
+        passwordHash,
+        roles,
+        tenantId,
+      },
+    });
+
+    return { user, created: true, updated: false } as const;
+  }
+
+  const needsNameUpdate = existingUser.name !== name;
+  const needsRoleUpdate = !arraysEqual(existingUser.roles, roles);
+  const needsPasswordUpdate = existingUser.passwordHash !== passwordHash;
+  const needsTenantUpdate = existingUser.tenantId !== tenantId;
+
+  if (!needsNameUpdate && !needsRoleUpdate && !needsPasswordUpdate && !needsTenantUpdate) {
+    return { user: existingUser, created: false, updated: false } as const;
+  }
+
+  const user = await prisma.user.update({
+    where: { email },
+    data: {
+      name,
+      roles,
+      passwordHash,
+      tenantId,
+    },
+  });
+
+  return { user, created: false, updated: true } as const;
+}
+
+function arraysEqual(left: string[], right: string[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  const leftSorted = [...left].sort();
+  const rightSorted = [...right].sort();
+
+  return leftSorted.every((value, index) => value === rightSorted[index]);
+}
