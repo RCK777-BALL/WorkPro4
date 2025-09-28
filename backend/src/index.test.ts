@@ -78,7 +78,7 @@ describe('server startup', () => {
     helmetMiddleware.mockReset();
     rateLimitFactory.mockReset();
     rateLimitMiddleware.mockReset();
-    ensureTenantNoTxn.mockResolvedValue({ tenant: { id: 'tenant-id' }, created: true });
+    ensureTenantNoTxn.mockResolvedValue({ tenant: { id: 'tenant-id', slug: 'tenant-slug' }, created: true });
     ensureAdminNoTxn.mockResolvedValue({ admin: { id: 'admin-id' }, created: true });
     delete process.env.DATABASE_URL;
     process.env.DATABASE_URL = '';

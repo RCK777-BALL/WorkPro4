@@ -6,12 +6,26 @@ export interface EnsureTenantResult {
 }
 
 export async function ensureTenantNoTxn(prisma: PrismaClient, tenantName: string): Promise<EnsureTenantResult> {
+  const slug = tenantName.toLowerCase().replace(/\s+/g, '-');
   const existing = await prisma.tenant.findUnique({ where: { name: tenantName } });
+
   if (existing) {
+    if (!existing.slug) {
+      const updated = await prisma.tenant.update({
+        where: { id: existing.id },
+        data: { slug },
+      });
+
+      return { tenant: updated, created: false };
+    }
+
     return { tenant: existing, created: false };
   }
 
-  const tenant = await prisma.tenant.create({ data: { name: tenantName } });
+  const tenant = await prisma.tenant.create({
+    data: { name: tenantName, slug },
+  });
+
   return { tenant, created: true };
 }
 

@@ -86,13 +86,26 @@ main()
   });
 
 async function ensureTenantNoTxn(tenantName: string): Promise<{ tenant: Tenant; created: boolean }> {
+  const slug = tenantName.toLowerCase().replace(/\s+/g, '-');
   const existingTenant = await prisma.tenant.findUnique({ where: { name: tenantName } });
 
   if (existingTenant) {
+    if (!existingTenant.slug) {
+      const updatedTenant = await prisma.tenant.update({
+        where: { id: existingTenant.id },
+        data: { slug },
+      });
+
+      return { tenant: updatedTenant, created: false };
+    }
+
     return { tenant: existingTenant, created: false };
   }
 
-  const tenant = await prisma.tenant.create({ data: { name: tenantName } });
+  const tenant = await prisma.tenant.create({
+    data: { name: tenantName, slug },
+  });
+
   return { tenant, created: true };
 }
 

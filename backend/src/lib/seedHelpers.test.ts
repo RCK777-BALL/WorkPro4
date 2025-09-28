@@ -1,98 +1,64 @@
-import { describe, expect, it, vi } from 'vitest';
-import type { PrismaClient, User } from '@prisma/client';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ensureAdminNoTxn } from './seedHelpers';
+import { ensureTenantNoTxn } from './seedHelpers';
 
-describe('ensureAdminNoTxn', () => {
-  it('creates an admin when no user exists', async () => {
-    const createdAdmin = {
-      id: 'admin-id',
-      tenantId: 'tenant-123',
-      email: 'admin@example.com',
-      name: 'Admin',
-      role: 'admin',
-      passwordHash: 'hashed-password',
-      createdAt: new Date('2024-01-01T00:00:00.000Z'),
-      updatedAt: new Date('2024-01-01T00:00:00.000Z'),
-    } as unknown as User;
+describe('ensureTenantNoTxn', () => {
+  const findUnique = vi.fn();
+  const create = vi.fn();
+  const update = vi.fn();
+  const prisma = {
+    tenant: {
+      findUnique,
+      create,
+      update,
+    },
+  } as unknown as Parameters<typeof ensureTenantNoTxn>[0];
 
-    const userModel = {
-      findUnique: vi.fn().mockResolvedValue(null),
-      create: vi.fn().mockResolvedValue(createdAdmin),
-      update: vi.fn(),
-    };
-
-    const prisma = { user: userModel } as unknown as PrismaClient;
-
-    const result = await ensureAdminNoTxn({
-      prisma,
-      tenantId: 'tenant-123',
-      email: 'admin@example.com',
-      name: 'Admin',
-      passwordHash: 'hashed-password',
-      role: 'admin',
-    });
-
-    expect(userModel.findUnique).toHaveBeenCalledWith({ where: { email: 'admin@example.com' } });
-    expect(userModel.create).toHaveBeenCalledWith({
-      data: {
-        tenantId: 'tenant-123',
-        email: 'admin@example.com',
-        name: 'Admin',
-        role: 'admin',
-        passwordHash: 'hashed-password',
-      },
-    });
-    expect(userModel.update).not.toHaveBeenCalled();
-    expect(result).toEqual({ admin: createdAdmin, created: true });
+  beforeEach(() => {
+    findUnique.mockReset();
+    create.mockReset();
+    update.mockReset();
   });
 
-  it('updates an existing admin when a user is found', async () => {
-    const existingAdmin = {
-      id: 'admin-id',
-      tenantId: 'tenant-123',
-      email: 'admin@example.com',
-      name: 'Admin',
-      role: 'admin',
-      passwordHash: 'old-hash',
-      createdAt: new Date('2024-01-01T00:00:00.000Z'),
-      updatedAt: new Date('2024-01-02T00:00:00.000Z'),
-    } as unknown as User;
+  it('creates a tenant with a slug when none exists', async () => {
+    findUnique.mockResolvedValue(null);
+    const createdTenant = { id: 'tenant-1', name: 'Demo Tenant', slug: 'demo-tenant' };
+    create.mockResolvedValue(createdTenant);
 
-    const updatedAdmin = {
-      ...existingAdmin,
-      passwordHash: 'new-hash',
-      updatedAt: new Date('2024-01-03T00:00:00.000Z'),
-    } as User;
+    const result = await ensureTenantNoTxn(prisma, 'Demo Tenant');
 
-    const userModel = {
-      findUnique: vi.fn().mockResolvedValue(existingAdmin),
-      create: vi.fn(),
-      update: vi.fn().mockResolvedValue(updatedAdmin),
-    };
-
-    const prisma = { user: userModel } as unknown as PrismaClient;
-
-    const result = await ensureAdminNoTxn({
-      prisma,
-      tenantId: 'tenant-123',
-      email: 'admin@example.com',
-      name: 'Admin',
-      passwordHash: 'new-hash',
-      role: 'admin',
-    });
-
-    expect(userModel.findUnique).toHaveBeenCalledWith({ where: { email: 'admin@example.com' } });
-    expect(userModel.create).not.toHaveBeenCalled();
-    expect(userModel.update).toHaveBeenCalledWith({
-      where: { email: 'admin@example.com' },
+    expect(create).toHaveBeenCalledWith({
       data: {
-        tenantId: 'tenant-123',
-        name: 'Admin',
-        role: 'admin',
-        passwordHash: 'new-hash',
+        name: 'Demo Tenant',
+        slug: 'demo-tenant',
       },
     });
-    expect(result).toEqual({ admin: updatedAdmin, created: false });
+    expect(result).toEqual({ tenant: createdTenant, created: true });
+  });
+
+  it('returns the existing tenant when it already has a slug', async () => {
+    const existingTenant = { id: 'tenant-1', name: 'Demo Tenant', slug: 'demo-tenant' };
+    findUnique.mockResolvedValue(existingTenant);
+
+    const result = await ensureTenantNoTxn(prisma, 'Demo Tenant');
+
+    expect(update).not.toHaveBeenCalled();
+    expect(result).toEqual({ tenant: existingTenant, created: false });
+  });
+
+  it('adds a slug to an existing tenant when missing', async () => {
+    const existingTenant = { id: 'tenant-1', name: 'Demo Tenant', slug: '' };
+    const updatedTenant = { ...existingTenant, slug: 'demo-tenant' };
+    findUnique.mockResolvedValue(existingTenant);
+    update.mockResolvedValue(updatedTenant);
+
+    const result = await ensureTenantNoTxn(prisma, 'Demo Tenant');
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: existingTenant.id },
+      data: { slug: 'demo-tenant' },
+    });
+    expect(result).toEqual({ tenant: updatedTenant, created: false });
+
   });
 });
