@@ -28,11 +28,18 @@ export function AuthProvider({ children }) {
 
     try {
       const res = await api.post('/api/auth/login', { email, password });
-      localStorage.setItem(TOKEN_KEY, res.token);
-      localStorage.setItem(USER_KEY, JSON.stringify(res.user ?? null));
-      setToken(res.token);
-      setUser(res.user ?? null);
-      return { ok: true, user: res.user };
+      const { token: nextToken, user: nextUser } = res?.data ?? {};
+
+      if (!nextToken) {
+        throw new Error('Missing token in login response');
+      }
+
+      localStorage.setItem(TOKEN_KEY, nextToken);
+      localStorage.setItem(USER_KEY, JSON.stringify(nextUser ?? null));
+      setToken(nextToken);
+      setUser(nextUser ?? null);
+
+      return { ok: true, user: nextUser };
     } catch (err) {
       if (err?.status === 401) {
         setError('Invalid email or password.');
