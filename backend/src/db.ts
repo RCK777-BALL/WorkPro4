@@ -1,9 +1,8 @@
 // /backend/src/db.ts
-// Use namespace import so the Prisma namespace is available for types
-import * as PrismaPkg from "@prisma/client";
-type PrismaNamespace = typeof PrismaPkg.Prisma;
-const { PrismaClient } = PrismaPkg;
-type PrismaClientType = InstanceType<typeof PrismaClient>;
+// Use named imports so the Prisma namespace is available for types
+import { PrismaClient, Prisma } from "@prisma/client";
+type PrismaNamespace = Prisma;
+type PrismaClientType = PrismaClient;
 type PrismaOptions = PrismaNamespace extends { PrismaClientOptions: infer O } ? O : any;
 
 /**
