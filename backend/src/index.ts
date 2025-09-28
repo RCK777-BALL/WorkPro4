@@ -220,11 +220,12 @@ function isReplicaSetPrimaryError(error: unknown): boolean {
 
 async function ensureDemoUsers() {
   const tenantName = 'Demo Tenant';
+  const tenantSlug = tenantName.toLowerCase().replace(/\s+/g, '-');
 
   const tenant = await prisma.tenant.upsert({
     where: { name: tenantName },
-    update: { name: tenantName },
-    create: { name: tenantName },
+    update: { name: tenantName, slug: tenantSlug },
+    create: { name: tenantName, slug: tenantSlug },
 
   });
 
@@ -245,14 +246,14 @@ async function ensureDemoUsers() {
       update: {
         passwordHash: defaultPassword,
         name: demoUser.name,
-        roles: [demoUser.role],
+        role: demoUser.role,
         tenantId: tenant.id,
       },
       create: {
         email: demoUser.email,
         passwordHash: defaultPassword,
         name: demoUser.name,
-        roles: [demoUser.role],
+        role: demoUser.role,
         tenantId: tenant.id,
       },
     });
