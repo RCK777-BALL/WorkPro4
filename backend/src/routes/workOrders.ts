@@ -46,7 +46,7 @@ function serializeWorkOrder(workOrder: WorkOrderWithRelations) {
 }
 
 // GET /work-orders
-router.get('/', asyncHandler(async (_req: AuthRequest, res) => {
+router.get('/', asyncHandler(async (req: AuthRequest, res) => {
   const workOrders = await prisma.workOrder.findMany({
     where: { tenantId: req.user!.tenantId },
     include: workOrderInclude,
