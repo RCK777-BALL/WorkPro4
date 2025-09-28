@@ -76,14 +76,20 @@ router.get('/:id', asyncHandler(async (req: AuthRequest, res) => {
 router.post('/', asyncHandler(async (req: AuthRequest, res) => {
   const data = createWorkOrderSchema.parse(req.body);
 
+  if (!req.user) {
+    return fail(res, 401, 'Authentication required');
+  }
+
   const workOrder = await prisma.workOrder.create({
     data: {
       title: data.title,
       description: data.description,
       status: (data.status ?? 'requested') as WorkOrderStatus,
       assigneeId: data.assigneeId,
-      tenantId: req.user!.tenantId,
-      createdBy: req.user!.id,
+      tenantId: req.user.tenantId,
+      createdBy: req.user.id,
+      assignees: data.assigneeId ? [data.assigneeId] : [],
+
     },
     include: workOrderInclude,
   });
