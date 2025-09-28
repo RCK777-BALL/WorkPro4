@@ -10,15 +10,17 @@ async function main(): Promise<void> {
   const adminEmail = 'admin@demo.com';
   const passwordHash = await bcrypt.hash('Admin@123', 10);
 
+  const tenantSlug = 'demo-tenant';
   const tenant =
-    (await prisma.tenant.findUnique({ where: { name: tenantName } })) ??
-    (await prisma.tenant.create({ data: { name: tenantName } }));
+    (await prisma.tenant.findUnique({ where: { name: tenantName } }))
+      ? await prisma.tenant.update({ where: { name: tenantName }, data: { slug: tenantSlug } })
+      : await prisma.tenant.create({ data: { name: tenantName, slug: tenantSlug } });
 
   const adminUser = await prisma.user.upsert({
     where: { email: adminEmail },
     update: {
       name: 'Admin',
-      roles: ['admin'],
+      role: 'admin',
       passwordHash,
       tenantId: tenant.id,
     },
@@ -26,7 +28,7 @@ async function main(): Promise<void> {
       tenantId: tenant.id,
       email: adminEmail,
       name: 'Admin',
-      roles: ['admin'],
+      role: 'admin',
       passwordHash,
     },
   });

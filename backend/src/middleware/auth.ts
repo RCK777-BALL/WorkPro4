@@ -9,7 +9,7 @@ export interface AuthRequest extends Request {
     id: string;
     email: string;
     name: string;
-    roles: string[];
+    role: string;
     tenantId: string;
   };
 }
@@ -34,7 +34,7 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
           id: true,
           email: true,
           name: true,
-          roles: true,
+          role: true,
           tenantId: true,
         },
       });
@@ -57,7 +57,7 @@ export function requireRoles(roles: string[]) {
       return fail(res, 401, 'Authentication required');
     }
 
-    const hasRole = roles.some(role => req.user!.roles.includes(role));
+    const hasRole = roles.includes(req.user.role);
     if (!hasRole) {
       return fail(res, 403, `Requires one of: ${roles.join(', ')}`);
     }

@@ -165,19 +165,20 @@ function isReplicaSetPrimaryError(error: unknown): boolean {
 
 async function ensureDemoUsers() {
   const tenantName = 'Demo Tenant';
+  const tenantSlug = 'demo-tenant';
 
   const tenant = await prisma.tenant.upsert({
     where: { name: tenantName },
-    update: {},
-    create: { name: tenantName },
+    update: { slug: tenantSlug },
+    create: { name: tenantName, slug: tenantSlug },
   });
 
   const defaultPassword = bcrypt.hashSync('Password123');
 
   const demoUsers = [
-    { email: 'admin@demo.com', name: 'Admin User', roles: ['admin'] },
-    { email: 'planner@demo.com', name: 'Maintenance Planner', roles: ['planner'] },
-    { email: 'tech@demo.com', name: 'Maintenance Tech', roles: ['tech'] },
+    { email: 'admin@demo.com', name: 'Admin User', role: 'admin' },
+    { email: 'planner@demo.com', name: 'Maintenance Planner', role: 'planner' },
+    { email: 'tech@demo.com', name: 'Maintenance Tech', role: 'tech' },
   ];
 
   const createdUsers: string[] = [];
@@ -189,14 +190,14 @@ async function ensureDemoUsers() {
       update: {
         passwordHash: defaultPassword,
         name: demoUser.name,
-        roles: demoUser.roles as any,
+        role: demoUser.role,
         tenantId: tenant.id,
       },
       create: {
         email: demoUser.email,
         passwordHash: defaultPassword,
         name: demoUser.name,
-        roles: demoUser.roles as any,
+        role: demoUser.role,
         tenantId: tenant.id,
       },
     });
