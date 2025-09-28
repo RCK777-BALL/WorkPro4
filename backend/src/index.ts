@@ -225,6 +225,7 @@ async function ensureDemoUsers() {
     where: { name: tenantName },
     update: { slug: tenantName.toLowerCase().replace(/\s+/g, '-') },
     create: { name: tenantName, slug: tenantName.toLowerCase().replace(/\s+/g, '-') },
+
   });
 
   const defaultPassword = bcrypt.hashSync('Password123');
