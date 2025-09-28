@@ -29,13 +29,17 @@ dotenv.config({ path: envPath });
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5010;
+const isProduction = process.env.NODE_ENV === 'production';
+const configuredFrontendOrigin = process.env.FRONTEND_ORIGIN?.trim() ?? process.env.FRONTEND_URL?.trim();
 
 // Security middleware
 app.use(helmet());
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production' ? process.env.FRONTEND_URL : 'http://localhost:5173',
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: isProduction ? configuredFrontendOrigin || 'http://localhost:5173' : 'http://localhost:5173',
+    credentials: true,
+  }),
+);
 
 // Rate limiting
 const limiter = rateLimit({

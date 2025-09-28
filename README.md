@@ -89,6 +89,8 @@ pnpm --filter backend db:seed
 
 The backend reads its MongoDB connection string from the `DATABASE_URL` value in `backend/.env`. Copying the example file seeds it with the standalone URI (`mongodb://localhost:27017/workpro4?directConnection=true`), which works for single-node development without replica sets. Adjust the URI if you're using the replica-set or managed-cluster strategies described above.
 
+Set `FRONTEND_ORIGIN` in `backend/.env` to the fully qualified origin (scheme + host + port) that should be allowed by CORS in production. When the variable is omitted the backend falls back to the local development origin (`http://localhost:5173`).
+
 4. **Start development servers:**
 ```bash
 pnpm dev:all
