@@ -166,11 +166,11 @@ function isReplicaSetPrimaryError(error: unknown): boolean {
 async function ensureDemoUsers() {
   const tenantName = 'Demo Tenant';
 
-  // Ensure tenant exists (use findFirst/create to avoid requiring a unique constraint on name)
-  let tenant = await prisma.tenant.findFirst({ where: { name: tenantName } });
-  if (!tenant) {
-    tenant = await prisma.tenant.create({ data: { name: tenantName } });
-  }
+  const tenant = await prisma.tenant.upsert({
+    where: { name: tenantName },
+    update: {},
+    create: { name: tenantName },
+  });
 
   const defaultPassword = bcrypt.hashSync('Password123');
 
@@ -181,31 +181,39 @@ async function ensureDemoUsers() {
   ];
 
   const createdUsers: string[] = [];
+  const updatedUsers: string[] = [];
 
   for (const demoUser of demoUsers) {
-    // Use findUnique assuming email is a unique field in the schema; fallback to findFirst if needed.
-    const existingUser =
-      (await prisma.user.findUnique({ where: { email: demoUser.email } })) ??
-      (await prisma.user.findFirst({ where: { email: demoUser.email } }));
+    const user = await prisma.user.upsert({
+      where: { email: demoUser.email },
+      update: {
+        passwordHash: defaultPassword,
+        name: demoUser.name,
+        roles: demoUser.roles as any,
+        tenantId: tenant.id,
+      },
+      create: {
+        email: demoUser.email,
+        passwordHash: defaultPassword,
+        name: demoUser.name,
+        roles: demoUser.roles as any,
+        tenantId: tenant.id,
+      },
+    });
 
-    if (!existingUser) {
-      await prisma.user.create({
-        data: {
-          email: demoUser.email,
-          passwordHash: defaultPassword,
-          name: demoUser.name,
-          roles: demoUser.roles as any,
-          tenantId: tenant.id,
-        },
-      });
+    if (user.createdAt.getTime() === user.updatedAt.getTime()) {
       createdUsers.push(demoUser.email);
+    } else {
+      updatedUsers.push(demoUser.email);
     }
   }
 
   if (createdUsers.length > 0) {
     console.log('✅ Created demo users:', createdUsers.join(', '));
-  } else {
-    console.log('ℹ️ Demo users already exist.');
+  }
+
+  if (updatedUsers.length > 0) {
+    console.log('♻️ Updated demo users:', updatedUsers.join(', '));
   }
 
   console.log('Demo login credentials:');
