@@ -21,7 +21,7 @@ async function main(): Promise<void> {
     email: adminEmail,
     name: 'Admin',
     passwordHash,
-    roles: ['admin'],
+    role: 'admin',
     tenantId: tenant.id,
 
   });
@@ -113,7 +113,7 @@ type EnsureAdminParams = {
   email: string;
   name: string;
   passwordHash: string;
-  roles: string[];
+  role: string;
   tenantId: string;
 };
 
@@ -124,7 +124,7 @@ type EnsureAdminResult = {
 };
 
 async function ensureAdminNoTxn(params: EnsureAdminParams): Promise<EnsureAdminResult> {
-  const { email, name, passwordHash, roles, tenantId } = params;
+  const { email, name, passwordHash, role, tenantId } = params;
   const existingUser = await prisma.user.findUnique({ where: { email } });
 
   if (!existingUser) {
@@ -133,7 +133,7 @@ async function ensureAdminNoTxn(params: EnsureAdminParams): Promise<EnsureAdminR
         email,
         name,
         passwordHash,
-        roles,
+        role,
         tenantId,
       },
     });
@@ -142,7 +142,7 @@ async function ensureAdminNoTxn(params: EnsureAdminParams): Promise<EnsureAdminR
   }
 
   const needsNameUpdate = existingUser.name !== name;
-  const needsRoleUpdate = !arraysEqual(existingUser.roles, roles);
+  const needsRoleUpdate = existingUser.role !== role;
   const needsPasswordUpdate = existingUser.passwordHash !== passwordHash;
   const needsTenantUpdate = existingUser.tenantId !== tenantId;
 
@@ -154,22 +154,11 @@ async function ensureAdminNoTxn(params: EnsureAdminParams): Promise<EnsureAdminR
     where: { email },
     data: {
       name,
-      roles,
+      role,
       passwordHash,
       tenantId,
     },
   });
 
   return { user, created: false, updated: true } as const;
-}
-
-function arraysEqual(left: string[], right: string[]) {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  const leftSorted = [...left].sort();
-  const rightSorted = [...right].sort();
-
-  return leftSorted.every((value, index) => value === rightSorted[index]);
 }
