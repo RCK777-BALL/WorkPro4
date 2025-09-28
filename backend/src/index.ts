@@ -172,6 +172,20 @@ async function ensureDemoUsers() {
 
   const defaultPassword = bcrypt.hashSync('Password123');
 
+  // Ensure there is a tenant to attach demo users to.
+  // Try to find an existing tenant named 'demo', otherwise create one.
+  let tenant = await prisma.tenant.findFirst({
+    where: { name: 'demo' },
+  });
+
+  if (!tenant) {
+    tenant = await prisma.tenant.create({
+      data: {
+        name: 'demo',
+      },
+    });
+  }
+
   const users = await Promise.all([
     prisma.user.create({
       data: {
@@ -179,6 +193,7 @@ async function ensureDemoUsers() {
         passwordHash: defaultPassword,
         name: 'Admin User',
         roles: ['admin'],
+        tenant: { connect: { id: tenant.id } },
       },
     }),
     prisma.user.create({
@@ -187,6 +202,7 @@ async function ensureDemoUsers() {
         passwordHash: defaultPassword,
         name: 'Maintenance Planner',
         roles: ['planner'],
+        tenant: { connect: { id: tenant.id } },
       },
     }),
     prisma.user.create({
@@ -195,6 +211,7 @@ async function ensureDemoUsers() {
         passwordHash: defaultPassword,
         name: 'Maintenance Tech',
         roles: ['tech'],
+        tenant: { connect: { id: tenant.id } },
       },
     }),
   ]);
