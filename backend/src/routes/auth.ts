@@ -44,6 +44,7 @@ router.post('/login', asyncHandler(async (req, res) => {
       email: user.email,
       name: user.name,
       roles: user.roles,
+      tenantId: user.tenantId,
       createdAt: user.createdAt.toISOString(),
       updatedAt: user.updatedAt.toISOString(),
     },
@@ -64,6 +65,7 @@ router.get('/me', authenticateToken, asyncHandler(async (req: AuthRequest, res) 
     email: user.email,
     name: user.name,
     roles: user.roles,
+    tenantId: user.tenantId,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
   });

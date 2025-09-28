@@ -162,13 +162,11 @@ function isReplicaSetPrimaryError(error: unknown): boolean {
 }
 
 async function ensureDemoUsers() {
-  const userCount = await prisma.user.count();
+  const tenantName = 'Demo Tenant';
 
-  if (userCount > 0) {
-    return;
-  }
-
-  console.log('👥 No users found in database. Creating demo users...');
+  const tenant =
+    (await prisma.tenant.findFirst({ where: { name: tenantName } })) ??
+    (await prisma.tenant.create({ data: { name: tenantName } }));
 
   const defaultPassword = bcrypt.hashSync('Password123');
 
@@ -176,6 +174,7 @@ async function ensureDemoUsers() {
     where: { name: 'Demo Tenant' },
     update: {},
     create: { name: 'Demo Tenant' },
+
   });
 
   const users = await Promise.all([
@@ -195,20 +194,29 @@ async function ensureDemoUsers() {
         name: 'Maintenance Planner',
         roles: ['planner'],
         tenantId: tenant.id,
+
       },
-    }),
-    prisma.user.create({
-      data: {
-        email: 'tech@demo.com',
+      create: {
+        email: demoUser.email,
         passwordHash: defaultPassword,
         name: 'Maintenance Tech',
         roles: ['tech'],
         tenantId: tenant.id,
-      },
-    }),
-  ]);
 
-  console.log('✅ Created demo users:', users.map((user) => user.email).join(', '));
+      },
+    });
+
+    if (!existingUser) {
+      createdUsers.push(demoUser.email);
+    }
+  }
+
+  if (createdUsers.length > 0) {
+    console.log('✅ Created demo users:', createdUsers.join(', '));
+  } else {
+    console.log('ℹ️ Demo users already exist.');
+  }
+
   console.log('Demo login credentials:');
   console.log('  • admin@demo.com / Password123');
   console.log('  • planner@demo.com / Password123');

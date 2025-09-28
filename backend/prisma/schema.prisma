@@ -50,6 +50,7 @@ model Asset {
   name     String
 
   tenant     Tenant     @relation(fields: [tenantId], references: [id])
+
   workOrders WorkOrder[]
 
   createdAt DateTime @default(now())
@@ -70,10 +71,25 @@ model User {
   assignedWorkOrders WorkOrder[] @relation("WorkOrderAssignee")
   createdWorkOrders  WorkOrder[] @relation("WorkOrderCreatedBy")
 
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("users")
+}
+
+model Asset {
+  id         String      @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId   String      @map("tenant_id") @db.ObjectId
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+  code       String?
+  name       String
+  workOrders WorkOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("assets")
 }
 
 model WorkOrder {
@@ -102,6 +118,7 @@ model WorkOrder {
   asset         Asset?     @relation(fields: [assetId], references: [id])
   assignee      User?      @relation("WorkOrderAssignee", fields: [assigneeId], references: [id])
   createdByUser User       @relation("WorkOrderCreatedBy", fields: [createdBy], references: [id])
+
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

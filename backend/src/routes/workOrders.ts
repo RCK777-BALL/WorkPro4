@@ -48,6 +48,7 @@ function serializeWorkOrder(workOrder: WorkOrderWithRelations) {
 // GET /work-orders
 router.get('/', asyncHandler(async (_req: AuthRequest, res) => {
   const workOrders = await prisma.workOrder.findMany({
+    where: { tenantId: req.user!.tenantId },
     include: workOrderInclude,
     orderBy: { createdAt: 'desc' },
   });
@@ -59,8 +60,8 @@ router.get('/', asyncHandler(async (_req: AuthRequest, res) => {
 router.get('/:id', asyncHandler(async (req: AuthRequest, res) => {
   const { id } = req.params;
 
-  const workOrder = await prisma.workOrder.findUnique({
-    where: { id },
+  const workOrder = await prisma.workOrder.findFirst({
+    where: { id, tenantId: req.user!.tenantId },
     include: workOrderInclude,
   });
 
@@ -88,6 +89,7 @@ router.post('/', asyncHandler(async (req: AuthRequest, res) => {
       tenantId: req.user.tenantId,
       createdBy: req.user.id,
       assignees: data.assigneeId ? [data.assigneeId] : [],
+
     },
     include: workOrderInclude,
   });
@@ -100,7 +102,7 @@ router.put('/:id', asyncHandler(async (req: AuthRequest, res) => {
   const { id } = req.params;
   const data = updateWorkOrderSchema.parse(req.body);
 
-  const existing = await prisma.workOrder.findUnique({ where: { id } });
+  const existing = await prisma.workOrder.findFirst({ where: { id, tenantId: req.user!.tenantId } });
 
   if (!existing) {
     return fail(res, 404, 'Work order not found');
@@ -129,7 +131,7 @@ router.put('/:id', asyncHandler(async (req: AuthRequest, res) => {
 router.delete('/:id', asyncHandler(async (req: AuthRequest, res) => {
   const { id } = req.params;
 
-  const existing = await prisma.workOrder.findUnique({ where: { id } });
+  const existing = await prisma.workOrder.findFirst({ where: { id, tenantId: req.user!.tenantId } });
 
   if (!existing) {
     return fail(res, 404, 'Work order not found');
