@@ -220,12 +220,11 @@ function isReplicaSetPrimaryError(error: unknown): boolean {
 
 async function ensureDemoUsers() {
   const tenantName = 'Demo Tenant';
-  const tenantSlug = 'demo-tenant';
 
   const tenant = await prisma.tenant.upsert({
     where: { name: tenantName },
-    update: { slug: tenantSlug },
-    create: { name: tenantName, slug: tenantSlug },
+    update: { slug: tenantName.toLowerCase().replace(/\s+/g, '-') },
+    create: { name: tenantName, slug: tenantName.toLowerCase().replace(/\s+/g, '-') },
   });
 
   const defaultPassword = bcrypt.hashSync('Password123');
