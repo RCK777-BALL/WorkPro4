@@ -1,4 +1,8 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import PrismaPkg from '@prisma/client';
+
+const { PrismaClient } = PrismaPkg;
+type PrismaNamespace = typeof PrismaPkg.Prisma;
+type PrismaOptions = PrismaNamespace['PrismaClientOptions'];
 
 export function sanitizeDatabaseUrl(rawUrl: string | undefined) {
   if (!rawUrl) {
@@ -29,7 +33,7 @@ export function sanitizeDatabaseUrl(rawUrl: string | undefined) {
   return trimmedUrl;
 }
 
-function getPrismaClientOptions(): Prisma.PrismaClientOptions | undefined {
+function getPrismaClientOptions(): PrismaOptions | undefined {
   const databaseUrl = sanitizeDatabaseUrl(process.env.DATABASE_URL);
 
   if (!databaseUrl) {
