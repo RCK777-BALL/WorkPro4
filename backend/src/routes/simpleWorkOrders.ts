@@ -104,9 +104,17 @@ async function resolveDefaultUser() {
 router.get(
   '/',
   asyncHandler(async (req, res) => {
+    const defaultUser = await resolveDefaultUser();
+
+    if (!defaultUser) {
+      return fail(res, 500, 'No default user found');
+    }
+
     const { status, priority, assignee, from, to, q } = req.query;
 
     const where: Prisma.WorkOrderWhereInput = {};
+
+    where.tenantId = defaultUser.tenantId;
 
     if (typeof status === 'string' && status) {
       const allowedStatuses = ['requested', 'assigned', 'in_progress', 'completed', 'cancelled'] as const;

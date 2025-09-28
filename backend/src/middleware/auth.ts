@@ -10,6 +10,7 @@ export interface AuthRequest extends Request {
     email: string;
     name: string;
     roles: string[];
+    tenantId: string;
   };
 }
 
@@ -34,6 +35,7 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
           email: true,
           name: true,
           roles: true,
+          tenantId: true,
         },
       });
 

@@ -7,12 +7,13 @@ async function main(): Promise<void> {
   await prisma.$connect();
 
   const tenantName = 'Demo Tenant';
+  const tenantSlug = 'demo-tenant';
   const adminEmail = 'admin@demo.com';
   const passwordHash = await bcrypt.hash('Admin@123', 10);
 
   const tenant =
-    (await prisma.tenant.findFirst({ where: { name: tenantName } })) ??
-    (await prisma.tenant.create({ data: { name: tenantName } }));
+    (await prisma.tenant.findFirst({ where: { slug: tenantSlug } })) ??
+    (await prisma.tenant.create({ data: { name: tenantName, slug: tenantSlug } }));
 
   const adminUser = await prisma.user.upsert({
     where: { email: adminEmail },
