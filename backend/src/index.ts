@@ -245,14 +245,14 @@ async function ensureDemoUsers() {
       update: {
         passwordHash: defaultPassword,
         name: demoUser.name,
-        role: demoUser.role,
+        roles: [demoUser.role],
         tenantId: tenant.id,
       },
       create: {
         email: demoUser.email,
         passwordHash: defaultPassword,
         name: demoUser.name,
-        role: demoUser.role,
+        roles: [demoUser.role],
         tenantId: tenant.id,
       },
     });
