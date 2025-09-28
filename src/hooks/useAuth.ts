@@ -7,7 +7,7 @@ export interface User {
   tenantId: string;
   email: string;
   name: string;
-  roles: string[];
+  role: string;
   createdAt: string;
   updatedAt: string;
 }

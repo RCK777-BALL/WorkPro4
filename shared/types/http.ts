@@ -20,7 +20,7 @@ export interface User {
   tenantId: string;
   email: string;
   name: string;
-  roles: ('tech' | 'planner' | 'supervisor' | 'admin')[];
+  role: 'tech' | 'planner' | 'supervisor' | 'admin' | 'user';
   createdAt: string;
   updatedAt: string;
 }

@@ -31,7 +31,7 @@ interface MockUser {
 
 interface MockAuthUser extends MockUser {
   tenantId: string;
-  roles: string[];
+  role: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -325,7 +325,7 @@ export class ApiClient {
         tenantId: 'tenant-1',
         email: 'john@example.com',
         name: 'John Smith',
-        roles: ['admin'],
+        role: 'admin',
         createdAt: now,
         updatedAt: now,
       };
