@@ -170,30 +170,38 @@ async function ensureDemoUsers() {
 
   const defaultPassword = bcrypt.hashSync('Password123');
 
-  const demoUsers: Array<{ email: string; name: string; roles: string[] }> = [
-    { email: 'admin@demo.com', name: 'Admin User', roles: ['admin'] },
-    { email: 'planner@demo.com', name: 'Maintenance Planner', roles: ['planner'] },
-    { email: 'tech@demo.com', name: 'Maintenance Tech', roles: ['tech'] },
-  ];
+  const tenant = await prisma.tenant.upsert({
+    where: { slug: 'demo-tenant' },
+    update: { name: 'Demo Tenant' },
+    create: { name: 'Demo Tenant', slug: 'demo-tenant' },
+  });
 
-  const createdUsers: string[] = [];
+  const users = await Promise.all([
+    prisma.user.create({
+      data: {
+        email: 'admin@demo.com',
+        passwordHash: defaultPassword,
+        name: 'Admin User',
+        roles: ['admin'],
+        tenantId: tenant.id,
+      },
+    }),
+    prisma.user.create({
+      data: {
+        email: 'planner@demo.com',
+        passwordHash: defaultPassword,
+        name: 'Maintenance Planner',
+        roles: ['planner'],
+        tenantId: tenant.id,
 
-  for (const demoUser of demoUsers) {
-    const existingUser = await prisma.user.findUnique({ where: { email: demoUser.email } });
-
-    await prisma.user.upsert({
-      where: { email: demoUser.email },
-      update: {
-        name: demoUser.name,
-        roles: demoUser.roles,
-        tenant: { connect: { id: tenant.id } },
       },
       create: {
         email: demoUser.email,
         passwordHash: defaultPassword,
-        name: demoUser.name,
-        roles: demoUser.roles,
-        tenant: { connect: { id: tenant.id } },
+        name: 'Maintenance Tech',
+        roles: ['tech'],
+        tenantId: tenant.id,
+
       },
     });
 
