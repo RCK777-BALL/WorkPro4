@@ -1,6 +1,6 @@
 import bcrypt from '../lib/bcrypt';
 import { loadEnv } from '../config/env';
-import { prisma } from 'src/db';
+import { prisma } from '../db';
 
 async function main(): Promise<void> {
   loadEnv();

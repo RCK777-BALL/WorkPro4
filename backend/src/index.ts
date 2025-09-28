@@ -172,6 +172,12 @@ async function ensureDemoUsers() {
 
   const defaultPassword = bcrypt.hashSync('Password123');
 
+  const tenant = await prisma.tenant.upsert({
+    where: { name: 'Demo Tenant' },
+    update: {},
+    create: { name: 'Demo Tenant' },
+  });
+
   const users = await Promise.all([
     prisma.user.create({
       data: {
@@ -179,6 +185,7 @@ async function ensureDemoUsers() {
         passwordHash: defaultPassword,
         name: 'Admin User',
         roles: ['admin'],
+        tenantId: tenant.id,
       },
     }),
     prisma.user.create({
@@ -187,6 +194,7 @@ async function ensureDemoUsers() {
         passwordHash: defaultPassword,
         name: 'Maintenance Planner',
         roles: ['planner'],
+        tenantId: tenant.id,
       },
     }),
     prisma.user.create({
@@ -195,6 +203,7 @@ async function ensureDemoUsers() {
         passwordHash: defaultPassword,
         name: 'Maintenance Tech',
         roles: ['tech'],
+        tenantId: tenant.id,
       },
     }),
   ]);

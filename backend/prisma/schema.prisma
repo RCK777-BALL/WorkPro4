@@ -8,19 +8,67 @@ datasource db {
 }
 
 enum WorkOrderStatus {
-  Open
-  InProgress
-  Completed
-  Cancelled
+  requested
+  assigned
+  in_progress
+  completed
+  cancelled
+}
+
+enum WorkOrderPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum ApprovalStatus {
+  not_required
+  pending
+  approved
+  rejected
+}
+
+model Tenant {
+  id   String @id @map("_id") @default(auto()) @db.ObjectId
+  name String @unique
+
+  users      User[]
+  workOrders WorkOrder[]
+  assets     Asset[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("tenants")
+}
+
+model Asset {
+  id       String @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId String @map("tenant_id") @db.ObjectId
+  code     String
+  name     String
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  workOrders WorkOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("assets")
 }
 
 model User {
   id           String   @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId     String   @map("tenant_id") @db.ObjectId
   email        String   @unique
   passwordHash String   @map("password_hash")
   name         String
   roles        String[] @default([])
-  workOrders   WorkOrder[]
+
+  tenant             Tenant      @relation(fields: [tenantId], references: [id])
+  assignedWorkOrders WorkOrder[] @relation("WorkOrderAssignee")
+  createdWorkOrders  WorkOrder[] @relation("WorkOrderCreatedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -30,11 +78,30 @@ model User {
 
 model WorkOrder {
   id          String           @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId    String           @map("tenant_id") @db.ObjectId
+  assetId     String?          @map("asset_id") @db.ObjectId
   title       String
   description String?
-  status      WorkOrderStatus  @default(Open)
+  status      WorkOrderStatus  @default(requested)
+  priority    WorkOrderPriority @default(medium)
+  approvalStatus ApprovalStatus @map("approval_status") @default(not_required)
   assigneeId  String?          @map("assignee_id") @db.ObjectId
-  assignee    User?            @relation(fields: [assigneeId], references: [id])
+  assignees   String[]         @default([])
+  checklists  Json?
+  lineName    String?          @map("line_name")
+  stationNumber String?        @map("station_number")
+  timeSpentMin Int?            @map("time_spent_min")
+  photos      String[]         @default([])
+  partsUsed   Json?            @map("parts_used")
+  signatures  Json?
+  failureCode String?          @map("failure_code")
+  pmTaskId    String?          @map("pm_task_id")
+  createdBy   String           @map("created_by") @db.ObjectId
+
+  tenant        Tenant    @relation(fields: [tenantId], references: [id])
+  asset         Asset?     @relation(fields: [assetId], references: [id])
+  assignee      User?      @relation("WorkOrderAssignee", fields: [assigneeId], references: [id])
+  createdByUser User       @relation("WorkOrderCreatedBy", fields: [createdBy], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

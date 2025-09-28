@@ -43,25 +43,32 @@ function mapWorkOrder(workOrder: WorkOrderWithRelations) {
     ? (workOrder.checklists as Prisma.JsonArray)
     : [];
 
-  const checklists = rawChecklists
-    .map((item) => {
-      if (!item || typeof item !== 'object') {
-        return null;
-      }
+  type NormalizedChecklist = {
+    text: string;
+    note?: string;
+    done: boolean;
+    completedAt?: string;
+  };
 
-      const text = 'text' in item && typeof item.text === 'string' ? item.text : '';
-      const note = 'note' in item && typeof item.note === 'string' ? item.note : undefined;
-      const done = 'done' in item ? Boolean(item.done) : false;
-      const completedAt =
-        'completedAt' in item && typeof item.completedAt === 'string' ? item.completedAt : undefined;
+  const checklists = rawChecklists.reduce<NormalizedChecklist[]>((acc, item) => {
+    if (!item || typeof item !== 'object') {
+      return acc;
+    }
 
-      if (!text) {
-        return null;
-      }
+    const record = item as Record<string, unknown>;
 
-      return { text, note, done, completedAt };
-    })
-    .filter((item): item is { text: string; note?: string; done: boolean; completedAt?: string } => item !== null);
+    const text = typeof record.text === 'string' ? record.text : '';
+    const note = typeof record.note === 'string' ? record.note : undefined;
+    const done = 'done' in record ? Boolean(record.done) : false;
+    const completedAt = typeof record.completedAt === 'string' ? record.completedAt : undefined;
+
+    if (!text) {
+      return acc;
+    }
+
+    acc.push({ text, note, done, completedAt });
+    return acc;
+  }, []);
 
   const assignees = Array.isArray(workOrder.assignees) ? workOrder.assignees.filter((id) => id) : [];
 

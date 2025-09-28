@@ -9,7 +9,7 @@ const router = Router();
 
 router.use(authenticateToken);
 
-const statusEnum = z.enum(['Open', 'InProgress', 'Completed', 'Cancelled']);
+const statusEnum = z.enum(['requested', 'assigned', 'in_progress', 'completed', 'cancelled']);
 
 const createWorkOrderSchema = z.object({
   title: z.string().min(1),
@@ -75,12 +75,19 @@ router.get('/:id', asyncHandler(async (req: AuthRequest, res) => {
 router.post('/', asyncHandler(async (req: AuthRequest, res) => {
   const data = createWorkOrderSchema.parse(req.body);
 
+  if (!req.user) {
+    return fail(res, 401, 'Authentication required');
+  }
+
   const workOrder = await prisma.workOrder.create({
     data: {
       title: data.title,
       description: data.description,
-      status: (data.status ?? 'Open') as WorkOrderStatus,
+      status: (data.status ?? 'requested') as WorkOrderStatus,
       assigneeId: data.assigneeId,
+      tenantId: req.user.tenantId,
+      createdBy: req.user.id,
+      assignees: data.assigneeId ? [data.assigneeId] : [],
     },
     include: workOrderInclude,
   });
