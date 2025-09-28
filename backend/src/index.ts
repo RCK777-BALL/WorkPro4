@@ -223,8 +223,9 @@ async function ensureDemoUsers() {
 
   const tenant = await prisma.tenant.upsert({
     where: { name: tenantName },
-    update: {},
-    create: { name: tenantName, slug: tenantSlug },
+    update: { slug: tenantName.toLowerCase().replace(/\s+/g, '-') },
+    create: { name: tenantName, slug: tenantName.toLowerCase().replace(/\s+/g, '-') },
+
   });
 
   const defaultPassword = bcrypt.hashSync('Password123');
