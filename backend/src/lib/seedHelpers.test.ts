@@ -59,5 +59,6 @@ describe('ensureTenantNoTxn', () => {
       data: { slug: 'demo-tenant' },
     });
     expect(result).toEqual({ tenant: updatedTenant, created: false });
+
   });
 });
