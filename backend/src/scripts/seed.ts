@@ -23,6 +23,7 @@ async function main(): Promise<void> {
     passwordHash,
     roles: ['admin'],
     tenantId: tenant.id,
+
   });
 
   const workOrderTitle = 'Demo Work Order';

@@ -9,6 +9,7 @@ import { requestLogger } from './middleware/requestLogger';
 import { errorHandler } from './middleware/errorHandler';
 import { prisma, verifyDatabaseConnection } from './db';
 import { ensureJwtSecrets } from './config/auth';
+import { ensureAdminNoTxn, ensureTenantNoTxn } from './lib/seedHelpers';
 
 // Routes
 import authRoutes from './routes/auth';
@@ -107,7 +108,7 @@ async function start() {
 
   try {
     await verifyDatabaseConnection();
-    console.log('🗄️ Connected to database');
+    console.log('Connected to database');
   } catch (error) {
     console.error('❌ Failed to connect to database', error);
 
@@ -121,13 +122,13 @@ async function start() {
     return;
   }
 
-  await ensureDemoUsers();
+  await seedDefaultsNoTxn();
 
   app.listen(PORT, () => {
-    console.log(`🚀 Backend server running on port ${PORT}`);
-    console.log(`🩺 Health check: http://localhost:${PORT}/api/health`);
-    console.log(`🗄️ DB health: http://localhost:${PORT}/health/db`);
-    console.log(`🔐 API base: http://localhost:${PORT}/api`);
+    console.log(`API listening on http://localhost:${PORT}`);
+    console.log(`Health check ready at http://localhost:${PORT}/api/health`);
+    console.log(`DB health at http://localhost:${PORT}/health/db`);
+    console.log(`API base at http://localhost:${PORT}/api`);
   });
 }
 
@@ -135,6 +136,60 @@ start().catch((error) => {
   console.error('❌ Failed to start server', error);
   process.exit(1);
 });
+
+async function seedDefaultsNoTxn(): Promise<void> {
+  const tenantName = process.env.DEFAULT_TENANT_NAME?.trim() || 'Demo Tenant';
+  const adminEmail = process.env.DEFAULT_ADMIN_EMAIL?.trim() || 'admin@demo.com';
+  const adminName = process.env.DEFAULT_ADMIN_NAME?.trim() || 'Admin';
+  const adminPassword = process.env.DEFAULT_ADMIN_PASSWORD || 'Admin@123';
+  const seedWorkOrder = process.env.SEED_SAMPLE_WORK_ORDER !== 'false';
+  const workOrderTitle = process.env.SAMPLE_WORK_ORDER_TITLE?.trim() || 'Demo Work Order';
+  const workOrderDescription =
+    process.env.SAMPLE_WORK_ORDER_DESCRIPTION?.trim() || 'Inspect the demo asset and confirm it is running.';
+
+  const { tenant } = await ensureTenantNoTxn(prisma, tenantName);
+  const passwordHash = await bcrypt.hash(adminPassword, 10);
+  const { admin } = await ensureAdminNoTxn({
+    prisma,
+    tenantId: tenant.id,
+    email: adminEmail,
+    name: adminName,
+    passwordHash,
+    roles: ['admin'],
+  });
+
+  console.log('[seed] tenant+admin ready (non-transactional)');
+
+  if (!seedWorkOrder) {
+    return;
+  }
+
+  const existingWorkOrder = await prisma.workOrder.findFirst({
+    where: {
+      tenantId: tenant.id,
+      title: workOrderTitle,
+    },
+  });
+
+  if (existingWorkOrder) {
+    console.log('[seed] sample work order already exists:', existingWorkOrder.id);
+    return;
+  }
+
+  const workOrder = await prisma.workOrder.create({
+    data: {
+      tenantId: tenant.id,
+      title: workOrderTitle,
+      description: workOrderDescription,
+      priority: 'medium',
+      status: 'requested',
+      assignees: [admin.id],
+      createdBy: admin.id,
+    },
+  });
+
+  console.log('[seed] sample work order created:', workOrder.id);
+}
 
 function isReplicaSetPrimaryError(error: unknown): boolean {
   if (!error || typeof error !== 'object') {
@@ -165,19 +220,20 @@ function isReplicaSetPrimaryError(error: unknown): boolean {
 
 async function ensureDemoUsers() {
   const tenantName = 'Demo Tenant';
+  const tenantSlug = 'demo-tenant';
 
   const tenant = await prisma.tenant.upsert({
     where: { name: tenantName },
-    update: {},
-    create: { name: tenantName },
+    update: { slug: tenantSlug },
+    create: { name: tenantName, slug: tenantSlug },
   });
 
   const defaultPassword = bcrypt.hashSync('Password123');
 
   const demoUsers = [
-    { email: 'admin@demo.com', name: 'Admin User', roles: ['admin'] },
-    { email: 'planner@demo.com', name: 'Maintenance Planner', roles: ['planner'] },
-    { email: 'tech@demo.com', name: 'Maintenance Tech', roles: ['tech'] },
+    { email: 'admin@demo.com', name: 'Admin User', role: 'admin' },
+    { email: 'planner@demo.com', name: 'Maintenance Planner', role: 'planner' },
+    { email: 'tech@demo.com', name: 'Maintenance Tech', role: 'tech' },
   ];
 
   const createdUsers: string[] = [];
@@ -189,14 +245,14 @@ async function ensureDemoUsers() {
       update: {
         passwordHash: defaultPassword,
         name: demoUser.name,
-        roles: demoUser.roles as any,
+        role: demoUser.role,
         tenantId: tenant.id,
       },
       create: {
         email: demoUser.email,
         passwordHash: defaultPassword,
         name: demoUser.name,
-        roles: demoUser.roles as any,
+        role: demoUser.role,
         tenantId: tenant.id,
       },
     });
