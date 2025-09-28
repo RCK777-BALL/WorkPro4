@@ -162,61 +162,52 @@ function isReplicaSetPrimaryError(error: unknown): boolean {
 }
 
 async function ensureDemoUsers() {
-  const userCount = await prisma.user.count();
+  const tenantName = 'Demo Tenant';
 
-  if (userCount > 0) {
-    return;
-  }
-
-  console.log('👥 No users found in database. Creating demo users...');
+  const tenant =
+    (await prisma.tenant.findFirst({ where: { name: tenantName } })) ??
+    (await prisma.tenant.create({ data: { name: tenantName } }));
 
   const defaultPassword = bcrypt.hashSync('Password123');
 
-  // Ensure there is a tenant to attach demo users to.
-  // Try to find an existing tenant named 'demo', otherwise create one.
-  let tenant = await prisma.tenant.findFirst({
-    where: { name: 'demo' },
-  });
+  const demoUsers: Array<{ email: string; name: string; roles: string[] }> = [
+    { email: 'admin@demo.com', name: 'Admin User', roles: ['admin'] },
+    { email: 'planner@demo.com', name: 'Maintenance Planner', roles: ['planner'] },
+    { email: 'tech@demo.com', name: 'Maintenance Tech', roles: ['tech'] },
+  ];
 
-  if (!tenant) {
-    tenant = await prisma.tenant.create({
-      data: {
-        name: 'demo',
+  const createdUsers: string[] = [];
+
+  for (const demoUser of demoUsers) {
+    const existingUser = await prisma.user.findUnique({ where: { email: demoUser.email } });
+
+    await prisma.user.upsert({
+      where: { email: demoUser.email },
+      update: {
+        name: demoUser.name,
+        roles: demoUser.roles,
+        tenant: { connect: { id: tenant.id } },
+      },
+      create: {
+        email: demoUser.email,
+        passwordHash: defaultPassword,
+        name: demoUser.name,
+        roles: demoUser.roles,
+        tenant: { connect: { id: tenant.id } },
       },
     });
+
+    if (!existingUser) {
+      createdUsers.push(demoUser.email);
+    }
   }
 
-  const users = await Promise.all([
-    prisma.user.create({
-      data: {
-        email: 'admin@demo.com',
-        passwordHash: defaultPassword,
-        name: 'Admin User',
-        roles: ['admin'],
-        tenant: { connect: { id: tenant.id } },
-      },
-    }),
-    prisma.user.create({
-      data: {
-        email: 'planner@demo.com',
-        passwordHash: defaultPassword,
-        name: 'Maintenance Planner',
-        roles: ['planner'],
-        tenant: { connect: { id: tenant.id } },
-      },
-    }),
-    prisma.user.create({
-      data: {
-        email: 'tech@demo.com',
-        passwordHash: defaultPassword,
-        name: 'Maintenance Tech',
-        roles: ['tech'],
-        tenant: { connect: { id: tenant.id } },
-      },
-    }),
-  ]);
+  if (createdUsers.length > 0) {
+    console.log('✅ Created demo users:', createdUsers.join(', '));
+  } else {
+    console.log('ℹ️ Demo users already exist.');
+  }
 
-  console.log('✅ Created demo users:', users.map((user) => user.email).join(', '));
   console.log('Demo login credentials:');
   console.log('  • admin@demo.com / Password123');
   console.log('  • planner@demo.com / Password123');
