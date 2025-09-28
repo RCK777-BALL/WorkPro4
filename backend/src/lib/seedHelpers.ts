@@ -21,7 +21,7 @@ export interface EnsureAdminOptions {
   email: string;
   name: string;
   passwordHash: string;
-  roles: string[];
+  role: string;
 }
 
 export interface EnsureAdminResult {
@@ -30,25 +30,33 @@ export interface EnsureAdminResult {
 }
 
 export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<EnsureAdminResult> {
-  const { prisma, tenantId, email, name, passwordHash, roles } = options;
+  const { prisma, tenantId, email, name, passwordHash, role } = options;
 
-  const admin = await prisma.user.upsert({
+  const existing = await prisma.user.findUnique({ where: { email } });
+
+  if (!existing) {
+    const admin = await prisma.user.create({
+      data: {
+        tenantId,
+        email,
+        name,
+        role,
+        passwordHash,
+      },
+    });
+
+    return { admin, created: true };
+  }
+
+  const admin = await prisma.user.update({
     where: { email },
-    update: {
+    data: {
       tenantId,
       name,
-      roles,
-      passwordHash,
-    },
-    create: {
-      tenantId,
-      email,
-      name,
-      roles,
+      role,
       passwordHash,
     },
   });
 
-  const created = admin.createdAt.getTime() === admin.updatedAt.getTime();
-  return { admin, created };
+  return { admin, created: false };
 }
