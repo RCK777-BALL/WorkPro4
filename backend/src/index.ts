@@ -7,7 +7,6 @@ import rateLimit from 'express-rate-limit';
 import bcrypt from './lib/bcrypt';
 import { requestLogger } from './middleware/requestLogger';
 import { errorHandler } from './middleware/errorHandler';
-import { Prisma } from '@prisma/client';
 import { prisma, verifyDatabaseConnection } from './db';
 import { ensureJwtSecrets } from './config/auth';
 
@@ -142,10 +141,13 @@ function isReplicaSetPrimaryError(error: unknown): boolean {
     return false;
   }
 
-  if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    if (error.code === 'P2010' || error.message.includes('ReplicaSetNoPrimary')) {
-      return true;
-    }
+  // Some Prisma versions may not export a Prisma namespace; do a structural check instead.
+  const anyErr = error as any;
+  if (
+    anyErr &&
+    (anyErr.code === 'P2010' || (typeof anyErr.message === 'string' && anyErr.message.includes('ReplicaSetNoPrimary')))
+  ) {
+    return true;
   }
 
   if (error instanceof Error && error.message.includes('ReplicaSetNoPrimary')) {
@@ -164,49 +166,38 @@ function isReplicaSetPrimaryError(error: unknown): boolean {
 async function ensureDemoUsers() {
   const tenantName = 'Demo Tenant';
 
-  const tenant =
-    (await prisma.tenant.findFirst({ where: { name: tenantName } })) ??
-    (await prisma.tenant.create({ data: { name: tenantName } }));
+  // Ensure tenant exists (use findFirst/create to avoid requiring a unique constraint on name)
+  let tenant = await prisma.tenant.findFirst({ where: { name: tenantName } });
+  if (!tenant) {
+    tenant = await prisma.tenant.create({ data: { name: tenantName } });
+  }
 
   const defaultPassword = bcrypt.hashSync('Password123');
 
-  const tenant = await prisma.tenant.upsert({
-    where: { name: 'Demo Tenant' },
-    update: {},
-    create: { name: 'Demo Tenant' },
+  const demoUsers = [
+    { email: 'admin@demo.com', name: 'Admin User', roles: ['admin'] },
+    { email: 'planner@demo.com', name: 'Maintenance Planner', roles: ['planner'] },
+    { email: 'tech@demo.com', name: 'Maintenance Tech', roles: ['tech'] },
+  ];
 
-  });
+  const createdUsers: string[] = [];
 
-  const users = await Promise.all([
-    prisma.user.create({
-      data: {
-        email: 'admin@demo.com',
-        passwordHash: defaultPassword,
-        name: 'Admin User',
-        roles: ['admin'],
-        tenantId: tenant.id,
-      },
-    }),
-    prisma.user.create({
-      data: {
-        email: 'planner@demo.com',
-        passwordHash: defaultPassword,
-        name: 'Maintenance Planner',
-        roles: ['planner'],
-        tenantId: tenant.id,
-
-      },
-      create: {
-        email: demoUser.email,
-        passwordHash: defaultPassword,
-        name: 'Maintenance Tech',
-        roles: ['tech'],
-        tenantId: tenant.id,
-
-      },
-    });
+  for (const demoUser of demoUsers) {
+    // Use findUnique assuming email is a unique field in the schema; fallback to findFirst if needed.
+    const existingUser =
+      (await prisma.user.findUnique({ where: { email: demoUser.email } })) ??
+      (await prisma.user.findFirst({ where: { email: demoUser.email } }));
 
     if (!existingUser) {
+      await prisma.user.create({
+        data: {
+          email: demoUser.email,
+          passwordHash: defaultPassword,
+          name: demoUser.name,
+          roles: demoUser.roles as any,
+          tenantId: tenant.id,
+        },
+      });
       createdUsers.push(demoUser.email);
     }
   }
@@ -222,3 +213,4 @@ async function ensureDemoUsers() {
   console.log('  • planner@demo.com / Password123');
   console.log('  • tech@demo.com / Password123');
 }
+
