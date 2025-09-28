@@ -1,9 +1,8 @@
 // /backend/src/db.ts
 // Use named imports so the Prisma namespace is available for types
 import { PrismaClient, Prisma } from "@prisma/client";
-type PrismaNamespace = Prisma;
 type PrismaClientType = PrismaClient;
-type PrismaOptions = PrismaNamespace extends { PrismaClientOptions: infer O } ? O : any;
+type PrismaOptions = Prisma.PrismaClientOptions;
 
 /**
  * Normalize Mongo connection strings for local dev so Prisma doesn't
