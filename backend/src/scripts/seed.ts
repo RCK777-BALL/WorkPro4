@@ -87,7 +87,7 @@ main()
 
 async function ensureTenantNoTxn(tenantName: string): Promise<{ tenant: Tenant; created: boolean }> {
   const slug = tenantName.toLowerCase().replace(/\s+/g, '-');
-  const existingTenant = await prisma.tenant.findUnique({ where: { name: tenantName } });
+  const existingTenant = await prisma.tenant.findUnique({ where: { slug } });
 
   if (existingTenant) {
     if (!existingTenant.slug) {
