@@ -39,26 +39,37 @@ describe('ensureTenantNoTxn', () => {
       .fn()
       .mockRejectedValueOnce(recoveryError as Prisma.PrismaClientKnownRequestError)
       .mockResolvedValueOnce(tenant);
-    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const runCommandRaw = vi.fn().mockResolvedValue({ ok: 1 });
 
     const prisma = {
       tenant: {
         findUnique,
         update: vi.fn(),
-        updateMany,
         create: vi.fn(),
       },
+      $runCommandRaw: runCommandRaw,
     } as unknown as PrismaClient;
 
     const result = await ensureTenantNoTxn(prisma, tenantName);
 
     expect(findUnique).toHaveBeenCalledTimes(2);
-    expect(updateMany).toHaveBeenCalledTimes(1);
+    expect(runCommandRaw).toHaveBeenCalledTimes(1);
 
-    const updateArgs = updateMany.mock.calls[0][0];
-    expect(updateArgs.where.slug).toBe(slug);
-    expect(updateArgs.data.createdAt).toBeInstanceOf(Date);
-    expect(updateArgs.data.updatedAt).toBeInstanceOf(Date);
+    const updateArgs = runCommandRaw.mock.calls[0][0];
+    expect(updateArgs.update).toBe('tenants');
+    expect(updateArgs.updates).toHaveLength(1);
+
+    const [update] = updateArgs.updates;
+    expect(update.q.slug).toBe(slug);
+    expect(update.q.$or).toEqual([
+      { createdAt: { $exists: false } },
+      { createdAt: { $type: 10 } },
+      { updatedAt: { $exists: false } },
+      { updatedAt: { $type: 10 } },
+    ]);
+    expect(update.u.$set.createdAt).toBeInstanceOf(Date);
+    expect(update.u.$set.updatedAt).toBeInstanceOf(Date);
+    expect(update.multi).toBe(true);
 
     expect(result).toEqual({ tenant, created: false });
   });

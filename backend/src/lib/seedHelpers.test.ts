@@ -22,14 +22,12 @@ describe('ensureTenantNoTxn', () => {
   const findUnique = vi.fn();
   const create = vi.fn();
   const update = vi.fn();
-  const updateMany = vi.fn();
   const runCommandRaw = vi.fn();
   const prisma = {
     tenant: {
       findUnique,
       create,
       update,
-      updateMany,
     },
     $runCommandRaw: runCommandRaw,
   } as unknown as Parameters<typeof ensureTenantNoTxn>[0];
@@ -38,7 +36,6 @@ describe('ensureTenantNoTxn', () => {
     findUnique.mockReset();
     create.mockReset();
     update.mockReset();
-    updateMany.mockReset();
     runCommandRaw.mockReset();
   });
 
@@ -55,7 +52,7 @@ describe('ensureTenantNoTxn', () => {
         slug: 'demo-tenant',
       },
     });
-    expect(updateMany).not.toHaveBeenCalled();
+    expect(runCommandRaw).not.toHaveBeenCalled();
     expect(result).toEqual({ tenant: createdTenant, created: true });
   });
 
@@ -66,7 +63,7 @@ describe('ensureTenantNoTxn', () => {
     const result = await ensureTenantNoTxn(prisma, 'Demo Tenant');
 
     expect(update).not.toHaveBeenCalled();
-    expect(updateMany).not.toHaveBeenCalled();
+    expect(runCommandRaw).not.toHaveBeenCalled();
     expect(result).toEqual({ tenant: existingTenant, created: false });
   });
 
@@ -82,7 +79,7 @@ describe('ensureTenantNoTxn', () => {
       where: { id: existingTenant.id },
       data: { slug: 'demo-tenant' },
     });
-    expect(updateMany).not.toHaveBeenCalled();
+    expect(runCommandRaw).not.toHaveBeenCalled();
     expect(result).toEqual({ tenant: updatedTenant, created: false });
 
   });
@@ -98,12 +95,15 @@ describe('ensureTenantNoTxn', () => {
         clientVersion: 'test',
       }),
     );
-    runCommandRaw.mockResolvedValueOnce({ ok: 1 });
-    updateMany.mockResolvedValueOnce({ count: 1 });
+    runCommandRaw.mockResolvedValue({ ok: 1 });
 
     const result = await ensureTenantNoTxn(prisma, 'Demo Tenant');
 
-    expect(runCommandRaw).toHaveBeenCalledWith({
+    expect(runCommandRaw).toHaveBeenCalledTimes(2);
+
+    const [insertCommand, updateCommand] = runCommandRaw.mock.calls.map(([command]) => command);
+
+    expect(insertCommand).toEqual({
       insert: 'tenants',
       documents: [
         {
@@ -114,12 +114,25 @@ describe('ensureTenantNoTxn', () => {
         },
       ],
     });
-    expect(updateMany).toHaveBeenCalledWith({
-      where: { OR: [{ createdAt: null }, { updatedAt: null }] },
-      data: {
-        createdAt: expect.any(Date),
-        updatedAt: expect.any(Date),
+
+    expect(updateCommand.update).toBe('tenants');
+    expect(updateCommand.updates).toHaveLength(1);
+    expect(updateCommand.updates[0]).toEqual({
+      q: {
+        $or: [
+          { createdAt: { $exists: false } },
+          { createdAt: { $type: 10 } },
+          { updatedAt: { $exists: false } },
+          { updatedAt: { $type: 10 } },
+        ],
       },
+      u: {
+        $set: {
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        },
+      },
+      multi: true,
     });
     expect(result).toEqual({ tenant: fallbackTenant, created: true });
   });
@@ -149,24 +162,37 @@ describe('ensureTenantNoTxn', () => {
         clientVersion: 'test',
       }),
     );
-    runCommandRaw.mockResolvedValueOnce({ ok: 1 });
-    updateMany.mockImplementationOnce((args) => {
-      timestampsBackfilled = true;
-      expect(args).toEqual({
-        where: { OR: [{ createdAt: null }, { updatedAt: null }] },
-        data: {
-          createdAt: expect.any(Date),
-          updatedAt: expect.any(Date),
-        },
-      });
+    runCommandRaw.mockImplementation((command: Record<string, unknown>) => {
+      if ('update' in command) {
+        const updates = command.update === 'tenants' ? (command.updates as unknown[]) : [];
 
-      return Promise.resolve({ count: 1 });
+        expect(updates).toHaveLength(1);
+        const [updateDescriptor] = updates as Array<Record<string, unknown>>;
+        expect(updateDescriptor?.q).toEqual({
+          $or: [
+            { createdAt: { $exists: false } },
+            { createdAt: { $type: 10 } },
+            { updatedAt: { $exists: false } },
+            { updatedAt: { $type: 10 } },
+          ],
+        });
+        expect(updateDescriptor?.u).toEqual({
+          $set: {
+            createdAt: expect.any(Date),
+            updatedAt: expect.any(Date),
+          },
+        });
+        expect(updateDescriptor?.multi).toBe(true);
+        timestampsBackfilled = true;
+      }
+
+      return Promise.resolve({ ok: 1 });
     });
 
     await expect(ensureTenantNoTxn(prisma, 'Demo Tenant')).resolves.toEqual({
       tenant: fallbackTenant,
       created: true,
     });
-    expect(updateMany).toHaveBeenCalledTimes(1);
+    expect(runCommandRaw).toHaveBeenCalledTimes(2);
   });
 });
