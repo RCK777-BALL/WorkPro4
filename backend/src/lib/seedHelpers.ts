@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import type { PrismaClient, Tenant, User } from '@prisma/client';
+import { ObjectId } from 'mongodb';
 
 export interface EnsureTenantResult {
   tenant: Tenant;
@@ -150,17 +151,48 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
   const existing = await prisma.user.findUnique({ where: { email } });
 
   if (!existing) {
-    const admin = await prisma.user.create({
-      data: {
-        tenantId,
-        email,
-        name,
-        role,
-        passwordHash,
-      },
-    });
+    try {
+      const admin = await prisma.user.create({
+        data: {
+          tenantId,
+          email,
+          name,
+          role,
+          passwordHash,
+        },
+      });
 
-    return { admin, created: true };
+      return { admin, created: true };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2031') {
+        const now = new Date();
+
+        await prisma.$runCommandRaw({
+          insert: 'users',
+          documents: [
+            {
+              tenantId: new ObjectId(tenantId),
+              email,
+              name,
+              role,
+              passwordHash,
+              createdAt: now,
+              updatedAt: now,
+            },
+          ],
+        } as Prisma.InputJsonObject);
+
+        const admin = await prisma.user.findUnique({ where: { email } });
+
+        if (admin) {
+          return { admin, created: true };
+        }
+
+        throw new Error('Admin not found after manual insert.');
+      }
+
+      throw error;
+    }
   }
 
   const admin = await prisma.user.update({
