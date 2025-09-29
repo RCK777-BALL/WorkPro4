@@ -31,9 +31,27 @@ export async function ensureTenantNoTxn(prisma: PrismaClient, tenantName: string
     return { tenant, created: true };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2031') {
+      const now = new Date();
       await prisma.$runCommandRaw({
         insert: 'tenants',
-        documents: [{ name: tenantName, slug }],
+        documents: [
+          {
+            name: tenantName,
+            slug,
+            createdAt: now,
+            updatedAt: now,
+          },
+        ],
+      });
+
+      await prisma.tenant.updateMany({
+        where: {
+          OR: [{ createdAt: null }, { updatedAt: null }],
+        },
+        data: {
+          createdAt: now,
+          updatedAt: now,
+        },
       });
 
       const tenant = await prisma.tenant.findUnique({ where: { slug } });
