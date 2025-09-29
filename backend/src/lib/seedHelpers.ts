@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import type { PrismaClient, Tenant, User } from '@prisma/client';
 
 export interface EnsureTenantResult {
@@ -22,11 +23,28 @@ export async function ensureTenantNoTxn(prisma: PrismaClient, tenantName: string
     return { tenant: existing, created: false };
   }
 
-  const tenant = await prisma.tenant.create({
-    data: { name: tenantName, slug },
-  });
+  try {
+    const tenant = await prisma.tenant.create({
+      data: { name: tenantName, slug },
+    });
 
-  return { tenant, created: true };
+    return { tenant, created: true };
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2031') {
+      await prisma.$runCommandRaw({
+        insert: 'tenants',
+        documents: [{ name: tenantName, slug }],
+      });
+
+      const tenant = await prisma.tenant.findUnique({ where: { slug } });
+
+      if (tenant) {
+        return { tenant, created: true };
+      }
+    }
+
+    throw error;
+  }
 }
 
 export interface EnsureAdminOptions {

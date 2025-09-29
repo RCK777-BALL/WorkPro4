@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import type { Tenant, User } from '@prisma/client';
 
 import bcrypt from '../lib/bcrypt';
@@ -102,11 +103,28 @@ async function ensureTenantNoTxn(tenantName: string): Promise<{ tenant: Tenant; 
     return { tenant: existingTenant, created: false };
   }
 
-  const tenant = await prisma.tenant.create({
-    data: { name: tenantName, slug },
-  });
+  try {
+    const tenant = await prisma.tenant.create({
+      data: { name: tenantName, slug },
+    });
 
-  return { tenant, created: true };
+    return { tenant, created: true };
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2031') {
+      await prisma.$runCommandRaw({
+        insert: 'tenants',
+        documents: [{ name: tenantName, slug }],
+      });
+
+      const tenant = await prisma.tenant.findUnique({ where: { slug } });
+
+      if (tenant) {
+        return { tenant, created: true };
+      }
+    }
+
+    throw error;
+  }
 }
 
 type EnsureAdminParams = {
