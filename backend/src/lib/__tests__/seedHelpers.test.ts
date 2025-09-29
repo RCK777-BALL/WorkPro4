@@ -71,6 +71,7 @@ describe('ensureTenantNoTxn', () => {
     expect(update.u.$set.updatedAt).toBeInstanceOf(Date);
     expect(update.multi).toBe(true);
 
+
     expect(result).toEqual({ tenant, created: false });
   });
 });

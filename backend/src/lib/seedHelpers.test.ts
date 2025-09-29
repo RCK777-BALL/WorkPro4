@@ -104,6 +104,7 @@ describe('ensureTenantNoTxn', () => {
     const [insertCommand, updateCommand] = runCommandRaw.mock.calls.map(([command]) => command);
 
     expect(insertCommand).toEqual({
+
       insert: 'tenants',
       documents: [
         {
@@ -133,6 +134,7 @@ describe('ensureTenantNoTxn', () => {
         },
       },
       multi: true,
+
     });
     expect(result).toEqual({ tenant: fallbackTenant, created: true });
   });
@@ -184,6 +186,7 @@ describe('ensureTenantNoTxn', () => {
         });
         expect(updateDescriptor?.multi).toBe(true);
         timestampsBackfilled = true;
+
       }
 
       return Promise.resolve({ ok: 1 });
@@ -194,5 +197,6 @@ describe('ensureTenantNoTxn', () => {
       created: true,
     });
     expect(runCommandRaw).toHaveBeenCalledTimes(2);
+
   });
 });

@@ -56,6 +56,7 @@ export async function ensureTenantNoTxn(prisma: PrismaClient, tenantName: string
 
       await backfillTenantTimestamps(prisma, now, slug);
 
+
       existing = await prisma.tenant.findUnique({ where: { slug } });
     } else {
       throw error;
@@ -97,6 +98,7 @@ export async function ensureTenantNoTxn(prisma: PrismaClient, tenantName: string
       });
 
       await backfillTenantTimestamps(prisma, now);
+
 
       const tenant = await prisma.tenant.findUnique({ where: { slug } });
 
