@@ -47,8 +47,14 @@ if (process.env.NODE_ENV !== "production") {
 export async function verifyDatabaseConnection(): Promise<void> {
   try {
     await prisma.$connect();
-    await prisma.$runCommandRaw({ ping: 1 });
-    console.log("[db] ping ok");
+    if (typeof (prisma as { $runCommandRaw?: unknown }).$runCommandRaw === "function") {
+      await (prisma as { $runCommandRaw: (command: Record<string, unknown>) => Promise<unknown> }).$runCommandRaw({
+        ping: 1,
+      });
+      console.log("[db] ping ok");
+    } else {
+      console.log("[db] connected (ping skipped: $runCommandRaw unavailable)");
+    }
   } catch (err: any) {
     const hint =
       "Check DATABASE_URL in /backend/.env. For local Mongo, try:\n" +

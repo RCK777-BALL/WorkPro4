@@ -222,6 +222,7 @@ async function ensureDemoUsers() {
   const tenant = await prisma.tenant.upsert({
     where: { slug: tenantSlug },
     update: { name: tenantName, slug: tenantSlug },
+
     create: { name: tenantName, slug: tenantSlug },
 
   });

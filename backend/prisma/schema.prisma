@@ -64,6 +64,7 @@ model Asset {
   tenant    Tenant     @relation(fields: [tenantId], references: [id])
   workOrders WorkOrder[]
 
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -95,6 +96,7 @@ model WorkOrder {
   assignee      User?    @relation("Assignee", fields: [assigneeId], references: [id])
   createdByUser User     @relation("CreatedBy", fields: [createdBy], references: [id])
   asset         Asset?   @relation(fields: [assetId], references: [id])
+
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
