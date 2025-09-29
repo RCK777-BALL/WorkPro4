@@ -55,28 +55,22 @@ describe('ensureTenantNoTxn', () => {
     expect(findUnique).toHaveBeenCalledTimes(2);
     expect(runCommandRaw).toHaveBeenCalledTimes(1);
 
-    expect(runCommandRaw).toHaveBeenCalledWith({
-      update: 'tenants',
-      updates: [
-        {
-          q: {
-            slug,
-            $or: [
-              { createdAt: { $exists: false } },
-              { updatedAt: { $exists: false } },
-            ],
-          },
-          u: {
-            $set: {
-              createdAt: expect.any(Date),
-              updatedAt: expect.any(Date),
-            },
-          },
-          upsert: false,
-          multi: true,
-        },
-      ],
-    });
+    const updateArgs = runCommandRaw.mock.calls[0][0];
+    expect(updateArgs.update).toBe('tenants');
+    expect(updateArgs.updates).toHaveLength(1);
+
+    const [update] = updateArgs.updates;
+    expect(update.q.slug).toBe(slug);
+    expect(update.q.$or).toEqual([
+      { createdAt: { $exists: false } },
+      { createdAt: { $type: 10 } },
+      { updatedAt: { $exists: false } },
+      { updatedAt: { $type: 10 } },
+    ]);
+    expect(update.u.$set.createdAt).toBeInstanceOf(Date);
+    expect(update.u.$set.updatedAt).toBeInstanceOf(Date);
+    expect(update.multi).toBe(true);
+
 
     expect(result).toEqual({ tenant, created: false });
   });

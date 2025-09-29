@@ -6,6 +6,44 @@ export interface EnsureTenantResult {
   created: boolean;
 }
 
+async function backfillTenantTimestamps(
+  prisma: PrismaClient,
+  now: Date,
+  slug?: string,
+): Promise<void> {
+  const missingTimestampFilter = {
+    $or: [
+      { createdAt: { $exists: false } },
+      { createdAt: { $type: 10 } },
+      { updatedAt: { $exists: false } },
+      { updatedAt: { $type: 10 } },
+    ],
+  } satisfies Record<string, unknown>;
+
+  const query = {
+    ...(slug ? { slug } : {}),
+    ...missingTimestampFilter,
+  } satisfies Record<string, unknown>;
+
+  const updateCommand = {
+    update: 'tenants',
+    updates: [
+      {
+        q: query,
+        u: {
+          $set: {
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+        multi: true,
+      },
+    ],
+  } satisfies Record<string, unknown>;
+
+  await prisma.$runCommandRaw(updateCommand as Prisma.InputJsonObject);
+}
+
 export async function ensureTenantNoTxn(prisma: PrismaClient, tenantName: string): Promise<EnsureTenantResult> {
   const slug = tenantName.toLowerCase().replace(/\s+/g, '-');
   let existing: Tenant | null = null;
@@ -16,28 +54,8 @@ export async function ensureTenantNoTxn(prisma: PrismaClient, tenantName: string
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2032') {
       const now = new Date();
 
-      await prisma.$runCommandRaw({
-        update: 'tenants',
-        updates: [
-          {
-            q: {
-              slug,
-              $or: [
-                { createdAt: { $exists: false } },
-                { updatedAt: { $exists: false } },
-              ],
-            },
-            u: {
-              $set: {
-                createdAt: now,
-                updatedAt: now,
-              },
-            },
-            upsert: false,
-            multi: true,
-          },
-        ],
-      });
+      await backfillTenantTimestamps(prisma, now, slug);
+
 
       existing = await prisma.tenant.findUnique({ where: { slug } });
     } else {
@@ -79,27 +97,8 @@ export async function ensureTenantNoTxn(prisma: PrismaClient, tenantName: string
         ],
       });
 
-      await prisma.$runCommandRaw({
-        update: 'tenants',
-        updates: [
-          {
-            q: {
-              $or: [
-                { createdAt: { $exists: false } },
-                { updatedAt: { $exists: false } },
-              ],
-            },
-            u: {
-              $set: {
-                createdAt: now,
-                updatedAt: now,
-              },
-            },
-            upsert: false,
-            multi: true,
-          },
-        ],
-      });
+      await backfillTenantTimestamps(prisma, now);
+
 
       const tenant = await prisma.tenant.findUnique({ where: { slug } });
 

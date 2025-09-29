@@ -100,7 +100,11 @@ describe('ensureTenantNoTxn', () => {
     const result = await ensureTenantNoTxn(prisma, 'Demo Tenant');
 
     expect(runCommandRaw).toHaveBeenCalledTimes(2);
-    expect(runCommandRaw).toHaveBeenNthCalledWith(1, {
+
+    const [insertCommand, updateCommand] = runCommandRaw.mock.calls.map(([command]) => command);
+
+    expect(insertCommand).toEqual({
+
       insert: 'tenants',
       documents: [
         {
@@ -111,26 +115,26 @@ describe('ensureTenantNoTxn', () => {
         },
       ],
     });
-    expect(runCommandRaw).toHaveBeenNthCalledWith(2, {
-      update: 'tenants',
-      updates: [
-        {
-          q: {
-            $or: [
-              { createdAt: { $exists: false } },
-              { updatedAt: { $exists: false } },
-            ],
-          },
-          u: {
-            $set: {
-              createdAt: expect.any(Date),
-              updatedAt: expect.any(Date),
-            },
-          },
-          upsert: false,
-          multi: true,
+
+    expect(updateCommand.update).toBe('tenants');
+    expect(updateCommand.updates).toHaveLength(1);
+    expect(updateCommand.updates[0]).toEqual({
+      q: {
+        $or: [
+          { createdAt: { $exists: false } },
+          { createdAt: { $type: 10 } },
+          { updatedAt: { $exists: false } },
+          { updatedAt: { $type: 10 } },
+        ],
+      },
+      u: {
+        $set: {
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
         },
-      ],
+      },
+      multi: true,
+
     });
     expect(result).toEqual({ tenant: fallbackTenant, created: true });
   });
@@ -160,30 +164,29 @@ describe('ensureTenantNoTxn', () => {
         clientVersion: 'test',
       }),
     );
-    runCommandRaw.mockImplementation((command) => {
+    runCommandRaw.mockImplementation((command: Record<string, unknown>) => {
       if ('update' in command) {
-        timestampsBackfilled = true;
-        expect(command).toEqual({
-          update: 'tenants',
-          updates: [
-            {
-              q: {
-                $or: [
-                  { createdAt: { $exists: false } },
-                  { updatedAt: { $exists: false } },
-                ],
-              },
-              u: {
-                $set: {
-                  createdAt: expect.any(Date),
-                  updatedAt: expect.any(Date),
-                },
-              },
-              upsert: false,
-              multi: true,
-            },
+        const updates = command.update === 'tenants' ? (command.updates as unknown[]) : [];
+
+        expect(updates).toHaveLength(1);
+        const [updateDescriptor] = updates as Array<Record<string, unknown>>;
+        expect(updateDescriptor?.q).toEqual({
+          $or: [
+            { createdAt: { $exists: false } },
+            { createdAt: { $type: 10 } },
+            { updatedAt: { $exists: false } },
+            { updatedAt: { $type: 10 } },
           ],
         });
+        expect(updateDescriptor?.u).toEqual({
+          $set: {
+            createdAt: expect.any(Date),
+            updatedAt: expect.any(Date),
+          },
+        });
+        expect(updateDescriptor?.multi).toBe(true);
+        timestampsBackfilled = true;
+
       }
 
       return Promise.resolve({ ok: 1 });
@@ -194,37 +197,6 @@ describe('ensureTenantNoTxn', () => {
       created: true,
     });
     expect(runCommandRaw).toHaveBeenCalledTimes(2);
-    expect(runCommandRaw).toHaveBeenNthCalledWith(1, {
-      insert: 'tenants',
-      documents: [
-        {
-          name: 'Demo Tenant',
-          slug: 'demo-tenant',
-          createdAt: expect.any(Date),
-          updatedAt: expect.any(Date),
-        },
-      ],
-    });
-    expect(runCommandRaw).toHaveBeenNthCalledWith(2, {
-      update: 'tenants',
-      updates: [
-        {
-          q: {
-            $or: [
-              { createdAt: { $exists: false } },
-              { updatedAt: { $exists: false } },
-            ],
-          },
-          u: {
-            $set: {
-              createdAt: expect.any(Date),
-              updatedAt: expect.any(Date),
-            },
-          },
-          upsert: false,
-          multi: true,
-        },
-      ],
-    });
+
   });
 });
