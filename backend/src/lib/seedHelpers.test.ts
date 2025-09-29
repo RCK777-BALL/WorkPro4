@@ -2,22 +2,41 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ensureTenantNoTxn } from './seedHelpers';
 
+vi.mock('@prisma/client', () => {
+  class PrismaClientKnownRequestError extends Error {
+    public code: string;
+
+    public clientVersion: string;
+
+    constructor(message: string, options: { code: string; clientVersion: string }) {
+      super(message);
+      this.code = options.code;
+      this.clientVersion = options.clientVersion;
+    }
+  }
+
+  return { Prisma: { PrismaClientKnownRequestError } };
+});
+
 describe('ensureTenantNoTxn', () => {
   const findUnique = vi.fn();
   const create = vi.fn();
   const update = vi.fn();
+  const runCommandRaw = vi.fn();
   const prisma = {
     tenant: {
       findUnique,
       create,
       update,
     },
+    $runCommandRaw: runCommandRaw,
   } as unknown as Parameters<typeof ensureTenantNoTxn>[0];
 
   beforeEach(() => {
     findUnique.mockReset();
     create.mockReset();
     update.mockReset();
+    runCommandRaw.mockReset();
   });
 
   it('creates a tenant with a slug when none exists', async () => {
@@ -60,5 +79,27 @@ describe('ensureTenantNoTxn', () => {
     });
     expect(result).toEqual({ tenant: updatedTenant, created: false });
 
+  });
+
+  it('falls back to a raw insert when create fails with P2031', async () => {
+    const { Prisma } = await import('@prisma/client');
+    const fallbackTenant = { id: 'tenant-1', name: 'Demo Tenant', slug: 'demo-tenant' };
+
+    findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(fallbackTenant);
+    create.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('raw operation required', {
+        code: 'P2031',
+        clientVersion: 'test',
+      }),
+    );
+    runCommandRaw.mockResolvedValueOnce({ ok: 1 });
+
+    const result = await ensureTenantNoTxn(prisma, 'Demo Tenant');
+
+    expect(runCommandRaw).toHaveBeenCalledWith({
+      insert: 'tenants',
+      documents: [{ name: 'Demo Tenant', slug: 'demo-tenant' }],
+    });
+    expect(result).toEqual({ tenant: fallbackTenant, created: true });
   });
 });
