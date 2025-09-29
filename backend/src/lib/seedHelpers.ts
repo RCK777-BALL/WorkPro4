@@ -15,8 +15,10 @@ async function backfillTenantTimestamps(
     $or: [
       { createdAt: { $exists: false } },
       { createdAt: { $type: 10 } },
+      { createdAt: { $type: 'string' } },
       { updatedAt: { $exists: false } },
       { updatedAt: { $type: 10 } },
+      { updatedAt: { $type: 'string' } },
     ],
   } satisfies Record<string, unknown>;
 
@@ -30,12 +32,26 @@ async function backfillTenantTimestamps(
     updates: [
       {
         q: query,
-        u: {
-          $set: {
-            createdAt: now,
-            updatedAt: now,
+        u: [
+          {
+            $set: {
+              createdAt: {
+                $cond: [
+                  { $eq: [{ $type: '$createdAt' }, 'string'] },
+                  { $toDate: '$createdAt' },
+                  { $ifNull: ['$createdAt', now] },
+                ],
+              },
+              updatedAt: {
+                $cond: [
+                  { $eq: [{ $type: '$updatedAt' }, 'string'] },
+                  { $toDate: '$updatedAt' },
+                  { $ifNull: ['$updatedAt', now] },
+                ],
+              },
+            },
           },
-        },
+        ],
         multi: true,
       },
     ],
@@ -51,7 +67,10 @@ export async function ensureTenantNoTxn(prisma: PrismaClient, tenantName: string
   try {
     existing = await prisma.tenant.findUnique({ where: { slug } });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2032') {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      (error.code === 'P2032' || error.code === 'P2023')
+    ) {
       const now = new Date();
 
       await backfillTenantTimestamps(prisma, now, slug);
