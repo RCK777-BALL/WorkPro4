@@ -22,12 +22,14 @@ describe('ensureTenantNoTxn', () => {
   const findUnique = vi.fn();
   const create = vi.fn();
   const update = vi.fn();
+  const updateMany = vi.fn();
   const runCommandRaw = vi.fn();
   const prisma = {
     tenant: {
       findUnique,
       create,
       update,
+      updateMany,
     },
     $runCommandRaw: runCommandRaw,
   } as unknown as Parameters<typeof ensureTenantNoTxn>[0];
@@ -36,6 +38,7 @@ describe('ensureTenantNoTxn', () => {
     findUnique.mockReset();
     create.mockReset();
     update.mockReset();
+    updateMany.mockReset();
     runCommandRaw.mockReset();
   });
 
@@ -52,6 +55,7 @@ describe('ensureTenantNoTxn', () => {
         slug: 'demo-tenant',
       },
     });
+    expect(updateMany).not.toHaveBeenCalled();
     expect(result).toEqual({ tenant: createdTenant, created: true });
   });
 
@@ -62,6 +66,7 @@ describe('ensureTenantNoTxn', () => {
     const result = await ensureTenantNoTxn(prisma, 'Demo Tenant');
 
     expect(update).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
     expect(result).toEqual({ tenant: existingTenant, created: false });
   });
 
@@ -77,6 +82,7 @@ describe('ensureTenantNoTxn', () => {
       where: { id: existingTenant.id },
       data: { slug: 'demo-tenant' },
     });
+    expect(updateMany).not.toHaveBeenCalled();
     expect(result).toEqual({ tenant: updatedTenant, created: false });
 
   });
@@ -93,13 +99,74 @@ describe('ensureTenantNoTxn', () => {
       }),
     );
     runCommandRaw.mockResolvedValueOnce({ ok: 1 });
+    updateMany.mockResolvedValueOnce({ count: 1 });
 
     const result = await ensureTenantNoTxn(prisma, 'Demo Tenant');
 
     expect(runCommandRaw).toHaveBeenCalledWith({
       insert: 'tenants',
-      documents: [{ name: 'Demo Tenant', slug: 'demo-tenant' }],
+      documents: [
+        {
+          name: 'Demo Tenant',
+          slug: 'demo-tenant',
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        },
+      ],
+    });
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { OR: [{ createdAt: null }, { updatedAt: null }] },
+      data: {
+        createdAt: expect.any(Date),
+        updatedAt: expect.any(Date),
+      },
     });
     expect(result).toEqual({ tenant: fallbackTenant, created: true });
+  });
+
+  it('backfills timestamps on tenants with null values before refetching', async () => {
+    const { Prisma } = await import('@prisma/client');
+    const fallbackTenant = { id: 'tenant-1', name: 'Demo Tenant', slug: 'demo-tenant' };
+
+    let timestampsBackfilled = false;
+
+    findUnique
+      .mockResolvedValueOnce(null)
+      .mockImplementationOnce(() => {
+        if (!timestampsBackfilled) {
+          throw new Prisma.PrismaClientKnownRequestError('Missing required value', {
+            code: 'P2032',
+            clientVersion: 'test',
+          });
+        }
+
+        return Promise.resolve(fallbackTenant);
+      });
+
+    create.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('raw operation required', {
+        code: 'P2031',
+        clientVersion: 'test',
+      }),
+    );
+    runCommandRaw.mockResolvedValueOnce({ ok: 1 });
+    updateMany.mockImplementationOnce((args) => {
+      timestampsBackfilled = true;
+      expect(args).toEqual({
+        where: { OR: [{ createdAt: null }, { updatedAt: null }] },
+        data: {
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        },
+      });
+
+      return Promise.resolve({ count: 1 });
+    });
+
+    await expect(ensureTenantNoTxn(prisma, 'Demo Tenant')).resolves.toEqual({
+      tenant: fallbackTenant,
+      created: true,
+    });
+    expect(updateMany).toHaveBeenCalledTimes(1);
   });
 });
