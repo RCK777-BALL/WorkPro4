@@ -1,8 +1,103 @@
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["mongodbDriver"]
+  provider = "prisma-client-js"
 }
+
 datasource db {
   provider = "mongodb"
   url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id   String @id @map("_id") @default(auto()) @db.ObjectId
+  name String
+  slug String @unique
+
+  users      User[]
+  assets     Asset[]
+  workOrders WorkOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("tenants")
+}
+
+model User {
+  id           String @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId     String @map("tenant_id") @db.ObjectId
+  email        String @unique
+  passwordHash String @map("password_hash")
+  name         String
+  role         String
+
+  tenant            Tenant      @relation(fields: [tenantId], references: [id])
+  createdWorkOrders WorkOrder[] @relation("CreatedBy")
+  assignedWorkOrders WorkOrder[] @relation("Assignee")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+enum WorkOrderPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum WorkOrderStatus {
+  requested
+  assigned
+  in_progress
+  completed
+  cancelled
+}
+
+model Asset {
+  id       String @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId String @map("tenant_id") @db.ObjectId
+  code     String
+  name     String
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  workOrders WorkOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("assets")
+}
+
+model WorkOrder {
+  id            String            @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId      String            @map("tenant_id") @db.ObjectId
+  title         String
+  description   String?
+  priority      WorkOrderPriority @default(medium)
+  status        WorkOrderStatus   @default(requested)
+  assetId       String?           @map("asset_id") @db.ObjectId
+  lineName      String?           @map("line_name")
+  stationNumber String?           @map("station_number")
+  assigneeId    String?           @map("assignee_id") @db.ObjectId
+  assignees     String[]          @default([])
+  checklists    Json?
+  partsUsed     Json?             @map("parts_used")
+  signatures    Json?
+  timeSpentMin  Int?              @map("time_spent_min")
+  photos        String[]          @default([])
+  failureCode   String?           @map("failure_code")
+  pmTaskId      String?           @map("pm_task_id") @db.ObjectId
+  createdBy     String            @map("created_by") @db.ObjectId
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  assignee      User?    @relation("Assignee", fields: [assigneeId], references: [id])
+  createdByUser User     @relation("CreatedBy", fields: [createdBy], references: [id])
+  asset         Asset?   @relation(fields: [assetId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("work_orders")
 }

@@ -220,7 +220,7 @@ async function ensureDemoUsers() {
   const tenantSlug = tenantName.toLowerCase().replace(/\s+/g, '-');
 
   const tenant = await prisma.tenant.upsert({
-    where: { name: tenantName },
+    where: { slug: tenantSlug },
     update: { name: tenantName, slug: tenantSlug },
     create: { name: tenantName, slug: tenantSlug },
 
