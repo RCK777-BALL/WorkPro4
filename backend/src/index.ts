@@ -1,5 +1,4 @@
-import path from 'path';
-import dotenv from 'dotenv';
+import './bootstrapEnv';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -20,12 +19,6 @@ import partRoutes from './routes/parts';
 import vendorRoutes from './routes/vendors';
 import searchRoutes from './routes/search';
 
-
-const envPath = path.resolve(__dirname, '../.env');
-
-// Load environment variables from backend/.env while still allowing real environment
-// variables to take precedence when they are already defined.
-dotenv.config({ path: envPath });
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5010;
