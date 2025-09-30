@@ -68,6 +68,7 @@ function validateAndFormatHex(hex: string, label: string): string {
 
   if (!HEX_24_REGEX.test(trimmed)) {
     failToNormalize(label, hex, 'Expected a 24-character hexadecimal string');
+
   }
 
   return trimmed.toLowerCase();
@@ -83,6 +84,7 @@ export function normalizeObjectId(value: NormalizableObjectId, label = 'ObjectId
 
     if (typeof input === 'string') {
       return validateAndFormatHex(input, currentLabel);
+
     }
 
     if (hasToHexString(input)) {
@@ -115,10 +117,12 @@ export function normalizeObjectId(value: NormalizableObjectId, label = 'ObjectId
       if (candidate._id != null) {
         return normalize(candidate._id, `${currentLabel}._id`);
       }
+
     }
 
     failToNormalize(currentLabel, input, 'Value could not be interpreted as an ObjectId');
   };
+
 
   return normalize(value, label);
 }

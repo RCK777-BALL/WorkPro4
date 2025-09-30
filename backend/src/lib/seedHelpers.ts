@@ -230,8 +230,8 @@ function normalizeUser(user: User): User {
   };
 }
 
-function ensureValidTenantId(tenantId: string): { tenantObjectId: ObjectId; tenantId: string } {
-  if (!tenantId || !ObjectId.isValid(tenantId)) {
+function ensureValidTenantId(tenantId: string): string {
+  if (!tenantId) {
     throw new Error('Invalid tenantId provided to ensureAdminNoTxn');
   }
 
@@ -241,6 +241,7 @@ function ensureValidTenantId(tenantId: string): { tenantObjectId: ObjectId; tena
     tenantObjectId,
     tenantId: normalizeObjectId(tenantObjectId, 'ensureValidTenantId.tenantObjectId'),
   };
+
 }
 
 async function applyRoles(
@@ -268,9 +269,11 @@ async function applyRoles(
 
 type MongoUserDocument = {
   _id: ObjectId;
-  tenant_id: ObjectId;
+  tenantId?: string;
+  tenant_id?: ObjectId | string;
   email: string;
-  password_hash: string;
+  password_hash?: string;
+  passwordHash?: string;
   name: string;
   role: string;
   roles?: string[];
@@ -278,23 +281,29 @@ type MongoUserDocument = {
   updatedAt?: Date | string;
 };
 
+interface UpsertUserRawArgs {
+  tenantId: string;
+  email: string;
+  name: string;
+  passwordHash: string;
+  roles: string[];
+}
+
 async function upsertUserRaw(
   prisma: PrismaClient,
-  tenantObjectId: ObjectId,
-  normalizedEmail: string,
-  name: string,
-  passwordHash: string,
-  roles: string[],
+  args: UpsertUserRawArgs,
   primaryRole: string,
 ): Promise<{ admin: User; created: boolean }> {
   const now = new Date();
+  const normalizedTenantId = normalizeObjectId(args.tenantId, 'tenantId');
+  const { email: normalizedEmail, name, passwordHash, roles } = args;
 
   const command = {
     findAndModify: 'users',
     query: { email: normalizedEmail },
     update: {
       $set: {
-        tenant_id: tenantObjectId,
+        tenantId: normalizedTenantId,
         email: normalizedEmail,
         name,
         password_hash: passwordHash,
@@ -321,11 +330,15 @@ async function upsertUserRaw(
     throw new Error('Failed to upsert admin user document.');
   }
 
+  const tenantIdSource = document.tenantId ?? document.tenant_id ?? normalizedTenantId;
+  const passwordHashSource = document.password_hash ?? document.passwordHash ?? passwordHash;
+
   const admin: User = {
     id: normalizeObjectId(document._id, 'MongoUserDocument._id'),
     tenantId: normalizeObjectId(document.tenant_id, 'MongoUserDocument.tenant_id'),
+
     email: normalizedEmail,
-    passwordHash: document.password_hash,
+    passwordHash: passwordHashSource,
     name: document.name,
     role: document.role,
     roles: document.roles ?? roles,
@@ -343,7 +356,7 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
   const normalizedEmail = normalizeEmail(email);
   const normalizedRoles = normalizeRoles(roles);
   const primaryRole = normalizedRoles[0];
-  const { tenantObjectId, tenantId: normalizedTenantId } = ensureValidTenantId(tenantId);
+  const normalizedTenantId = ensureValidTenantId(tenantId);
 
 
   let existing: User | null = null;
@@ -368,11 +381,13 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
   if (encounteredKnownError) {
     return upsertUserRaw(
       prisma,
-      tenantObjectId,
-      normalizedEmail,
-      name,
-      passwordHash,
-      normalizedRoles,
+      {
+        tenantId: normalizedTenantId,
+        email: normalizedEmail,
+        name,
+        passwordHash,
+        roles: normalizedRoles,
+      },
       primaryRole,
     );
   }
@@ -411,7 +426,7 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
           insert: 'users',
           documents: [
             {
-              tenant_id: tenantObjectId,
+              tenantId: normalizedTenantId,
               email: normalizedEmail,
               name,
               roles: normalizedRoles,
@@ -427,11 +442,13 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
 
         return upsertUserRaw(
           prisma,
-          tenantObjectId,
-          normalizedEmail,
-          name,
-          passwordHash,
-          normalizedRoles,
+          {
+            tenantId: normalizedTenantId,
+            email: normalizedEmail,
+            name,
+            passwordHash,
+            roles: normalizedRoles,
+          },
           primaryRole,
         );
       }
