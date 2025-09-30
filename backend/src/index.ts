@@ -144,7 +144,21 @@ async function seedDefaultsNoTxn(): Promise<void> {
   const workOrderDescription =
     process.env.SAMPLE_WORK_ORDER_DESCRIPTION?.trim() || 'Inspect the demo asset and confirm it is running.';
 
-  const { tenant } = await ensureTenantNoTxn(prisma, tenantName);
+  let tenantResult: Awaited<ReturnType<typeof ensureTenantNoTxn>>;
+
+  try {
+    tenantResult = await ensureTenantNoTxn(prisma, tenantName);
+  } catch (error) {
+    console.error('[seed] failed to ensure default tenant before admin creation:', error);
+    return;
+  }
+
+  const tenant = tenantResult.tenant;
+
+  if (!tenant?.id) {
+    console.error('[seed] tenant creation did not return a valid id. Skipping admin seeding.');
+    return;
+  }
   const passwordHash = await bcrypt.hash(adminPassword, 10);
   const { admin } = await ensureAdminNoTxn({
     prisma,
