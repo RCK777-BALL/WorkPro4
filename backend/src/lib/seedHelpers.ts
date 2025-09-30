@@ -390,7 +390,7 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
     try {
       const admin = await prisma.user.create({
         data: {
-          tenantId: normalizedTenantId,
+          tenant: { connect: { id: normalizedTenantId } },
           email: normalizedEmail,
           name,
           roles: normalizedRoles,
@@ -454,7 +454,7 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
   const admin = await prisma.user.update({
     where: { id: existing.id },
     data: {
-      tenantId: normalizedTenantId,
+      tenant: { connect: { id: normalizedTenantId } },
       email: normalizedEmail,
       name,
       roles: normalizedRoles,
