@@ -111,6 +111,23 @@ describe('ensureAdminNoTxn', () => {
     const roles = ['ADMIN'];
     const passwordHash = 'hash';
 
+    const existingUser = {
+      id: 'user-1',
+      tenantId,
+      email,
+      name: 'Old Name',
+      roles: ['USER'],
+      passwordHash: 'old-hash',
+    } satisfies Record<string, unknown>;
+
+    const updatedUser = {
+      ...existingUser,
+      name,
+      roles,
+      passwordHash,
+    } satisfies Record<string, unknown>;
+
+
     const recoveryError = Object.assign(new Error('malformed document'), {
       code: 'P2023',
       clientVersion: 'test',
@@ -165,15 +182,10 @@ describe('ensureAdminNoTxn', () => {
     expect(backfillOperation.q.email).toBe(normalizedEmail);
     expect(Array.isArray(backfillOperation.u)).toBe(true);
 
-    expect(upsertCommand.findAndModify).toBe('users');
-    expect(upsertCommand.query).toEqual({ email: normalizedEmail });
-    expect(upsertCommand.update.$set).toMatchObject({
-      tenant_id: expect.anything(),
-      email: normalizedEmail,
-      name,
-      password_hash: passwordHash,
-      roles,
-      role: roles[0],
+    expect(update).toHaveBeenCalledWith({
+      where: { email },
+      data: { tenantId, name, roles, passwordHash },
+
     });
     expect(upsertCommand.upsert).toBe(true);
     expect(upsertCommand.new).toBe(true);

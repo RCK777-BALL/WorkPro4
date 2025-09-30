@@ -318,11 +318,8 @@ async function upsertUserRaw(
 }
 
 export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<EnsureAdminResult> {
-  const { prisma, tenantId: rawTenantId, email, name, passwordHash } = options;
-  const normalizedEmail = normalizeEmail(email);
-  const roles = normalizeRoles(options.roles);
-  const primaryRole = roles[0];
-  const { tenantObjectId, tenantId } = ensureValidTenantId(rawTenantId);
+  const { prisma, tenantId, email, name, passwordHash, roles } = options;
+
 
   let existing: User | null = null;
   let encounteredKnownError = false;
@@ -354,7 +351,8 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
           tenantId,
           email: normalizedEmail,
           name,
-          role: primaryRole,
+          roles,
+
           passwordHash,
         },
       });
@@ -374,8 +372,8 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
               email: normalizedEmail,
               name,
               roles,
-              role: primaryRole,
-              password_hash: passwordHash,
+              passwordHash,
+
               createdAt: now,
               updatedAt: now,
             },
@@ -397,7 +395,8 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
       tenantId,
       email: normalizedEmail,
       name,
-      role: primaryRole,
+      roles,
+
       passwordHash,
     },
   });

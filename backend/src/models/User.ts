@@ -5,7 +5,7 @@ export interface UserDoc extends Document {
   email: string;
   passwordHash: string;
   name?: string;
-  role: 'admin' | 'user';
+  roles: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -15,7 +15,7 @@ const UserSchema = new Schema<UserDoc>(
     email: { type: String, unique: true, required: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
     name: { type: String },
-    role: { type: String, enum: ['admin', 'user'], default: 'user', required: true },
+    roles: { type: [String], default: [], required: true },
   },
   { timestamps: true },
 );
