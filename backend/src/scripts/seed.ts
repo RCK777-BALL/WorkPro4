@@ -27,6 +27,7 @@ async function main(): Promise<void> {
     passwordHash,
     role: 'admin',
     tenantId: normalizedTenantId,
+
   });
 
   const workOrderTitle = 'Demo Work Order';
@@ -135,6 +136,7 @@ type EnsureAdminParams = {
   passwordHash: string;
   role: string;
   tenantId: NormalizableObjectId;
+
 };
 
 type EnsureAdminResult = {
@@ -155,6 +157,7 @@ function assertUserHasId(
 async function ensureAdminNoTxn(params: EnsureAdminParams): Promise<EnsureAdminResult> {
   const { email, name, passwordHash, role, tenantId } = params;
   const normalizedTenantId = normalizeObjectId(tenantId, 'ensureAdminNoTxn.tenantId');
+
   const existingUser = await prisma.user.findUnique({ where: { email } });
 
   if (!existingUser) {
@@ -166,6 +169,7 @@ async function ensureAdminNoTxn(params: EnsureAdminParams): Promise<EnsureAdminR
         role,
         roles: [role],
         tenantId: normalizedTenantId,
+
       },
     });
 
@@ -190,6 +194,7 @@ async function ensureAdminNoTxn(params: EnsureAdminParams): Promise<EnsureAdminR
     !needsRoleUpdate
   ) {
     assertUserHasId(existingUser, 'retrieving the existing admin user');
+
     return { user: existingUser, created: false, updated: false } as const;
   }
 
@@ -199,6 +204,7 @@ async function ensureAdminNoTxn(params: EnsureAdminParams): Promise<EnsureAdminR
       name,
       role,
       roles: [role],
+
       passwordHash,
       tenantId: normalizedTenantId,
     },
