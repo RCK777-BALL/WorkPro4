@@ -112,7 +112,7 @@ describe('ensureAdminNoTxn', () => {
     const email = 'Admin@example.com';
     const normalizedEmail = email.toLowerCase();
     const name = 'Admin';
-    const roles = ['ADMIN'];
+    const role = 'ADMIN';
     const passwordHash = 'hash';
 
     const existingUser = {
@@ -120,14 +120,14 @@ describe('ensureAdminNoTxn', () => {
       tenantId,
       email,
       name: 'Old Name',
-      roles: ['USER'],
+      role: 'USER',
       passwordHash: 'old-hash',
     } satisfies Record<string, unknown>;
 
     const updatedUser = {
       ...existingUser,
       name,
-      roles,
+      role,
       passwordHash,
     } satisfies Record<string, unknown>;
 
@@ -146,7 +146,7 @@ describe('ensureAdminNoTxn', () => {
       email: normalizedEmail,
       password_hash: passwordHash,
       name,
-      role: roles[0],
+      role,
       createdAt: now,
       updatedAt: now,
     };
@@ -171,7 +171,7 @@ describe('ensureAdminNoTxn', () => {
       email,
       name,
       passwordHash,
-      roles,
+      role,
     });
 
     expect(findUnique).toHaveBeenCalledTimes(1);
@@ -190,13 +190,17 @@ describe('ensureAdminNoTxn', () => {
     expect(upsertCommand.upsert).toBe(true);
     expect(upsertCommand.new).toBe(true);
 
+    const updateSet = upsertCommand.update.$set;
+    expect(updateSet.role).toBe(role);
+    expect(updateSet.roles).toBeUndefined();
+
     expect(result.created).toBe(false);
     expect(result.admin.id).toBe('507f1f77bcf86cd799439012');
     expect(result.admin.tenantId).toBe(tenantId);
     expect(result.admin.email).toBe(normalizedEmail);
     expect(result.admin.passwordHash).toBe(passwordHash);
     expect(result.admin.name).toBe(name);
-    expect(result.admin.role).toBe(roles[0]);
+    expect(result.admin.role).toBe(role);
     expect(result.admin.createdAt).toBeInstanceOf(Date);
     expect(result.admin.updatedAt).toBeInstanceOf(Date);
   });

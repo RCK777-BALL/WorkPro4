@@ -22,7 +22,7 @@ async function main(): Promise<void> {
     email: adminEmail,
     name: 'Admin',
     passwordHash,
-    roles: ['admin'],
+    role: 'admin',
     tenantId: tenant.id,
 
   });
@@ -131,7 +131,7 @@ type EnsureAdminParams = {
   email: string;
   name: string;
   passwordHash: string;
-  roles: string[];
+  role: string;
   tenantId: string;
 };
 
@@ -142,7 +142,8 @@ type EnsureAdminResult = {
 };
 
 async function ensureAdminNoTxn(params: EnsureAdminParams): Promise<EnsureAdminResult> {
-  const { email, name, passwordHash, roles, tenantId } = params;
+  const { email, name, passwordHash, role, tenantId } = params;
+  const normalizedRole = role.trim() || 'admin';
   const existingUser = await prisma.user.findUnique({ where: { email } });
 
   if (!existingUser) {
@@ -151,7 +152,7 @@ async function ensureAdminNoTxn(params: EnsureAdminParams): Promise<EnsureAdminR
         email,
         name,
         passwordHash,
-        roles,
+        role: normalizedRole,
         tenantId,
       },
     });
@@ -160,14 +161,11 @@ async function ensureAdminNoTxn(params: EnsureAdminParams): Promise<EnsureAdminR
   }
 
   const needsNameUpdate = existingUser.name !== name;
-  const existingRoles = existingUser.roles ?? [];
-  const needsRolesUpdate =
-    existingRoles.length !== roles.length ||
-    existingRoles.some((existingRole, index) => existingRole !== roles[index]);
+  const needsRoleUpdate = existingUser.role !== normalizedRole;
   const needsPasswordUpdate = existingUser.passwordHash !== passwordHash;
   const needsTenantUpdate = existingUser.tenantId !== tenantId;
 
-  if (!needsNameUpdate && !needsRolesUpdate && !needsPasswordUpdate && !needsTenantUpdate) {
+  if (!needsNameUpdate && !needsRoleUpdate && !needsPasswordUpdate && !needsTenantUpdate) {
     return { user: existingUser, created: false, updated: false } as const;
   }
 
@@ -175,7 +173,7 @@ async function ensureAdminNoTxn(params: EnsureAdminParams): Promise<EnsureAdminR
     where: { email },
     data: {
       name,
-      roles,
+      role: normalizedRole,
       passwordHash,
       tenantId,
     },
