@@ -4,6 +4,8 @@ import type { Tenant, User } from '@prisma/client';
 import bcrypt from '../lib/bcrypt';
 import { loadEnv } from '../config/env';
 import { prisma } from '../db';
+import { normalizeObjectId } from '../lib/normalizeObjectId';
+import type { NormalizableObjectId } from '../lib/normalizeObjectId';
 
 async function main(): Promise<void> {
   loadEnv();
@@ -14,6 +16,7 @@ async function main(): Promise<void> {
   const passwordHash = await bcrypt.hash('Admin@123', 10);
 
   const { tenant, created: tenantCreated } = await ensureTenantNoTxn(tenantName);
+  const normalizedTenantId = normalizeObjectId(tenant.id, 'tenant.id');
   const {
     user: adminUser,
     created: adminCreated,
@@ -22,9 +25,8 @@ async function main(): Promise<void> {
     email: adminEmail,
     name: 'Admin',
     passwordHash,
-    roles: ['admin'],
-    tenantId: tenant.id,
-
+    role: 'admin',
+    tenantId: normalizedTenantId,
   });
 
   const workOrderTitle = 'Demo Work Order';
@@ -131,8 +133,8 @@ type EnsureAdminParams = {
   email: string;
   name: string;
   passwordHash: string;
-  roles: string[];
-  tenantId: string;
+  role: string;
+  tenantId: NormalizableObjectId;
 };
 
 type EnsureAdminResult = {
@@ -141,8 +143,18 @@ type EnsureAdminResult = {
   updated: boolean;
 };
 
+function assertUserHasId(
+  user: Pick<User, 'id'> | null | undefined,
+  context: string,
+): asserts user is Pick<User, 'id'> & { id: string } {
+  if (!user || !user.id) {
+    throw new Error(`Prisma returned a user without an id while ${context}.`);
+  }
+}
+
 async function ensureAdminNoTxn(params: EnsureAdminParams): Promise<EnsureAdminResult> {
-  const { email, name, passwordHash, roles, tenantId } = params;
+  const { email, name, passwordHash, role, tenantId } = params;
+  const normalizedTenantId = normalizeObjectId(tenantId, 'ensureAdminNoTxn.tenantId');
   const existingUser = await prisma.user.findUnique({ where: { email } });
 
   if (!existingUser) {
@@ -151,23 +163,33 @@ async function ensureAdminNoTxn(params: EnsureAdminParams): Promise<EnsureAdminR
         email,
         name,
         passwordHash,
-        roles,
-        tenantId,
+        role,
+        roles: [role],
+        tenantId: normalizedTenantId,
       },
     });
+
+    assertUserHasId(user, 'creating the admin user');
 
     return { user, created: true, updated: false } as const;
   }
 
   const needsNameUpdate = existingUser.name !== name;
   const existingRoles = existingUser.roles ?? [];
-  const needsRolesUpdate =
-    existingRoles.length !== roles.length ||
-    existingRoles.some((existingRole, index) => existingRole !== roles[index]);
+  const needsRolesUpdate = existingRoles.length !== 1 || existingRoles[0] !== role;
   const needsPasswordUpdate = existingUser.passwordHash !== passwordHash;
-  const needsTenantUpdate = existingUser.tenantId !== tenantId;
+  const needsTenantUpdate = existingUser.tenantId !== normalizedTenantId;
+  const existingRole = (existingUser as User & { role?: string | null }).role ?? existingRoles[0];
+  const needsRoleUpdate = existingRole !== role;
 
-  if (!needsNameUpdate && !needsRolesUpdate && !needsPasswordUpdate && !needsTenantUpdate) {
+  if (
+    !needsNameUpdate &&
+    !needsRolesUpdate &&
+    !needsPasswordUpdate &&
+    !needsTenantUpdate &&
+    !needsRoleUpdate
+  ) {
+    assertUserHasId(existingUser, 'retrieving the existing admin user');
     return { user: existingUser, created: false, updated: false } as const;
   }
 
@@ -175,11 +197,14 @@ async function ensureAdminNoTxn(params: EnsureAdminParams): Promise<EnsureAdminR
     where: { email },
     data: {
       name,
-      roles,
+      role,
+      roles: [role],
       passwordHash,
-      tenantId,
+      tenantId: normalizedTenantId,
     },
   });
+
+  assertUserHasId(user, 'updating the admin user');
 
   return { user, created: false, updated: true } as const;
 }
