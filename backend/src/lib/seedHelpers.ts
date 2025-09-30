@@ -2,6 +2,8 @@ import { Prisma } from '@prisma/client';
 import type { PrismaClient, Tenant, User } from '@prisma/client';
 import { ObjectId } from 'mongodb';
 
+import { normalizeObjectId } from './normalizeObjectId';
+
 export interface EnsureTenantResult {
   tenant: Tenant;
   created: boolean;
@@ -144,10 +146,10 @@ export async function ensureTenantNoTxn(prisma: PrismaClient, tenantName: string
         data: { slug },
       });
 
-      return { tenant: updated, created: false };
+      return { tenant: normalizeTenant(updated), created: false };
     }
 
-    return { tenant: existing, created: false };
+    return { tenant: normalizeTenant(existing), created: false };
   }
 
   try {
@@ -155,7 +157,7 @@ export async function ensureTenantNoTxn(prisma: PrismaClient, tenantName: string
       data: { name: tenantName, slug },
     });
 
-    return { tenant, created: true };
+    return { tenant: normalizeTenant(tenant), created: true };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2031') {
       const now = new Date();
@@ -177,7 +179,7 @@ export async function ensureTenantNoTxn(prisma: PrismaClient, tenantName: string
       const tenant = await prisma.tenant.findUnique({ where: { slug } });
 
       if (tenant) {
-        return { tenant, created: true };
+        return { tenant: normalizeTenant(tenant), created: true };
       }
     }
 
@@ -213,6 +215,21 @@ function normalizeRoles(roles: string[]): string[] {
   return Array.from(new Set(sanitized));
 }
 
+function normalizeTenant(tenant: Tenant): Tenant {
+  return {
+    ...tenant,
+    id: normalizeObjectId(tenant.id),
+  };
+}
+
+function normalizeUser(user: User): User {
+  return {
+    ...user,
+    id: normalizeObjectId(user.id),
+    tenantId: normalizeObjectId(user.tenantId),
+  };
+}
+
 function ensureValidTenantId(tenantId: string): { tenantObjectId: ObjectId; tenantId: string } {
   if (!tenantId || !ObjectId.isValid(tenantId)) {
     throw new Error('Invalid tenantId provided to ensureAdminNoTxn');
@@ -220,7 +237,7 @@ function ensureValidTenantId(tenantId: string): { tenantObjectId: ObjectId; tena
 
   const tenantObjectId = new ObjectId(tenantId);
 
-  return { tenantObjectId, tenantId: tenantObjectId.toString() };
+  return { tenantObjectId, tenantId: normalizeObjectId(tenantObjectId) };
 }
 
 async function applyRoles(
@@ -302,8 +319,8 @@ async function upsertUserRaw(
   }
 
   const admin: User = {
-    id: document._id.toString(),
-    tenantId: document.tenant_id.toString(),
+    id: normalizeObjectId(document._id),
+    tenantId: normalizeObjectId(document.tenant_id),
     email: normalizedEmail,
     passwordHash: document.password_hash,
     name: document.name,
@@ -315,7 +332,7 @@ async function upsertUserRaw(
 
   const created = Boolean(result.lastErrorObject?.upserted) || result.lastErrorObject?.updatedExisting === false;
 
-  return { admin, created };
+  return { admin: normalizeUser(admin), created };
 }
 
 export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<EnsureAdminResult> {
@@ -370,15 +387,17 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
         },
       });
 
-      await applyRoles(prisma, admin.id, normalizedRoles, primaryRole);
+      const normalizedAdmin = normalizeUser({
+        ...admin,
+        tenantId: normalizedTenantId,
+        email: normalizedEmail,
+        roles: normalizedRoles,
+      });
+
+      await applyRoles(prisma, normalizedAdmin.id, normalizedRoles, primaryRole);
 
       return {
-        admin: {
-          ...admin,
-          tenantId: normalizedTenantId,
-          email: normalizedEmail,
-          roles: normalizedRoles,
-        },
+        admin: normalizedAdmin,
         created: true,
       };
     } catch (error) {
@@ -430,15 +449,17 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
     },
   });
 
-  await applyRoles(prisma, admin.id, normalizedRoles, primaryRole);
+  const normalizedAdmin = normalizeUser({
+    ...admin,
+    tenantId: normalizedTenantId,
+    email: normalizedEmail,
+    roles: normalizedRoles,
+  });
+
+  await applyRoles(prisma, normalizedAdmin.id, normalizedRoles, primaryRole);
 
   return {
-    admin: {
-      ...admin,
-      tenantId: normalizedTenantId,
-      email: normalizedEmail,
-      roles: normalizedRoles,
-    },
+    admin: normalizedAdmin,
     created: false,
   };
 }

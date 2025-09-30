@@ -14,8 +14,12 @@ vi.mock('mongodb', () => ({
       return this.value;
     }
 
+    toHexString(): string {
+      return this.value;
+    }
+
     static isValid(value: string): boolean {
-      return Boolean(value);
+      return typeof value === 'string' && value.length === 24;
     }
   },
 }));
@@ -59,7 +63,11 @@ describe('ensureTenantNoTxn', () => {
 
   it('creates a tenant with a slug when none exists', async () => {
     findUnique.mockResolvedValue(null);
-    const createdTenant = { id: 'tenant-1', name: 'Demo Tenant', slug: 'demo-tenant' };
+    const createdTenant = {
+      id: '507f1f77bcf86cd799439011',
+      name: 'Demo Tenant',
+      slug: 'demo-tenant',
+    };
     create.mockResolvedValue(createdTenant);
 
     const result = await ensureTenantNoTxn(prisma, 'Demo Tenant');
@@ -75,7 +83,11 @@ describe('ensureTenantNoTxn', () => {
   });
 
   it('returns the existing tenant when it already has a slug', async () => {
-    const existingTenant = { id: 'tenant-1', name: 'Demo Tenant', slug: 'demo-tenant' };
+    const existingTenant = {
+      id: '507f1f77bcf86cd799439011',
+      name: 'Demo Tenant',
+      slug: 'demo-tenant',
+    };
     findUnique.mockResolvedValue(existingTenant);
 
     const result = await ensureTenantNoTxn(prisma, 'Demo Tenant');
@@ -86,7 +98,7 @@ describe('ensureTenantNoTxn', () => {
   });
 
   it('adds a slug to an existing tenant when missing', async () => {
-    const existingTenant = { id: 'tenant-1', name: 'Demo Tenant', slug: '' };
+    const existingTenant = { id: '507f1f77bcf86cd799439011', name: 'Demo Tenant', slug: '' };
     const updatedTenant = { ...existingTenant, slug: 'demo-tenant' };
     findUnique.mockResolvedValue(existingTenant);
     update.mockResolvedValue(updatedTenant);
@@ -104,7 +116,11 @@ describe('ensureTenantNoTxn', () => {
 
   it('falls back to a raw insert when create fails with P2031', async () => {
     const { Prisma } = await import('@prisma/client');
-    const fallbackTenant = { id: 'tenant-1', name: 'Demo Tenant', slug: 'demo-tenant' };
+    const fallbackTenant = {
+      id: '507f1f77bcf86cd799439011',
+      name: 'Demo Tenant',
+      slug: 'demo-tenant',
+    };
 
     findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(fallbackTenant);
     create.mockRejectedValueOnce(
@@ -163,7 +179,11 @@ describe('ensureTenantNoTxn', () => {
 
   it('backfills timestamps on tenants with null values before refetching', async () => {
     const { Prisma } = await import('@prisma/client');
-    const fallbackTenant = { id: 'tenant-1', name: 'Demo Tenant', slug: 'demo-tenant' };
+    const fallbackTenant = {
+      id: '507f1f77bcf86cd799439011',
+      name: 'Demo Tenant',
+      slug: 'demo-tenant',
+    };
 
     let timestampsBackfilled = false;
 
