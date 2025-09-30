@@ -61,6 +61,60 @@ async function backfillTenantTimestamps(
   await prisma.$runCommandRaw(updateCommand as Prisma.InputJsonObject);
 }
 
+async function backfillUserTimestamps(
+  prisma: PrismaClient,
+  now: Date,
+  email?: string,
+): Promise<void> {
+  const missingTimestampFilter = {
+    $or: [
+      { createdAt: { $exists: false } },
+      { createdAt: { $type: 10 } },
+      { createdAt: { $type: 'string' } },
+      { updatedAt: { $exists: false } },
+      { updatedAt: { $type: 10 } },
+      { updatedAt: { $type: 'string' } },
+    ],
+  } satisfies Record<string, unknown>;
+
+  const query = {
+    ...(email ? { email } : {}),
+    ...missingTimestampFilter,
+  } satisfies Record<string, unknown>;
+
+  const updateCommand = {
+    update: 'users',
+    updates: [
+      {
+        q: query,
+        u: [
+          {
+            $set: {
+              createdAt: {
+                $cond: [
+                  { $eq: [{ $type: '$createdAt' }, 'string'] },
+                  { $toDate: '$createdAt' },
+                  { $ifNull: ['$createdAt', now] },
+                ],
+              },
+              updatedAt: {
+                $cond: [
+                  { $eq: [{ $type: '$updatedAt' }, 'string'] },
+                  { $toDate: '$updatedAt' },
+                  { $ifNull: ['$updatedAt', now] },
+                ],
+              },
+            },
+          },
+        ],
+        multi: true,
+      },
+    ],
+  } satisfies Record<string, unknown>;
+
+  await prisma.$runCommandRaw(updateCommand as Prisma.InputJsonObject);
+}
+
 export async function ensureTenantNoTxn(prisma: PrismaClient, tenantName: string): Promise<EnsureTenantResult> {
   const slug = tenantName.toLowerCase().replace(/\s+/g, '-');
   let existing: Tenant | null = null;
@@ -148,7 +202,24 @@ export interface EnsureAdminResult {
 export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<EnsureAdminResult> {
   const { prisma, tenantId, email, name, passwordHash, role } = options;
 
-  const existing = await prisma.user.findUnique({ where: { email } });
+  let existing: User | null = null;
+
+  try {
+    existing = await prisma.user.findUnique({ where: { email } });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      (error.code === 'P2032' || error.code === 'P2023')
+    ) {
+      const now = new Date();
+
+      await backfillUserTimestamps(prisma, now, email);
+
+      existing = await prisma.user.findUnique({ where: { email } });
+    } else {
+      throw error;
+    }
+  }
 
   if (!existing) {
     try {
@@ -181,6 +252,8 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
             },
           ],
         } as Prisma.InputJsonObject);
+
+        await backfillUserTimestamps(prisma, now, email);
 
         const admin = await prisma.user.findUnique({ where: { email } });
 
