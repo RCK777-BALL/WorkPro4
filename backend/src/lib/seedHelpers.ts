@@ -218,15 +218,15 @@ function normalizeRoles(roles: string[]): string[] {
 function normalizeTenant(tenant: Tenant): Tenant {
   return {
     ...tenant,
-    id: normalizeObjectId(tenant.id),
+    id: normalizeObjectId(tenant.id, 'tenant.id'),
   };
 }
 
 function normalizeUser(user: User): User {
   return {
     ...user,
-    id: normalizeObjectId(user.id),
-    tenantId: normalizeObjectId(user.tenantId),
+    id: normalizeObjectId(user.id, 'user.id'),
+    tenantId: normalizeObjectId(user.tenantId, 'user.tenantId'),
   };
 }
 
@@ -237,7 +237,10 @@ function ensureValidTenantId(tenantId: string): { tenantObjectId: ObjectId; tena
 
   const tenantObjectId = new ObjectId(tenantId);
 
-  return { tenantObjectId, tenantId: normalizeObjectId(tenantObjectId) };
+  return {
+    tenantObjectId,
+    tenantId: normalizeObjectId(tenantObjectId, 'ensureValidTenantId.tenantObjectId'),
+  };
 }
 
 async function applyRoles(
@@ -319,8 +322,8 @@ async function upsertUserRaw(
   }
 
   const admin: User = {
-    id: normalizeObjectId(document._id),
-    tenantId: normalizeObjectId(document.tenant_id),
+    id: normalizeObjectId(document._id, 'MongoUserDocument._id'),
+    tenantId: normalizeObjectId(document.tenant_id, 'MongoUserDocument.tenant_id'),
     email: normalizedEmail,
     passwordHash: document.password_hash,
     name: document.name,

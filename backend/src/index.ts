@@ -161,7 +161,7 @@ async function seedDefaultsNoTxn(): Promise<void> {
     return;
   }
 
-  const tenantId = normalizeObjectId(tenant.id);
+  const tenantId = normalizeObjectId(tenant.id, 'seedDefaultsNoTxn.tenant.id');
   const passwordHash = await bcrypt.hash(adminPassword, 10);
   const { admin } = await ensureAdminNoTxn({
     prisma,
@@ -178,7 +178,7 @@ async function seedDefaultsNoTxn(): Promise<void> {
     return;
   }
 
-  const adminId = normalizeObjectId(admin.id);
+  const adminId = normalizeObjectId(admin.id, 'seedDefaultsNoTxn.admin.id');
 
   console.log('[seed] normalized ids:', { tenantId, adminId });
 
