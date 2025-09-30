@@ -457,7 +457,7 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
       tenant: { connect: { id: normalizedTenantId } },
       email: normalizedEmail,
       name,
-      roles: { set: normalizedRoles },
+      roles: normalizedRoles,
 
       passwordHash,
     },

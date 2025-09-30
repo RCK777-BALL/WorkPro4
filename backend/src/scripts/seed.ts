@@ -175,7 +175,7 @@ async function ensureAdminNoTxn(params: EnsureAdminParams): Promise<EnsureAdminR
     where: { email },
     data: {
       name,
-      roles: { set: roles },
+      roles,
       passwordHash,
       tenantId,
     },
