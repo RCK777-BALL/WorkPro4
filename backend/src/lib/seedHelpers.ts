@@ -218,15 +218,15 @@ function normalizeRoles(roles: string[]): string[] {
 function normalizeTenant(tenant: Tenant): Tenant {
   return {
     ...tenant,
-    id: normalizeObjectId(tenant.id),
+    id: normalizeObjectId(tenant.id, 'tenant.id'),
   };
 }
 
 function normalizeUser(user: User): User {
   return {
     ...user,
-    id: normalizeObjectId(user.id),
-    tenantId: normalizeObjectId(user.tenantId),
+    id: normalizeObjectId(user.id, 'user.id'),
+    tenantId: normalizeObjectId(user.tenantId, 'user.tenantId'),
   };
 }
 
@@ -235,7 +235,13 @@ function ensureValidTenantId(tenantId: string): string {
     throw new Error('Invalid tenantId provided to ensureAdminNoTxn');
   }
 
-  return normalizeObjectId(tenantId, 'tenantId');
+  const tenantObjectId = new ObjectId(tenantId);
+
+  return {
+    tenantObjectId,
+    tenantId: normalizeObjectId(tenantObjectId, 'ensureValidTenantId.tenantObjectId'),
+  };
+
 }
 
 async function applyRoles(
@@ -328,8 +334,9 @@ async function upsertUserRaw(
   const passwordHashSource = document.password_hash ?? document.passwordHash ?? passwordHash;
 
   const admin: User = {
-    id: normalizeObjectId(document._id),
-    tenantId: normalizeObjectId(tenantIdSource, 'tenantId'),
+    id: normalizeObjectId(document._id, 'MongoUserDocument._id'),
+    tenantId: normalizeObjectId(document.tenant_id, 'MongoUserDocument.tenant_id'),
+
     email: normalizedEmail,
     passwordHash: passwordHashSource,
     name: document.name,
