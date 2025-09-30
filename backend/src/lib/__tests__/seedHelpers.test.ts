@@ -12,8 +12,12 @@ vi.mock('mongodb', () => ({
       return this.value;
     }
 
+    toHexString(): string {
+      return this.value;
+    }
+
     static isValid(value: string): boolean {
-      return Boolean(value);
+      return typeof value === 'string' && value.length === 24;
     }
   },
 }));
@@ -45,7 +49,7 @@ describe('ensureTenantNoTxn', () => {
   it('recovers from P2032 error by backfilling timestamps and returns the tenant', async () => {
     const tenantName = 'Acme Corp';
     const slug = tenantName.toLowerCase().replace(/\s+/g, '-');
-    const tenant = { id: 'tenant-1', name: tenantName, slug };
+    const tenant = { id: '507f1f77bcf86cd799439011', name: tenantName, slug };
 
     const recoveryError = Object.assign(new Error('missing timestamps'), {
       code: 'P2032',
@@ -104,7 +108,7 @@ describe('ensureTenantNoTxn', () => {
 
 describe('ensureAdminNoTxn', () => {
   it('recovers from P2023 error by backfilling timestamps and upserting via raw command', async () => {
-    const tenantId = 'tenant-1';
+    const tenantId = '507f1f77bcf86cd799439011';
     const email = 'Admin@example.com';
     const normalizedEmail = email.toLowerCase();
     const name = 'Admin';
@@ -112,7 +116,7 @@ describe('ensureAdminNoTxn', () => {
     const passwordHash = 'hash';
 
     const existingUser = {
-      id: 'user-1',
+      id: '507f1f77bcf86cd799439012',
       tenantId,
       email,
       name: 'Old Name',
@@ -137,8 +141,8 @@ describe('ensureAdminNoTxn', () => {
     const now = new Date();
     const findUnique = vi.fn().mockRejectedValue(recoveryError as Prisma.PrismaClientKnownRequestError);
     const rawUser = {
-      _id: { toString: () => 'user-1' },
-      tenant_id: { toString: () => tenantId },
+      _id: { toString: () => '507f1f77bcf86cd799439012', toHexString: () => '507f1f77bcf86cd799439012' },
+      tenant_id: { toString: () => tenantId, toHexString: () => tenantId },
       email: normalizedEmail,
       password_hash: passwordHash,
       name,
@@ -187,7 +191,7 @@ describe('ensureAdminNoTxn', () => {
     expect(upsertCommand.new).toBe(true);
 
     expect(result.created).toBe(false);
-    expect(result.admin.id).toBe('user-1');
+    expect(result.admin.id).toBe('507f1f77bcf86cd799439012');
     expect(result.admin.tenantId).toBe(tenantId);
     expect(result.admin.email).toBe(normalizedEmail);
     expect(result.admin.passwordHash).toBe(passwordHash);
