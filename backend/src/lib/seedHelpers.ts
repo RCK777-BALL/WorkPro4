@@ -235,13 +235,7 @@ function ensureValidTenantId(tenantId: string): string {
     throw new Error('Invalid tenantId provided to ensureAdminNoTxn');
   }
 
-  const tenantObjectId = new ObjectId(tenantId);
-
-  return {
-    tenantObjectId,
-    tenantId: normalizeObjectId(tenantObjectId, 'ensureValidTenantId.tenantObjectId'),
-  };
-
+  return normalizeObjectId(tenantId, 'ensureValidTenantId.tenantId');
 }
 
 async function applyRoles(
