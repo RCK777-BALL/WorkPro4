@@ -9,6 +9,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { prisma, verifyDatabaseConnection } from './db';
 import { ensureJwtSecrets } from './config/auth';
 import { ensureAdminNoTxn, ensureTenantNoTxn } from './lib/seedHelpers';
+import { normalizeToObjectIdString } from './lib/ids';
 
 // Routes
 import authRoutes from './routes/auth';
@@ -159,10 +160,12 @@ async function seedDefaultsNoTxn(): Promise<void> {
     console.error('[seed] tenant creation did not return a valid id. Skipping admin seeding.');
     return;
   }
+
+  const tenantId = normalizeToObjectIdString(tenant.id);
   const passwordHash = await bcrypt.hash(adminPassword, 10);
   const { admin } = await ensureAdminNoTxn({
     prisma,
-    tenantId: tenant.id,
+    tenantId,
     email: adminEmail,
     name: adminName,
     passwordHash,
@@ -170,7 +173,14 @@ async function seedDefaultsNoTxn(): Promise<void> {
   });
 
   console.log('[seed] tenant+admin ready (non-transactional)');
-  console.log('[seed] ids:', { tenantId: tenant.id, adminId: admin.id });
+  if (!admin?.id) {
+    console.error('[seed] admin creation did not return a valid id. Skipping sample work order seeding.');
+    return;
+  }
+
+  const adminId = normalizeToObjectIdString(admin.id);
+
+  console.log('[seed] ids:', { tenantId, adminId });
 
   if (!seedWorkOrder) {
     return;
@@ -178,7 +188,7 @@ async function seedDefaultsNoTxn(): Promise<void> {
 
   const existingWorkOrder = await prisma.workOrder.findFirst({
     where: {
-      tenantId: tenant.id,
+      tenantId,
       title: workOrderTitle,
     },
   });
@@ -190,13 +200,13 @@ async function seedDefaultsNoTxn(): Promise<void> {
 
   const workOrder = await prisma.workOrder.create({
     data: {
-      tenantId: tenant.id,
+      tenantId,
       title: workOrderTitle,
       description: workOrderDescription,
       priority: 'medium',
       status: 'requested',
-      assignees: [admin.id],
-      createdBy: admin.id,
+      assignees: [adminId],
+      createdBy: adminId,
     },
   });
 
