@@ -275,7 +275,7 @@ async function ensureDemoUsers() {
       update: {
         passwordHash: defaultPassword,
         name: demoUser.name,
-        roles: demoUser.roles,
+        roles: { set: demoUser.roles },
         tenantId: tenant.id,
       },
       create: {
