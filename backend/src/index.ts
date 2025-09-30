@@ -170,6 +170,7 @@ async function seedDefaultsNoTxn(): Promise<void> {
   });
 
   console.log('[seed] tenant+admin ready (non-transactional)');
+  console.log('[seed] ids:', { tenantId: tenant.id, adminId: admin.id });
 
   if (!seedWorkOrder) {
     return;
