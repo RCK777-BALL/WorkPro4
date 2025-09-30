@@ -1,5 +1,27 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('mongodb', () => ({
+  ObjectId: class {
+    value: string;
+
+    constructor(value: string) {
+      this.value = value;
+    }
+
+    toString(): string {
+      return this.value;
+    }
+
+    toHexString(): string {
+      return this.value;
+    }
+
+    static isValid(value: string): boolean {
+      return typeof value === 'string' && value.length === 24;
+    }
+  },
+}));
+
 const originalDatabaseUrl = process.env.DATABASE_URL;
 const verifyDatabaseConnection = vi.fn();
 const ensureTenantNoTxn = vi.fn();

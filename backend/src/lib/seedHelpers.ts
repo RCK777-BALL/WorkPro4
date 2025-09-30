@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import type { PrismaClient, Tenant, User } from '@prisma/client';
-import { ObjectId } from 'mongodb';
+import type { ObjectId } from 'mongodb';
 
 import { normalizeObjectId } from './normalizeObjectId';
 
@@ -193,7 +193,7 @@ export interface EnsureAdminOptions {
   email: string;
   name: string;
   passwordHash: string;
-  roles: string[];
+  role: string;
 }
 
 export interface EnsureAdminResult {
@@ -205,14 +205,14 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-function normalizeRoles(roles: string[]): string[] {
-  const sanitized = roles.map((value) => value.trim()).filter((value) => value.length > 0);
+function normalizeRole(role: string): string {
+  const normalized = role.trim();
 
-  if (sanitized.length === 0) {
-    return ['admin'];
+  if (!normalized) {
+    return 'admin';
   }
 
-  return Array.from(new Set(sanitized));
+  return normalized;
 }
 
 function normalizeTenant(tenant: Tenant): Tenant {
@@ -238,29 +238,6 @@ function ensureValidTenantId(tenantId: string): string {
   return normalizeObjectId(tenantId, 'ensureValidTenantId.tenantId');
 }
 
-async function applyRoles(
-  prisma: PrismaClient,
-  userId: string,
-  roles: string[],
-  primaryRole: string,
-): Promise<void> {
-  await prisma.$runCommandRaw({
-    update: 'users',
-    updates: [
-      {
-        q: { _id: new ObjectId(userId) },
-        u: {
-          $set: {
-            roles,
-            role: primaryRole,
-          },
-        },
-        multi: false,
-      },
-    ],
-  } as Prisma.InputJsonObject);
-}
-
 type MongoUserDocument = {
   _id: ObjectId;
   tenantId?: string;
@@ -270,7 +247,6 @@ type MongoUserDocument = {
   passwordHash?: string;
   name: string;
   role: string;
-  roles?: string[];
   createdAt?: Date | string;
   updatedAt?: Date | string;
 };
@@ -280,17 +256,17 @@ interface UpsertUserRawArgs {
   email: string;
   name: string;
   passwordHash: string;
-  roles: string[];
+  role: string;
 }
 
 async function upsertUserRaw(
   prisma: PrismaClient,
   args: UpsertUserRawArgs,
-  primaryRole: string,
 ): Promise<{ admin: User; created: boolean }> {
   const now = new Date();
   const normalizedTenantId = normalizeObjectId(args.tenantId, 'tenantId');
-  const { email: normalizedEmail, name, passwordHash, roles } = args;
+  const { email: normalizedEmail, name, passwordHash } = args;
+  const role = normalizeRole(args.role);
 
   const command = {
     findAndModify: 'users',
@@ -301,8 +277,7 @@ async function upsertUserRaw(
         email: normalizedEmail,
         name,
         password_hash: passwordHash,
-        roles,
-        role: primaryRole,
+        role,
         updatedAt: now,
       },
       $setOnInsert: {
@@ -327,15 +302,16 @@ async function upsertUserRaw(
   const tenantIdSource = document.tenantId ?? document.tenant_id ?? normalizedTenantId;
   const passwordHashSource = document.password_hash ?? document.passwordHash ?? passwordHash;
 
+  const adminRole = normalizeRole(document.role ?? role);
+
   const admin: User = {
     id: normalizeObjectId(document._id, 'MongoUserDocument._id'),
-    tenantId: normalizeObjectId(document.tenant_id, 'MongoUserDocument.tenant_id'),
+    tenantId: normalizeObjectId(tenantIdSource, 'MongoUserDocument.tenant_id'),
 
     email: normalizedEmail,
     passwordHash: passwordHashSource,
     name: document.name,
-    role: document.role,
-    roles: document.roles ?? roles,
+    role: adminRole,
     createdAt: document.createdAt ? new Date(document.createdAt) : now,
     updatedAt: document.updatedAt ? new Date(document.updatedAt) : now,
   };
@@ -346,11 +322,10 @@ async function upsertUserRaw(
 }
 
 export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<EnsureAdminResult> {
-  const { prisma, tenantId, email, name, passwordHash, roles } = options;
+  const { prisma, tenantId, email, name, passwordHash, role } = options;
   const normalizedEmail = normalizeEmail(email);
-  const normalizedRoles = normalizeRoles(roles);
-  const primaryRole = normalizedRoles[0];
   const normalizedTenantId = ensureValidTenantId(tenantId);
+  const normalizedRole = normalizeRole(role);
 
 
   let existing: User | null = null;
@@ -380,9 +355,8 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
         email: normalizedEmail,
         name,
         passwordHash,
-        roles: normalizedRoles,
+        role: normalizedRole,
       },
-      primaryRole,
     );
   }
 
@@ -390,10 +364,10 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
     try {
       const admin = await prisma.user.create({
         data: {
-          tenant: { connect: { id: normalizedTenantId } },
+          tenantId: normalizedTenantId,
           email: normalizedEmail,
           name,
-          roles: normalizedRoles,
+          role: normalizedRole,
 
           passwordHash,
         },
@@ -403,10 +377,8 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
         ...admin,
         tenantId: normalizedTenantId,
         email: normalizedEmail,
-        roles: normalizedRoles,
+        role: normalizedRole,
       });
-
-      await applyRoles(prisma, normalizedAdmin.id, normalizedRoles, primaryRole);
 
       return {
         admin: normalizedAdmin,
@@ -423,7 +395,7 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
               tenantId: normalizedTenantId,
               email: normalizedEmail,
               name,
-              roles: normalizedRoles,
+              role: normalizedRole,
               passwordHash,
 
               createdAt: now,
@@ -441,9 +413,8 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
             email: normalizedEmail,
             name,
             passwordHash,
-            roles: normalizedRoles,
+            role: normalizedRole,
           },
-          primaryRole,
         );
       }
 
@@ -452,25 +423,27 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
   }
 
   const admin = await prisma.user.update({
-    where: { id: existing.id },
+    where: { email: normalizedEmail },
     data: {
-      tenant: { connect: { id: normalizedTenantId } },
+      tenantId: normalizedTenantId,
       email: normalizedEmail,
       name,
-      roles: { set: normalizedRoles },
+      role: normalizedRole,
 
       passwordHash,
     },
   });
 
+  if (!admin.id) {
+    throw new Error('Failed to update admin user: missing id in response.');
+  }
+
   const normalizedAdmin = normalizeUser({
     ...admin,
     tenantId: normalizedTenantId,
     email: normalizedEmail,
-    roles: normalizedRoles,
+    role: normalizedRole,
   });
-
-  await applyRoles(prisma, normalizedAdmin.id, normalizedRoles, primaryRole);
 
   return {
     admin: normalizedAdmin,

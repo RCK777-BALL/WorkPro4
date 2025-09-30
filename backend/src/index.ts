@@ -172,7 +172,7 @@ async function seedDefaultsNoTxn(): Promise<void> {
     email: adminEmail,
     name: adminName,
     passwordHash,
-    roles: ['admin'],
+    role: 'admin',
   });
 
   console.log('[seed] tenant+admin ready (non-transactional)');
