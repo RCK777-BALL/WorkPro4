@@ -9,7 +9,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { prisma, verifyDatabaseConnection } from './db';
 import { ensureJwtSecrets } from './config/auth';
 import { ensureAdminNoTxn, ensureTenantNoTxn } from './lib/seedHelpers';
-import { normalizeToObjectIdString } from './lib/ids';
+import { normalizeObjectId } from './lib/normalizeObjectId';
 
 // Routes
 import authRoutes from './routes/auth';
@@ -161,7 +161,7 @@ async function seedDefaultsNoTxn(): Promise<void> {
     return;
   }
 
-  const tenantId = normalizeToObjectIdString(tenant.id);
+  const tenantId = normalizeObjectId(tenant.id);
   const passwordHash = await bcrypt.hash(adminPassword, 10);
   const { admin } = await ensureAdminNoTxn({
     prisma,
@@ -178,9 +178,9 @@ async function seedDefaultsNoTxn(): Promise<void> {
     return;
   }
 
-  const adminId = normalizeToObjectIdString(admin.id);
+  const adminId = normalizeObjectId(admin.id);
 
-  console.log('[seed] ids:', { tenantId, adminId });
+  console.log('[seed] normalized ids:', { tenantId, adminId });
 
   if (!seedWorkOrder) {
     return;
