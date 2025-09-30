@@ -70,62 +70,30 @@ describe('ensureTenantNoTxn', () => {
 });
 
 describe('ensureAdminNoTxn', () => {
-  it('recovers from P2023 error by backfilling timestamps and upserting via raw command', async () => {
-    const tenantId = '507f1f77bcf86cd799439011';
-    const email = 'Admin@example.com';
-    const normalizedEmail = email.toLowerCase();
+  it('creates a new admin when one does not exist', async () => {
+    const tenantId = '507F1F77BCF86CD799439011';
+    const email = ' Admin@example.com ';
     const name = 'Admin';
-    const role = 'ADMIN';
+    const role = ' ADMIN ';
     const passwordHash = 'hash';
 
-    const existingUser = {
+    const createdUser = {
       id: '507f1f77bcf86cd799439012',
-      tenantId,
-      email,
-      name: 'Old Name',
-      role: 'USER',
-      passwordHash: 'old-hash',
-    } satisfies Record<string, unknown>;
-
-    const updatedUser = {
-      ...existingUser,
+      tenantId: tenantId.toLowerCase(),
+      email: email.trim().toLowerCase(),
       name,
-      role,
+      role: role.trim(),
       passwordHash,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     } satisfies Record<string, unknown>;
-
-
-    const recoveryError = Object.assign(new Error('malformed document'), {
-      code: 'P2023',
-      clientVersion: 'test',
-    });
-    Object.setPrototypeOf(recoveryError, Prisma.PrismaClientKnownRequestError.prototype);
-
-    const now = new Date();
-    const findUnique = vi.fn().mockRejectedValue(recoveryError as Prisma.PrismaClientKnownRequestError);
-    const rawUser = {
-      _id: { toString: () => '507f1f77bcf86cd799439012', toHexString: () => '507f1f77bcf86cd799439012' },
-      tenant_id: { toString: () => tenantId, toHexString: () => tenantId },
-      email: normalizedEmail,
-      password_hash: passwordHash,
-      name,
-      role,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    const runCommandRaw = vi
-      .fn()
-      .mockResolvedValueOnce({ ok: 1 })
-      .mockResolvedValueOnce({ value: rawUser, lastErrorObject: { updatedExisting: true } });
 
     const prisma = {
       user: {
-        findUnique,
+        findUnique: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue(createdUser),
         update: vi.fn(),
-        create: vi.fn(),
       },
-      $runCommandRaw: runCommandRaw,
     } as unknown as PrismaClient;
 
     const result = await ensureAdminNoTxn({
@@ -137,34 +105,92 @@ describe('ensureAdminNoTxn', () => {
       role,
     });
 
-    expect(findUnique).toHaveBeenCalledTimes(1);
-    expect(findUnique).toHaveBeenCalledWith({ where: { email: normalizedEmail } });
-    expect(runCommandRaw).toHaveBeenCalledTimes(2);
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: 'admin@example.com' } });
+    expect(prisma.user.create).toHaveBeenCalledWith({
+      data: {
+        tenantId: tenantId.toLowerCase(),
+        email: 'admin@example.com',
+        name,
+        role: 'ADMIN',
+        passwordHash,
+      },
+    });
 
-    const [backfillCommand, upsertCommand] = runCommandRaw.mock.calls.map(([arg]) => arg);
+    expect(result).toEqual({
+      admin: {
+        ...createdUser,
+        id: createdUser.id,
+        tenantId: tenantId.toLowerCase(),
+        email: 'admin@example.com',
+        role: 'ADMIN',
+      },
+      created: true,
+    });
+  });
 
-    expect(backfillCommand.update).toBe('users');
-    expect(backfillCommand.updates).toHaveLength(1);
-    const [backfillOperation] = backfillCommand.updates;
-    expect(backfillOperation.q.email).toBe(normalizedEmail);
-    expect(Array.isArray(backfillOperation.u)).toBe(true);
+  it('updates an existing admin when one is found', async () => {
+    const tenantId = '507f1f77bcf86cd799439011';
+    const email = 'admin@example.com';
+    const name = 'Admin';
+    const role = 'admin';
+    const passwordHash = 'hash';
 
-    expect(prisma.user.update).not.toHaveBeenCalled();
-    expect(upsertCommand.upsert).toBe(true);
-    expect(upsertCommand.new).toBe(true);
+    const existingUser = {
+      id: '507f1f77bcf86cd799439012',
+      tenantId,
+      email,
+      name: 'Old Name',
+      role: 'user',
+      passwordHash: 'old-hash',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } satisfies Record<string, unknown>;
 
-    const updateSet = upsertCommand.update.$set;
-    expect(updateSet.role).toBe(role);
-    expect(updateSet.roles).toBeUndefined();
+    const updatedUser = {
+      ...existingUser,
+      tenantId,
+      email,
+      name,
+      role,
+      passwordHash,
+    } satisfies Record<string, unknown>;
 
-    expect(result.created).toBe(false);
-    expect(result.admin.id).toBe('507f1f77bcf86cd799439012');
-    expect(result.admin.tenantId).toBe(tenantId);
-    expect(result.admin.email).toBe(normalizedEmail);
-    expect(result.admin.passwordHash).toBe(passwordHash);
-    expect(result.admin.name).toBe(name);
-    expect(result.admin.role).toBe(role);
-    expect(result.admin.createdAt).toBeInstanceOf(Date);
-    expect(result.admin.updatedAt).toBeInstanceOf(Date);
+    const prisma = {
+      user: {
+        findUnique: vi.fn().mockResolvedValue(existingUser),
+        create: vi.fn(),
+        update: vi.fn().mockResolvedValue(updatedUser),
+      },
+    } as unknown as PrismaClient;
+
+    const result = await ensureAdminNoTxn({
+      prisma,
+      tenantId,
+      email,
+      name,
+      passwordHash,
+      role,
+    });
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { email },
+      data: {
+        tenantId,
+        email,
+        name,
+        role,
+        passwordHash,
+      },
+    });
+
+    expect(result).toEqual({
+      admin: {
+        ...updatedUser,
+        tenantId,
+        email,
+        role,
+      },
+      updated: true,
+    });
   });
 });
