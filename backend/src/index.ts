@@ -161,7 +161,10 @@ async function seedDefaultsNoTxn(): Promise<void> {
     return;
   }
 
-  const tenantId = normalizeObjectId(tenant.id, 'seedDefaultsNoTxn.tenant.id');
+  console.dir({ tenantRaw: tenant?.id, adminRaw: undefined }, { depth: 5 });
+
+  const tenantId = normalizeObjectId(tenant?.id, 'tenant.id');
+
   const passwordHash = await bcrypt.hash(adminPassword, 10);
   const { admin } = await ensureAdminNoTxn({
     prisma,
@@ -178,9 +181,12 @@ async function seedDefaultsNoTxn(): Promise<void> {
     return;
   }
 
-  const adminId = normalizeObjectId(admin.id, 'seedDefaultsNoTxn.admin.id');
+  console.dir({ tenantRaw: tenant?.id, adminRaw: admin?.id }, { depth: 5 });
 
-  console.log('[seed] normalized ids:', { tenantId, adminId });
+  const adminId = normalizeObjectId(admin?.id, 'admin.id');
+
+
+  console.log('[seed] ids:', { tenantId, adminId });
 
   if (!seedWorkOrder) {
     return;
