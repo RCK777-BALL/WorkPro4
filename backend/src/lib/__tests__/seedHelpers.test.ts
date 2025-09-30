@@ -182,11 +182,7 @@ describe('ensureAdminNoTxn', () => {
     expect(backfillOperation.q.email).toBe(normalizedEmail);
     expect(Array.isArray(backfillOperation.u)).toBe(true);
 
-    expect(update).toHaveBeenCalledWith({
-      where: { email },
-      data: { tenantId, name, roles, passwordHash },
-
-    });
+    expect(prisma.user.update).not.toHaveBeenCalled();
     expect(upsertCommand.upsert).toBe(true);
     expect(upsertCommand.new).toBe(true);
 

@@ -304,10 +304,11 @@ async function upsertUserRaw(
   const admin: User = {
     id: document._id.toString(),
     tenantId: document.tenant_id.toString(),
-    email: document.email,
+    email: normalizedEmail,
     passwordHash: document.password_hash,
     name: document.name,
     role: document.role,
+    roles: document.roles ?? roles,
     createdAt: document.createdAt ? new Date(document.createdAt) : now,
     updatedAt: document.updatedAt ? new Date(document.updatedAt) : now,
   };
@@ -319,6 +320,10 @@ async function upsertUserRaw(
 
 export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<EnsureAdminResult> {
   const { prisma, tenantId, email, name, passwordHash, roles } = options;
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedRoles = normalizeRoles(roles);
+  const primaryRole = normalizedRoles[0];
+  const { tenantObjectId, tenantId: normalizedTenantId } = ensureValidTenantId(tenantId);
 
 
   let existing: User | null = null;
@@ -341,25 +346,41 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
   }
 
   if (encounteredKnownError) {
-    return upsertUserRaw(prisma, tenantObjectId, normalizedEmail, name, passwordHash, roles, primaryRole);
+    return upsertUserRaw(
+      prisma,
+      tenantObjectId,
+      normalizedEmail,
+      name,
+      passwordHash,
+      normalizedRoles,
+      primaryRole,
+    );
   }
 
   if (!existing) {
     try {
       const admin = await prisma.user.create({
         data: {
-          tenantId,
+          tenantId: normalizedTenantId,
           email: normalizedEmail,
           name,
-          roles,
+          roles: normalizedRoles,
 
           passwordHash,
         },
       });
 
-      await applyRoles(prisma, admin.id, roles, primaryRole);
+      await applyRoles(prisma, admin.id, normalizedRoles, primaryRole);
 
-      return { admin: { ...admin, email: normalizedEmail }, created: true };
+      return {
+        admin: {
+          ...admin,
+          tenantId: normalizedTenantId,
+          email: normalizedEmail,
+          roles: normalizedRoles,
+        },
+        created: true,
+      };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2031') {
         const now = new Date();
@@ -371,7 +392,7 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
               tenant_id: tenantObjectId,
               email: normalizedEmail,
               name,
-              roles,
+              roles: normalizedRoles,
               passwordHash,
 
               createdAt: now,
@@ -382,7 +403,15 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
 
         await backfillUserTimestamps(prisma, now, normalizedEmail);
 
-        return upsertUserRaw(prisma, tenantObjectId, normalizedEmail, name, passwordHash, roles, primaryRole);
+        return upsertUserRaw(
+          prisma,
+          tenantObjectId,
+          normalizedEmail,
+          name,
+          passwordHash,
+          normalizedRoles,
+          primaryRole,
+        );
       }
 
       throw error;
@@ -392,16 +421,24 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
   const admin = await prisma.user.update({
     where: { id: existing.id },
     data: {
-      tenantId,
+      tenantId: normalizedTenantId,
       email: normalizedEmail,
       name,
-      roles,
+      roles: normalizedRoles,
 
       passwordHash,
     },
   });
 
-  await applyRoles(prisma, admin.id, roles, primaryRole);
+  await applyRoles(prisma, admin.id, normalizedRoles, primaryRole);
 
-  return { admin: { ...admin, email: normalizedEmail }, created: false };
+  return {
+    admin: {
+      ...admin,
+      tenantId: normalizedTenantId,
+      email: normalizedEmail,
+      roles: normalizedRoles,
+    },
+    created: false,
+  };
 }
