@@ -46,62 +46,25 @@ import type { PrismaClient } from '@prisma/client';
 import { ensureAdminNoTxn, ensureTenantNoTxn } from '../seedHelpers';
 
 describe('ensureTenantNoTxn', () => {
-  it('recovers from P2032 error by backfilling timestamps and returns the tenant', async () => {
+  it('finds an existing tenant before creating a new one', async () => {
     const tenantName = 'Acme Corp';
-    const slug = tenantName.toLowerCase().replace(/\s+/g, '-');
-    const tenant = { id: '507f1f77bcf86cd799439011', name: tenantName, slug };
+    const trimmedName = 'Acme Corp';
+    const tenant = { id: '507f1f77bcf86cd799439011', name: trimmedName };
 
-    const recoveryError = Object.assign(new Error('missing timestamps'), {
-      code: 'P2032',
-      clientVersion: 'test',
-    });
-    Object.setPrototypeOf(recoveryError, Prisma.PrismaClientKnownRequestError.prototype);
-
-    const findUnique = vi
-      .fn()
-      .mockRejectedValueOnce(recoveryError as Prisma.PrismaClientKnownRequestError)
-      .mockResolvedValueOnce(tenant);
-    const runCommandRaw = vi.fn().mockResolvedValue({ ok: 1 });
+    const findFirst = vi.fn().mockResolvedValueOnce(tenant);
+    const create = vi.fn();
 
     const prisma = {
       tenant: {
-        findUnique,
-        update: vi.fn(),
-        create: vi.fn(),
+        findFirst,
+        create,
       },
-      $runCommandRaw: runCommandRaw,
     } as unknown as PrismaClient;
 
-    const result = await ensureTenantNoTxn(prisma, tenantName);
+    const result = await ensureTenantNoTxn(prisma, `  ${tenantName}  `);
 
-    expect(findUnique).toHaveBeenCalledTimes(2);
-    expect(runCommandRaw).toHaveBeenCalledTimes(1);
-
-    const updateArgs = runCommandRaw.mock.calls[0][0];
-    expect(updateArgs.update).toBe('tenants');
-    expect(updateArgs.updates).toHaveLength(1);
-
-    const [update] = updateArgs.updates;
-    expect(update.q.slug).toBe(slug);
-    expect(update.q.$or).toEqual([
-      { createdAt: { $exists: false } },
-      { createdAt: { $type: 10 } },
-      { createdAt: { $type: 'string' } },
-      { updatedAt: { $exists: false } },
-      { updatedAt: { $type: 10 } },
-      { updatedAt: { $type: 'string' } },
-    ]);
-    expect(Array.isArray(update.u)).toBe(true);
-    expect(update.u).toHaveLength(1);
-
-    const [updateStage] = update.u;
-    const createdAtFallback = updateStage.$set.createdAt.$cond?.[2]?.$ifNull?.[1];
-    const updatedAtFallback = updateStage.$set.updatedAt.$cond?.[2]?.$ifNull?.[1];
-
-    expect(createdAtFallback).toBeInstanceOf(Date);
-    expect(updatedAtFallback).toBeInstanceOf(Date);
-    expect(update.multi).toBe(true);
-
+    expect(findFirst).toHaveBeenCalledWith({ where: { name: trimmedName } });
+    expect(create).not.toHaveBeenCalled();
     expect(result).toEqual({ tenant, created: false });
   });
 });
