@@ -191,7 +191,7 @@ export interface EnsureAdminOptions {
   email: string;
   name: string;
   passwordHash: string;
-  role: string;
+  roles: string[];
 }
 
 export interface EnsureAdminResult {
@@ -199,26 +199,152 @@ export interface EnsureAdminResult {
   created: boolean;
 }
 
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function normalizeRoles(roles: string[]): string[] {
+  const sanitized = roles.map((value) => value.trim()).filter((value) => value.length > 0);
+
+  if (sanitized.length === 0) {
+    return ['admin'];
+  }
+
+  return Array.from(new Set(sanitized));
+}
+
+function ensureValidTenantId(tenantId: string): { tenantObjectId: ObjectId; tenantId: string } {
+  if (!tenantId || !ObjectId.isValid(tenantId)) {
+    throw new Error('Invalid tenantId provided to ensureAdminNoTxn');
+  }
+
+  const tenantObjectId = new ObjectId(tenantId);
+
+  return { tenantObjectId, tenantId: tenantObjectId.toString() };
+}
+
+async function applyRoles(
+  prisma: PrismaClient,
+  userId: string,
+  roles: string[],
+  primaryRole: string,
+): Promise<void> {
+  await prisma.$runCommandRaw({
+    update: 'users',
+    updates: [
+      {
+        q: { _id: new ObjectId(userId) },
+        u: {
+          $set: {
+            roles,
+            role: primaryRole,
+          },
+        },
+        multi: false,
+      },
+    ],
+  } as Prisma.InputJsonObject);
+}
+
+type MongoUserDocument = {
+  _id: ObjectId;
+  tenant_id: ObjectId;
+  email: string;
+  password_hash: string;
+  name: string;
+  role: string;
+  roles?: string[];
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+};
+
+async function upsertUserRaw(
+  prisma: PrismaClient,
+  tenantObjectId: ObjectId,
+  normalizedEmail: string,
+  name: string,
+  passwordHash: string,
+  roles: string[],
+  primaryRole: string,
+): Promise<{ admin: User; created: boolean }> {
+  const now = new Date();
+
+  const command = {
+    findAndModify: 'users',
+    query: { email: normalizedEmail },
+    update: {
+      $set: {
+        tenant_id: tenantObjectId,
+        email: normalizedEmail,
+        name,
+        password_hash: passwordHash,
+        roles,
+        role: primaryRole,
+        updatedAt: now,
+      },
+      $setOnInsert: {
+        createdAt: now,
+      },
+    },
+    upsert: true,
+    new: true,
+  } satisfies Record<string, unknown>;
+
+  const result = (await prisma.$runCommandRaw(command as Prisma.InputJsonObject)) as {
+    value?: MongoUserDocument | null;
+    lastErrorObject?: { upserted?: ObjectId; updatedExisting?: boolean };
+  };
+
+  const document = result.value;
+
+  if (!document) {
+    throw new Error('Failed to upsert admin user document.');
+  }
+
+  const admin: User = {
+    id: document._id.toString(),
+    tenantId: document.tenant_id.toString(),
+    email: document.email,
+    passwordHash: document.password_hash,
+    name: document.name,
+    role: document.role,
+    createdAt: document.createdAt ? new Date(document.createdAt) : now,
+    updatedAt: document.updatedAt ? new Date(document.updatedAt) : now,
+  };
+
+  const created = Boolean(result.lastErrorObject?.upserted) || result.lastErrorObject?.updatedExisting === false;
+
+  return { admin, created };
+}
+
 export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<EnsureAdminResult> {
-  const { prisma, tenantId, email, name, passwordHash, role } = options;
+  const { prisma, tenantId: rawTenantId, email, name, passwordHash } = options;
+  const normalizedEmail = normalizeEmail(email);
+  const roles = normalizeRoles(options.roles);
+  const primaryRole = roles[0];
+  const { tenantObjectId, tenantId } = ensureValidTenantId(rawTenantId);
 
   let existing: User | null = null;
+  let encounteredKnownError = false;
 
   try {
-    existing = await prisma.user.findUnique({ where: { email } });
+    existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       (error.code === 'P2032' || error.code === 'P2023')
     ) {
+      encounteredKnownError = true;
       const now = new Date();
 
-      await backfillUserTimestamps(prisma, now, email);
-
-      existing = await prisma.user.findUnique({ where: { email } });
+      await backfillUserTimestamps(prisma, now, normalizedEmail);
     } else {
       throw error;
     }
+  }
+
+  if (encounteredKnownError) {
+    return upsertUserRaw(prisma, tenantObjectId, normalizedEmail, name, passwordHash, roles, primaryRole);
   }
 
   if (!existing) {
@@ -226,14 +352,16 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
       const admin = await prisma.user.create({
         data: {
           tenantId,
-          email,
+          email: normalizedEmail,
           name,
-          role,
+          role: primaryRole,
           passwordHash,
         },
       });
 
-      return { admin, created: true };
+      await applyRoles(prisma, admin.id, roles, primaryRole);
+
+      return { admin: { ...admin, email: normalizedEmail }, created: true };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2031') {
         const now = new Date();
@@ -242,26 +370,21 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
           insert: 'users',
           documents: [
             {
-              tenantId: new ObjectId(tenantId),
-              email,
+              tenant_id: tenantObjectId,
+              email: normalizedEmail,
               name,
-              role,
-              passwordHash,
+              roles,
+              role: primaryRole,
+              password_hash: passwordHash,
               createdAt: now,
               updatedAt: now,
             },
           ],
         } as Prisma.InputJsonObject);
 
-        await backfillUserTimestamps(prisma, now, email);
+        await backfillUserTimestamps(prisma, now, normalizedEmail);
 
-        const admin = await prisma.user.findUnique({ where: { email } });
-
-        if (admin) {
-          return { admin, created: true };
-        }
-
-        throw new Error('Admin not found after manual insert.');
+        return upsertUserRaw(prisma, tenantObjectId, normalizedEmail, name, passwordHash, roles, primaryRole);
       }
 
       throw error;
@@ -269,14 +392,17 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
   }
 
   const admin = await prisma.user.update({
-    where: { email },
+    where: { id: existing.id },
     data: {
       tenantId,
+      email: normalizedEmail,
       name,
-      role,
+      role: primaryRole,
       passwordHash,
     },
   });
 
-  return { admin, created: false };
+  await applyRoles(prisma, admin.id, roles, primaryRole);
+
+  return { admin: { ...admin, email: normalizedEmail }, created: false };
 }

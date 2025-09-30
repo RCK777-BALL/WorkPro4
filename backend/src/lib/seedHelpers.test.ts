@@ -2,6 +2,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ensureTenantNoTxn } from './seedHelpers';
 
+vi.mock('mongodb', () => ({
+  ObjectId: class {
+    value: string;
+
+    constructor(value: string) {
+      this.value = value;
+    }
+
+    toString(): string {
+      return this.value;
+    }
+
+    static isValid(value: string): boolean {
+      return Boolean(value);
+    }
+  },
+}));
+
 vi.mock('@prisma/client', () => {
   class PrismaClientKnownRequestError extends Error {
     public code: string;
@@ -118,24 +136,28 @@ describe('ensureTenantNoTxn', () => {
 
     expect(updateCommand.update).toBe('tenants');
     expect(updateCommand.updates).toHaveLength(1);
-    expect(updateCommand.updates[0]).toEqual({
-      q: {
-        $or: [
-          { createdAt: { $exists: false } },
-          { createdAt: { $type: 10 } },
-          { updatedAt: { $exists: false } },
-          { updatedAt: { $type: 10 } },
-        ],
-      },
-      u: {
-        $set: {
-          createdAt: expect.any(Date),
-          updatedAt: expect.any(Date),
-        },
-      },
-      multi: true,
 
+    const [updateOperation] = updateCommand.updates;
+    expect(updateOperation.q).toEqual({
+      $or: [
+        { createdAt: { $exists: false } },
+        { createdAt: { $type: 10 } },
+        { createdAt: { $type: 'string' } },
+        { updatedAt: { $exists: false } },
+        { updatedAt: { $type: 10 } },
+        { updatedAt: { $type: 'string' } },
+      ],
     });
+    expect(Array.isArray(updateOperation.u)).toBe(true);
+    expect(updateOperation.u).toHaveLength(1);
+
+    const [userUpdateStage] = updateOperation.u;
+    const userCreatedAtFallback = userUpdateStage.$set.createdAt.$cond?.[2]?.$ifNull?.[1];
+    const userUpdatedAtFallback = userUpdateStage.$set.updatedAt.$cond?.[2]?.$ifNull?.[1];
+
+    expect(userCreatedAtFallback).toBeInstanceOf(Date);
+    expect(userUpdatedAtFallback).toBeInstanceOf(Date);
+    expect(updateOperation.multi).toBe(true);
     expect(result).toEqual({ tenant: fallbackTenant, created: true });
   });
 
@@ -174,19 +196,20 @@ describe('ensureTenantNoTxn', () => {
           $or: [
             { createdAt: { $exists: false } },
             { createdAt: { $type: 10 } },
+            { createdAt: { $type: 'string' } },
             { updatedAt: { $exists: false } },
             { updatedAt: { $type: 10 } },
+            { updatedAt: { $type: 'string' } },
           ],
         });
-        expect(updateDescriptor?.u).toEqual({
-          $set: {
-            createdAt: expect.any(Date),
-            updatedAt: expect.any(Date),
-          },
-        });
+        expect(Array.isArray(updateDescriptor?.u)).toBe(true);
+        const [updateStage] = (updateDescriptor?.u ?? []) as Array<Record<string, any>>;
+        const createdFallback = updateStage?.$set?.createdAt?.$cond?.[2]?.$ifNull?.[1];
+        const updatedFallback = updateStage?.$set?.updatedAt?.$cond?.[2]?.$ifNull?.[1];
+        expect(createdFallback).toBeInstanceOf(Date);
+        expect(updatedFallback).toBeInstanceOf(Date);
         expect(updateDescriptor?.multi).toBe(true);
         timestampsBackfilled = true;
-
       }
 
       return Promise.resolve({ ok: 1 });
