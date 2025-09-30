@@ -250,14 +250,15 @@ async function ensureDemoUsers() {
   const tenantName = 'Demo Tenant';
   const tenantSlug = tenantName.toLowerCase().replace(/\s+/g, '-');
 
-  const tenant = await prisma.tenant.upsert({
-    where: { slug: tenantSlug },
-    update: { name: tenantName, slug: tenantSlug },
+  let tenant = await prisma.tenant.findFirst({ where: { slug: tenantSlug } });
 
-    create: { name: tenantName, slug: tenantSlug },
+  if (!tenant) {
+    tenant = await prisma.tenant.create({
+      data: { name: tenantName, slug: tenantSlug },
+    });
+  }
 
-  });
-
+  const tenantId = normalizeObjectId(tenant.id, 'demoUsers.tenantId');
   const defaultPassword = bcrypt.hashSync('Password123');
 
   const demoUsers = [
@@ -270,27 +271,33 @@ async function ensureDemoUsers() {
   const updatedUsers: string[] = [];
 
   for (const demoUser of demoUsers) {
-    const user = await prisma.user.upsert({
-      where: { email: demoUser.email },
-      update: {
-        passwordHash: defaultPassword,
-        name: demoUser.name,
-        roles: { set: demoUser.roles },
-        tenantId: tenant.id,
-      },
-      create: {
-        email: demoUser.email,
-        passwordHash: defaultPassword,
-        name: demoUser.name,
-        roles: demoUser.roles,
-        tenantId: tenant.id,
-      },
-    });
+    const existingUser = await prisma.user.findUnique({ where: { email: demoUser.email } });
 
-    if (user.createdAt.getTime() === user.updatedAt.getTime()) {
-      createdUsers.push(demoUser.email);
-    } else {
+    const userData = {
+      passwordHash: defaultPassword,
+      name: demoUser.name,
+      roles: demoUser.roles,
+      tenantId,
+    } as const;
+
+    if (existingUser) {
+      const userId = normalizeObjectId(existingUser.id, `demoUsers.user(${demoUser.email}).id`);
+
+      await prisma.user.update({
+        where: { id: userId },
+        data: userData,
+      });
+
       updatedUsers.push(demoUser.email);
+    } else {
+      await prisma.user.create({
+        data: {
+          email: demoUser.email,
+          ...userData,
+        },
+      });
+
+      createdUsers.push(demoUser.email);
     }
   }
 
