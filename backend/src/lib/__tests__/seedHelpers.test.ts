@@ -99,7 +99,7 @@ describe('ensureAdminNoTxn', () => {
     const tenantId = 'tenant-1';
     const email = 'admin@example.com';
     const name = 'Admin';
-    const role = 'ADMIN';
+    const roles = ['ADMIN'];
     const passwordHash = 'hash';
 
     const existingUser = {
@@ -107,14 +107,14 @@ describe('ensureAdminNoTxn', () => {
       tenantId,
       email,
       name: 'Old Name',
-      role: 'USER',
+      roles: ['USER'],
       passwordHash: 'old-hash',
     } satisfies Record<string, unknown>;
 
     const updatedUser = {
       ...existingUser,
       name,
-      role,
+      roles,
       passwordHash,
     } satisfies Record<string, unknown>;
 
@@ -147,7 +147,7 @@ describe('ensureAdminNoTxn', () => {
       email,
       name,
       passwordHash,
-      role,
+      roles,
     });
 
     expect(findUnique).toHaveBeenCalledTimes(2);
@@ -179,7 +179,7 @@ describe('ensureAdminNoTxn', () => {
 
     expect(update).toHaveBeenCalledWith({
       where: { email },
-      data: { tenantId, name, role, passwordHash },
+      data: { tenantId, name, roles, passwordHash },
     });
     expect(create).not.toHaveBeenCalled();
     expect(result).toEqual({ admin: updatedUser, created: false });

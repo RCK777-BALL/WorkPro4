@@ -152,7 +152,7 @@ async function seedDefaultsNoTxn(): Promise<void> {
     email: adminEmail,
     name: adminName,
     passwordHash,
-    role: 'admin',
+    roles: ['admin'],
   });
 
   console.log('[seed] tenant+admin ready (non-transactional)');
@@ -230,9 +230,9 @@ async function ensureDemoUsers() {
   const defaultPassword = bcrypt.hashSync('Password123');
 
   const demoUsers = [
-    { email: 'admin@demo.com', name: 'Admin User', role: 'admin' },
-    { email: 'planner@demo.com', name: 'Maintenance Planner', role: 'planner' },
-    { email: 'tech@demo.com', name: 'Maintenance Tech', role: 'tech' },
+    { email: 'admin@demo.com', name: 'Admin User', roles: ['admin'] },
+    { email: 'planner@demo.com', name: 'Maintenance Planner', roles: ['planner'] },
+    { email: 'tech@demo.com', name: 'Maintenance Tech', roles: ['tech'] },
   ];
 
   const createdUsers: string[] = [];
@@ -244,14 +244,14 @@ async function ensureDemoUsers() {
       update: {
         passwordHash: defaultPassword,
         name: demoUser.name,
-        role: demoUser.role,
+        roles: demoUser.roles,
         tenantId: tenant.id,
       },
       create: {
         email: demoUser.email,
         passwordHash: defaultPassword,
         name: demoUser.name,
-        role: demoUser.role,
+        roles: demoUser.roles,
         tenantId: tenant.id,
       },
     });

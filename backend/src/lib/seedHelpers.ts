@@ -191,7 +191,7 @@ export interface EnsureAdminOptions {
   email: string;
   name: string;
   passwordHash: string;
-  role: string;
+  roles: string[];
 }
 
 export interface EnsureAdminResult {
@@ -200,7 +200,7 @@ export interface EnsureAdminResult {
 }
 
 export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<EnsureAdminResult> {
-  const { prisma, tenantId, email, name, passwordHash, role } = options;
+  const { prisma, tenantId, email, name, passwordHash, roles } = options;
 
   let existing: User | null = null;
 
@@ -228,7 +228,7 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
           tenantId,
           email,
           name,
-          role,
+          roles,
           passwordHash,
         },
       });
@@ -245,7 +245,7 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
               tenantId: new ObjectId(tenantId),
               email,
               name,
-              role,
+              roles,
               passwordHash,
               createdAt: now,
               updatedAt: now,
@@ -273,7 +273,7 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
     data: {
       tenantId,
       name,
-      role,
+      roles,
       passwordHash,
     },
   });
