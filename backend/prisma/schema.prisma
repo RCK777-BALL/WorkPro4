@@ -74,6 +74,7 @@ model Asset {
 model WorkOrder {
   id            String            @id @map("_id") @default(auto()) @db.ObjectId
   tenantId      String            @map("tenant_id") @db.ObjectId
+  siteId        String?           @map("site_id") @db.ObjectId
   title         String
   description   String?
   priority      WorkOrderPriority @default(medium)
@@ -81,8 +82,11 @@ model WorkOrder {
   assetId       String?           @map("asset_id") @db.ObjectId
   lineName      String?           @map("line_name")
   stationNumber String?           @map("station_number")
-  assigneeId    String?           @map("assignee_id") @db.ObjectId
+  assignedTo    String?           @map("assignee_id") @db.ObjectId
   assignees     String[]          @default([])
+  dueDate       DateTime?         @map("due_date")
+  category      String?
+  attachments   Json?
   checklists    Json?
   partsUsed     Json?             @map("parts_used")
   signatures    Json?
@@ -90,11 +94,11 @@ model WorkOrder {
   photos        String[]          @default([])
   failureCode   String?           @map("failure_code")
   pmTaskId      String?           @map("pm_task_id") @db.ObjectId
-  createdBy     String            @map("created_by") @db.ObjectId
+  requestedBy   String            @map("created_by") @db.ObjectId
 
   tenant        Tenant   @relation(fields: [tenantId], references: [id])
-  assignee      User?    @relation("Assignee", fields: [assigneeId], references: [id])
-  createdByUser User     @relation("CreatedBy", fields: [createdBy], references: [id])
+  assignee      User?    @relation("Assignee", fields: [assignedTo], references: [id])
+  createdByUser User     @relation("CreatedBy", fields: [requestedBy], references: [id])
   asset         Asset?   @relation(fields: [assetId], references: [id])
 
 
@@ -102,4 +106,7 @@ model WorkOrder {
   updatedAt DateTime @updatedAt
 
   @@map("work_orders")
+  @@index([tenantId, siteId], map: "work_orders_tenant_site_idx")
+  @@index([tenantId, status], map: "work_orders_tenant_status_idx")
+  @@index([tenantId, dueDate], map: "work_orders_tenant_duedate_idx")
 }

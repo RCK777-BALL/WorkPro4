@@ -213,7 +213,9 @@ async function seedDefaultsNoTxn(): Promise<void> {
         priority: 'medium',
         status: 'requested',
         assignees: [adminId],
-        createdBy: adminId,
+        requestedBy: adminId,
+        assignedTo: adminId,
+        attachments: [],
       },
     });
 
