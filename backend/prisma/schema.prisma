@@ -30,7 +30,7 @@ model User {
   name         String
   role         String @default("user")
 
-  tenant            Tenant      @relation(fields: [tenantId], references: [id])
+  tenant            Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   createdWorkOrders WorkOrder[] @relation("CreatedBy")
   assignedWorkOrders WorkOrder[] @relation("Assignee")
 
@@ -67,7 +67,7 @@ model Asset {
   cost     Float?   @map("cost")
   status   String   @default("operational")
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   workOrders WorkOrder[]
 
 
@@ -98,7 +98,7 @@ model WorkOrder {
   pmTaskId      String?           @map("pm_task_id") @db.ObjectId
   createdBy     String            @map("created_by") @db.ObjectId
 
-  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   assignee      User?    @relation("Assignee", fields: [assigneeId], references: [id])
   createdByUser User     @relation("CreatedBy", fields: [createdBy], references: [id])
 
