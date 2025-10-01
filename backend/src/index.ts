@@ -213,7 +213,7 @@ async function seedDefaultsNoTxn(): Promise<void> {
         description: workOrderDescription,
         priority: 'medium',
         status: 'requested',
-        assignedTo: adminId,
+        assigneeId: adminId,
         createdBy: adminId,
 
       },

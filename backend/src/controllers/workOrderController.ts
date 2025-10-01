@@ -40,8 +40,8 @@ function serializeWorkOrder(workOrder: {
   priority: string;
   status: string;
   assetId: string | null;
-  requestedBy: string;
-  assignedTo: string | null;
+  createdBy: string;
+  assigneeId: string | null;
   dueDate: Date | null;
   category: string | null;
   attachments: Prisma.JsonValue | null;
@@ -61,8 +61,8 @@ function serializeWorkOrder(workOrder: {
     priority: workOrder.priority,
     status: workOrder.status,
     assetId: workOrder.assetId,
-    requestedBy: workOrder.requestedBy,
-    assignedTo: workOrder.assignedTo,
+    requestedBy: workOrder.createdBy,
+    assigneeId: workOrder.assigneeId,
     dueDate: workOrder.dueDate ? workOrder.dueDate.toISOString() : null,
     category: workOrder.category,
     attachments,
@@ -110,8 +110,8 @@ export async function createWorkOrder(req: TenantScopedRequest, res: Response) {
         priority: data.priority ?? 'medium',
         status: 'requested',
         assetId: data.assetId ?? null,
-        requestedBy: req.userId,
-        assignedTo: data.assignedTo ?? null,
+        createdBy: req.userId,
+        assigneeId: data.assigneeId ?? null,
         dueDate: data.dueDate ? new Date(data.dueDate) : null,
         category: data.category ?? null,
         attachments: (data.attachments ?? []) as Prisma.JsonValue,

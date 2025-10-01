@@ -22,7 +22,7 @@ const updateWorkOrderSchema = z.object({
   status: statusEnum.optional(),
   priority: priorityEnum.optional(),
   assetId: objectIdSchema.optional().nullable(),
-  assignedTo: z.union([objectIdSchema, z.null()]).optional(),
+  assigneeId: z.union([objectIdSchema, z.null()]).optional(),
   category: z.string().trim().max(120).optional().nullable(),
   dueDate: z
     .union([
@@ -49,7 +49,7 @@ const updateWorkOrderSchema = z.object({
 
 
 const workOrderInclude = {
-  assignedToUser: {
+  assignee: {
     select: {
       id: true,
       name: true,
@@ -69,12 +69,12 @@ function serializeWorkOrder(workOrder: WorkOrderWithRelations) {
     priority: workOrder.priority,
     status: workOrder.status,
     assetId: workOrder.assetId ?? null,
-    assignedTo: workOrder.assignedTo ?? null,
-    assignedToUser: workOrder.assignedToUser
+    assigneeId: workOrder.assigneeId ?? null,
+    assignee: workOrder.assignee
       ? {
-          id: workOrder.assignedToUser.id,
-          name: workOrder.assignedToUser.name,
-          email: workOrder.assignedToUser.email,
+          id: workOrder.assignee.id,
+          name: workOrder.assignee.name,
+          email: workOrder.assignee.email,
         }
       : null,
     category: workOrder.category ?? null,
@@ -128,7 +128,7 @@ router.post('/', asyncHandler(async (req: AuthRequest, res) => {
       status: (data.status ?? 'requested') as WorkOrderStatus,
       priority: data.priority ?? 'medium',
       assetId: data.assetId ?? undefined,
-      assignedTo: data.assignedTo ?? null,
+      assigneeId: data.assigneeId ?? null,
       category: data.category ?? undefined,
       dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
       attachments: data.attachments ?? [],
@@ -176,8 +176,8 @@ router.put('/:id', asyncHandler(async (req: AuthRequest, res) => {
     updateData.assetId = data.assetId ?? null;
   }
 
-  if ('assignedTo' in data) {
-    updateData.assignedTo = data.assignedTo ?? null;
+  if ('assigneeId' in data) {
+    updateData.assigneeId = data.assigneeId ?? null;
   }
 
   if ('category' in data) {

@@ -84,8 +84,8 @@ describe('workOrderController.createWorkOrder', () => {
       status: 'requested',
       assetId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
       asset: null,
-      assignedTo: null,
-      assignedToUser: null,
+      assigneeId: null,
+      assignee: null,
       category: null,
       attachments: [],
       dueDate: null,
@@ -102,7 +102,7 @@ describe('workOrderController.createWorkOrder', () => {
         description: 'Inspect the conveyor for issues',
         priority: 'high',
         assetId: 'AAAAAAAAAAAAAAAAAAAAAAAA',
-        assignedTo: 'BBBBBBBBBBBBBBBBBBBBBBBB',
+        assigneeId: 'BBBBBBBBBBBBBBBBBBBBBBBB',
         dueDate: now.toISOString(),
         category: 'maintenance',
         attachments: [
@@ -126,7 +126,7 @@ describe('workOrderController.createWorkOrder', () => {
         data: expect.objectContaining({
           assetId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
           attachments: [],
-          assignedTo: null,
+          assigneeId: null,
           category: undefined,
           dueDate: undefined,
           priority: 'medium',
@@ -148,7 +148,7 @@ describe('workOrderController.createWorkOrder', () => {
         status: 'requested',
         assetId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
         attachments: [],
-        assignedTo: null,
+        assigneeId: null,
         category: null,
         dueDate: null,
 
@@ -168,7 +168,7 @@ describe('workOrderController.createWorkOrder', () => {
         status: 'requested',
         assetId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
         requestedBy: 'user-1',
-        assignedTo: 'bbbbbbbbbbbbbbbbbbbbbbbb',
+        assigneeId: 'bbbbbbbbbbbbbbbbbbbbbbbb',
         dueDate: now.toISOString(),
         category: 'maintenance',
         attachments: [
