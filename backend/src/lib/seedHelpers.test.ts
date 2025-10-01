@@ -31,6 +31,8 @@ import { ensureTenantNoTxn } from './seedHelpers';
 describe('ensureTenantNoTxn', () => {
   const findFirst = vi.fn();
   const create = vi.fn();
+  const update = vi.fn();
+
   const prisma = {
     tenant: {
       findFirst,
@@ -41,6 +43,8 @@ describe('ensureTenantNoTxn', () => {
   beforeEach(() => {
     findFirst.mockReset();
     create.mockReset();
+    update.mockReset();
+
   });
 
   it('creates a tenant when one does not exist', async () => {
@@ -50,29 +54,46 @@ describe('ensureTenantNoTxn', () => {
 
     const result = await ensureTenantNoTxn(prisma, 'Demo Tenant');
 
-    expect(findFirst).toHaveBeenCalledWith({ where: { name: 'Demo Tenant' } });
-    expect(create).toHaveBeenCalledWith({ data: { name: 'Demo Tenant' } });
+    expect(create).toHaveBeenCalledWith({
+      data: {
+        name: 'Demo Tenant',
+        slug: 'demo-tenant',
+      },
+    });
     expect(result).toEqual({ tenant: createdTenant, created: true });
   });
 
-  it('trims whitespace before querying and creating', async () => {
-    const createdTenant = { id: 'tenant-id', name: 'Demo Tenant' };
-    findFirst.mockResolvedValue(null);
-    create.mockResolvedValue(createdTenant);
+  it('returns the existing tenant when it already has a slug', async () => {
+    const existingTenant = {
+      id: '507f1f77bcf86cd799439011',
+      name: 'Demo Tenant',
+      slug: 'demo-tenant',
+    };
+    findUnique.mockResolvedValue(existingTenant);
 
-    await ensureTenantNoTxn(prisma, '  Demo Tenant  ');
+    const result = await ensureTenantNoTxn(prisma, 'Demo Tenant');
+
+    expect(update).not.toHaveBeenCalled();
+    expect(result).toEqual({ tenant: existingTenant, created: false });
+  });
+
+  it('adds a slug to an existing tenant when missing', async () => {
+    const existingTenant = { id: '507f1f77bcf86cd799439011', name: 'Demo Tenant', slug: '' };
+    const updatedTenant = { ...existingTenant, slug: 'demo-tenant' };
+    findUnique.mockResolvedValue(existingTenant);
+    update.mockResolvedValue(updatedTenant);
+
+    const result = await ensureTenantNoTxn(prisma, 'Demo Tenant');
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: existingTenant.id },
+      data: { slug: 'demo-tenant' },
+    });
+    expect(result).toEqual({ tenant: updatedTenant, created: false });
+
 
     expect(findFirst).toHaveBeenCalledWith({ where: { name: 'Demo Tenant' } });
     expect(create).toHaveBeenCalledWith({ data: { name: 'Demo Tenant' } });
   });
 
-  it('returns the existing tenant when found', async () => {
-    const existingTenant = { id: 'tenant-id', name: 'Existing Tenant' };
-    findFirst.mockResolvedValue(existingTenant);
-
-    const result = await ensureTenantNoTxn(prisma, 'Existing Tenant');
-
-    expect(create).not.toHaveBeenCalled();
-    expect(result).toEqual({ tenant: existingTenant, created: false });
-  });
 });

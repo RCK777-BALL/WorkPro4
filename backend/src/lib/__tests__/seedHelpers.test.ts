@@ -40,126 +40,97 @@ vi.mock('@prisma/client', () => {
   };
 });
 
-import { Prisma } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
 
 import { ensureAdminNoTxn, ensureTenantNoTxn } from '../seedHelpers';
 
 describe('ensureTenantNoTxn', () => {
-  it('finds an existing tenant before creating a new one', async () => {
+   it('returns an existing tenant without performing raw updates', async () => {
     const tenantName = 'Acme Corp';
-    const trimmedName = 'Acme Corp';
-    const tenant = { id: '507f1f77bcf86cd799439011', name: trimmedName };
+    const slug = 'acme-corp';
+    const tenant = { id: '507F1F77BCF86CD799439011', name: tenantName, slug };
 
-    const findFirst = vi.fn().mockResolvedValueOnce(tenant);
+    const findUnique = vi.fn().mockResolvedValue(tenant);
+    const update = vi.fn();
     const create = vi.fn();
 
     const prisma = {
       tenant: {
-        findFirst,
+        findUnique,
+        update,
+        create,
+      },
+    } as unknown as PrismaClient;
+
+    const result = await ensureTenantNoTxn(prisma, tenantName);
+
+    expect(findUnique).toHaveBeenCalledWith({ where: { slug } });
+    expect(update).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      tenant: { id: '507f1f77bcf86cd799439011', name: tenantName, slug },
+      created: false,
+    });
+  });
+
+  it('creates a tenant when none exists', async () => {
+    const tenantName = 'New Tenant';
+    const slug = 'new-tenant';
+    const createdTenant = { id: '507F1F77BCF86CD799439012', name: tenantName, slug };
+
+    const findUnique = vi.fn().mockResolvedValue(null);
+    const create = vi.fn().mockResolvedValue(createdTenant);
+
+    const prisma = {
+      tenant: {
+        findUnique,
+        update: vi.fn(),
+
         create,
       },
     } as unknown as PrismaClient;
 
     const result = await ensureTenantNoTxn(prisma, `  ${tenantName}  `);
 
-    expect(findFirst).toHaveBeenCalledWith({ where: { name: trimmedName } });
-    expect(create).not.toHaveBeenCalled();
-    expect(result).toEqual({ tenant, created: false });
-  });
-});
-
-describe('ensureAdminNoTxn', () => {
-  it('creates a new admin when one does not exist', async () => {
-    const tenantId = '507F1F77BCF86CD799439011';
-    const email = ' Admin@example.com ';
-    const name = 'Admin';
-    const role = ' ADMIN ';
-    const passwordHash = 'hash';
-
-    const createdUser = {
-      id: '507f1f77bcf86cd799439012',
-      tenantId: tenantId.toLowerCase(),
-      email: email.trim().toLowerCase(),
-      name,
-      role: role.trim(),
-      passwordHash,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    } satisfies Record<string, unknown>;
-
-    const prisma = {
-      user: {
-        findUnique: vi.fn().mockResolvedValue(null),
-        create: vi.fn().mockResolvedValue(createdUser),
-        update: vi.fn(),
-      },
-    } as unknown as PrismaClient;
-
-    const result = await ensureAdminNoTxn({
-      prisma,
-      tenantId,
-      email,
-      name,
-      passwordHash,
-      role,
-    });
-
-    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: 'admin@example.com' } });
-    expect(prisma.user.create).toHaveBeenCalledWith({
-      data: {
-        tenantId: tenantId.toLowerCase(),
-        email: 'admin@example.com',
-        name,
-        role: 'ADMIN',
-        passwordHash,
-      },
-    });
-
+    expect(findUnique).toHaveBeenCalledWith({ where: { slug } });
+    expect(create).toHaveBeenCalledWith({ data: { name: tenantName, slug } });
     expect(result).toEqual({
-      admin: {
-        ...createdUser,
-        id: createdUser.id,
-        tenantId: tenantId.toLowerCase(),
-        email: 'admin@example.com',
-        role: 'ADMIN',
-      },
+      tenant: { id: '507f1f77bcf86cd799439012', name: tenantName, slug },
+
       created: true,
     });
   });
 
-  it('updates an existing admin when one is found', async () => {
-    const tenantId = '507f1f77bcf86cd799439011';
-    const email = 'admin@example.com';
+describe('ensureAdminNoTxn', () => {
+  it('creates an admin with normalized inputs when no user exists', async () => {
+    const tenantId = '507F1F77BCF86CD799439011';
+    const email = ' Admin@example.com ';
+    const normalizedEmail = 'admin@example.com';
+    const normalizedTenantId = '507f1f77bcf86cd799439011';
+
     const name = 'Admin';
     const role = 'admin';
     const passwordHash = 'hash';
 
-    const existingUser = {
-      id: '507f1f77bcf86cd799439012',
+    const findUnique = vi.fn().mockResolvedValue(null);
+    const create = vi.fn().mockResolvedValue({
+      id: '507F1F77BCF86CD799439012',
       tenantId,
       email,
-      name: 'Old Name',
-      role: 'user',
-      passwordHash: 'old-hash',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    } satisfies Record<string, unknown>;
 
-    const updatedUser = {
-      ...existingUser,
-      tenantId,
-      email,
       name,
       role,
       passwordHash,
-    } satisfies Record<string, unknown>;
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const update = vi.fn();
 
     const prisma = {
       user: {
-        findUnique: vi.fn().mockResolvedValue(existingUser),
-        create: vi.fn(),
-        update: vi.fn().mockResolvedValue(updatedUser),
+        findUnique,
+        create,
+        update,
       },
     } as unknown as PrismaClient;
 
@@ -172,25 +143,107 @@ describe('ensureAdminNoTxn', () => {
       role,
     });
 
-    expect(prisma.user.update).toHaveBeenCalledWith({
-      where: { email },
+    expect(findUnique).toHaveBeenCalledWith({ where: { email: normalizedEmail } });
+    expect(create).toHaveBeenCalledWith({
       data: {
-        tenantId,
-        email,
+        tenantId: normalizedTenantId,
+        email: normalizedEmail,
         name,
         role,
         passwordHash,
       },
     });
-
+    expect(update).not.toHaveBeenCalled();
     expect(result).toEqual({
-      admin: {
-        ...updatedUser,
-        tenantId,
-        email,
+      admin: expect.objectContaining({
+        id: '507f1f77bcf86cd799439012',
+        tenantId: normalizedTenantId,
+        email: normalizedEmail,
+        name,
         role,
+        passwordHash,
+        createdAt: expect.any(Date),
+        updatedAt: expect.any(Date),
+      }),
+      created: true,
+    });
+    expect(result.updated).toBeUndefined();
+  });
+
+  it('updates an existing admin with normalized inputs', async () => {
+    const tenantId = '507F1F77BCF86CD799439011';
+    const normalizedTenantId = '507f1f77bcf86cd799439011';
+    const email = 'Admin@example.com';
+    const normalizedEmail = 'admin@example.com';
+    const name = 'Admin';
+    const role = 'ADMIN';
+    const passwordHash = 'hash';
+
+    const findUnique = vi.fn().mockResolvedValue({
+      id: '507F1F77BCF86CD799439012',
+      tenantId,
+      email: 'admin@example.com',
+      name: 'Old Name',
+      role: 'USER',
+      passwordHash: 'old-hash',
+    });
+    const update = vi.fn().mockResolvedValue({
+      id: '507F1F77BCF86CD799439012',
+      tenantId: normalizedTenantId,
+      email: normalizedEmail,
+      name,
+      role,
+      passwordHash,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const create = vi.fn();
+
+    const prisma = {
+      user: {
+        findUnique,
+        update,
+        create,
+
       },
+    } as unknown as PrismaClient;
+
+    const result = await ensureAdminNoTxn({
+      prisma,
+      tenantId,
+      email,
+      name,
+      passwordHash,
+      role,
+    });
+
+    expect(findUnique).toHaveBeenCalledWith({ where: { email: normalizedEmail } });
+    expect(create).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith({
+      where: { email: normalizedEmail },
+      data: {
+        tenantId: normalizedTenantId,
+        email: normalizedEmail,
+
+        name,
+        role,
+        passwordHash,
+      },
+    });
+    expect(result).toEqual({
+      admin: expect.objectContaining({
+        id: '507f1f77bcf86cd799439012',
+        tenantId: normalizedTenantId,
+        email: normalizedEmail,
+        name,
+        role,
+        passwordHash,
+        createdAt: expect.any(Date),
+        updatedAt: expect.any(Date),
+      }),
       updated: true,
     });
+    expect(result.created).toBeUndefined();
+ main
   });
 });

@@ -8,74 +8,47 @@ export interface EnsureTenantResult {
   created: boolean;
 }
 
-async function backfillUserTimestamps(
-  prisma: PrismaClient,
-  now: Date,
-  email?: string,
-
-): Promise<void> {
-  const missingTimestampFilter = {
-    $or: [
-      { createdAt: { $exists: false } },
-      { createdAt: { $type: 10 } },
-      { createdAt: { $type: 'string' } },
-      { updatedAt: { $exists: false } },
-      { updatedAt: { $type: 10 } },
-      { updatedAt: { $type: 'string' } },
-    ],
-  } satisfies Record<string, unknown>;
-
-  const query = {
-    ...(email ? { email } : {}),
-
-    ...missingTimestampFilter,
-  } satisfies Record<string, unknown>;
-
-  const updateCommand = {
-    update: 'users',
-
-    updates: [
-      {
-        q: query,
-        u: [
-          {
-            $set: {
-              createdAt: {
-                $cond: [
-                  { $eq: [{ $type: '$createdAt' }, 'string'] },
-                  { $toDate: '$createdAt' },
-                  { $ifNull: ['$createdAt', now] },
-                ],
-              },
-              updatedAt: {
-                $cond: [
-                  { $eq: [{ $type: '$updatedAt' }, 'string'] },
-                  { $toDate: '$updatedAt' },
-                  { $ifNull: ['$updatedAt', now] },
-                ],
-              },
-            },
-          },
-        ],
-        multi: true,
-      },
-    ],
-  } satisfies Record<string, unknown>;
-
-  await prisma.$runCommandRaw(updateCommand as Prisma.InputJsonObject);
-}
-
 export async function ensureTenantNoTxn(prisma: PrismaClient, tenantName: string): Promise<EnsureTenantResult> {
-  const trimmed = tenantName.trim();
-  let tenant = await prisma.tenant.findFirst({ where: { name: trimmed } });
-  let created = false;
+  const slug = tenantName.toLowerCase().replace(/\s+/g, '-');
+  let existing: Tenant | null = null;
+
+  try {
+    existing = await prisma.tenant.findUnique({ where: { slug } });
+  } catch (error) {
+    if (
+      !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+      (error.code !== 'P2032' && error.code !== 'P2023')
+    ) {
+      throw error;
+    }
+  }
+
+  if (existing) {
+    if (!existing.slug) {
+      const updated = await prisma.tenant.update({
+        where: { id: existing.id },
+        data: { slug },
+      });
+
+      return { tenant: normalizeTenant(updated), created: false };
+    }
+
 
   if (!tenant) {
     tenant = await prisma.tenant.create({ data: { name: trimmed } });
     created = true;
   }
 
-  return { tenant, created };
+  try {
+    const tenant = await prisma.tenant.create({
+      data: { name: tenantName, slug },
+    });
+
+    return { tenant: normalizeTenant(tenant), created: true };
+  } catch (error) {
+    throw error;
+  }
+
 }
 
 export interface EnsureAdminOptions {
@@ -87,9 +60,12 @@ export interface EnsureAdminOptions {
   role: string;
 }
 
-export type EnsureAdminResult =
-  | { admin: User; created: true }
-  | { admin: User; updated: true };
+export interface EnsureAdminResult {
+  admin: User;
+  created?: boolean;
+  updated?: boolean;
+}
+
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -120,7 +96,12 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
     throw new Error('Invalid tenantId provided to ensureAdminNoTxn');
   }
 
-  const normalizedTenantId = normalizeObjectId(tenantId, 'ensureAdminNoTxn.tenantId');
+  return normalizeObjectId(tenantId, 'ensureValidTenantId.tenantId');
+}
+
+export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<EnsureAdminResult> {
+  const { prisma, tenantId, email, name, passwordHash, role } = options;
+
   const normalizedEmail = normalizeEmail(email);
   const normalizedRole = normalizeRole(role);
 
@@ -137,6 +118,11 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
       },
     });
 
+    if (!admin.id) {
+      throw new Error('Failed to create admin user: missing id in response.');
+    }
+
+
     const normalizedAdmin = normalizeUser({
       ...admin,
       tenantId: normalizedTenantId,
@@ -144,7 +130,11 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
       role: normalizedRole,
     });
 
-    return { admin: normalizedAdmin, created: true };
+    return {
+      admin: normalizedAdmin,
+      created: true,
+    };
+
   }
 
   const admin = await prisma.user.update({
@@ -165,5 +155,9 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
     role: normalizedRole,
   });
 
-  return { admin: normalizedAdmin, updated: true };
+  return {
+    admin: normalizedAdmin,
+    updated: true,
+  };
+
 }
