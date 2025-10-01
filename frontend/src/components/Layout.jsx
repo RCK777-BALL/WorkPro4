@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom';
 
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
+import { ToastViewport } from './ui/toast';
 
 export function Layout({ children }) {
   return (
@@ -13,6 +14,7 @@ export function Layout({ children }) {
           {children || <Outlet />}
         </main>
       </div>
+      <ToastViewport />
     </div>
   );
 }

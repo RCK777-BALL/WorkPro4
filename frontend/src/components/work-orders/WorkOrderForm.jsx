@@ -29,20 +29,22 @@ const workOrderSchema = z.object({
     .min(1, 'Add at least one checklist item'),
 });
 
-export function WorkOrderForm({ onClose, onSuccess }) {
+const DEFAULT_VALUES = {
+  title: '',
+  description: '',
+  priority: 'medium',
+  assetId: '',
+  lineName: '',
+  stationNumber: '',
+  assignees: [''],
+  checklists: [{ text: '', note: '' }],
+};
+
+export function WorkOrderForm({ onClose, onSuccess, defaultValues }) {
   const [submitError, setSubmitError] = useState('');
   const form = useForm({
     resolver: zodResolver(workOrderSchema),
-    defaultValues: {
-      title: '',
-      description: '',
-      priority: 'medium',
-      assetId: '',
-      lineName: '',
-      stationNumber: '',
-      assignees: [''],
-      checklists: [{ text: '', note: '' }],
-    },
+    defaultValues: { ...DEFAULT_VALUES, ...(defaultValues || {}) },
   });
 
   const {
