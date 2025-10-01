@@ -76,7 +76,7 @@ export function WorkOrderForm({ onClose, onSuccess, defaultValues }) {
 
   });
 
-  const { register, handleSubmit, setError, setValue, watch, formState } = form;
+  const { register, handleSubmit, reset, setError, setValue, watch, formState } = form;
   const { errors, isSubmitting } = formState;
 
   const attachments = watch('attachments') || [];
