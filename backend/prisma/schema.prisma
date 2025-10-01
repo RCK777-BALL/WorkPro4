@@ -28,7 +28,7 @@ model User {
   email        String @unique
   passwordHash String @map("password_hash")
   name         String
-  roles        String[] @default([])
+  role         String @default("user")
 
   tenant            Tenant      @relation(fields: [tenantId], references: [id])
   createdWorkOrders WorkOrder[] @relation("CreatedBy")
