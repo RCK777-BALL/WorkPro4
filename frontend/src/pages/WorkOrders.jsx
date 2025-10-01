@@ -51,9 +51,17 @@ export function WorkOrders() {
   const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
-    if (isFiltersOpen) {
-      setTempFilters({ ...advancedFilters });
+    if (!isFiltersOpen) {
+      return;
     }
+
+    setTempFilters((previous) => {
+      const hasChanges = Object.keys(advancedFilters).some((key) => {
+        return previous?.[key] !== advancedFilters[key];
+      });
+
+      return hasChanges ? { ...advancedFilters } : previous;
+    });
   }, [isFiltersOpen, advancedFilters]);
 
   const queryClient = useQueryClient();
