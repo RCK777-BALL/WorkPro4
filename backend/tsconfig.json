@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "lib": ["ES2020"],
+    "lib": ["ES2020", "DOM"],
     "module": "CommonJS",
     "moduleResolution": "Node",
     "esModuleInterop": true,
@@ -9,9 +9,8 @@
     "strict": true,
     "skipLibCheck": true,
     "outDir": "dist",
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "sourceMap": true
   },
-  "include": [
-    "src/**/*.ts"
-  ]
+  "include": ["src"]
 }
