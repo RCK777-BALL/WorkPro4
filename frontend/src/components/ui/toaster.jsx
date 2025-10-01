@@ -15,7 +15,7 @@ const variantStyles = {
 export function Toaster() {
   const [mounted, setMounted] = useState(false);
   const toasts = useToastStore((state) => state.toasts);
-  const dismiss = useToastStore((state) => state.dismiss);
+  const dismiss = useToastStore((state) => state.dismissToast);
 
   useEffect(() => {
     setMounted(true);
