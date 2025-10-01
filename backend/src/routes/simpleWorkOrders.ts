@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../db';
+import { normalizeToObjectIdString } from '../lib/ids';
 import { asyncHandler, fail, ok } from '../utils/response';
 
 const router = Router();
@@ -17,7 +18,26 @@ const workOrderCreateSchema = z.object({
     .enum(['requested', 'assigned', 'in_progress', 'completed', 'cancelled'])
     .optional()
     .default('requested'),
-  assetId: z.string().optional(),
+  assetId: z
+    .string()
+    .trim()
+    .superRefine((value, ctx) => {
+      try {
+        normalizeToObjectIdString(value);
+      } catch (error) {
+        if (error instanceof TypeError) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Invalid assetId',
+          });
+          return;
+        }
+
+        throw error;
+      }
+    })
+    .transform((value) => normalizeToObjectIdString(value))
+    .optional(),
   lineName: z.string().optional(),
   stationNumber: z.string().optional(),
   assignees: z.array(z.string()).optional(),
@@ -189,7 +209,19 @@ router.get(
 router.post(
   '/',
   asyncHandler(async (req, res) => {
-    const payload = workOrderCreateSchema.parse(req.body);
+    const parseResult = workOrderCreateSchema.safeParse(req.body);
+
+    if (!parseResult.success) {
+      const { fieldErrors } = parseResult.error.flatten();
+      const assetIdError = fieldErrors.assetId?.[0];
+      if (assetIdError) {
+        return fail(res, 400, assetIdError);
+      }
+
+      return fail(res, 400, 'Invalid request body');
+    }
+
+    const payload = parseResult.data;
 
     const defaultUser = await resolveDefaultUser();
     if (!defaultUser) {
@@ -207,7 +239,7 @@ router.post(
         status: payload.status,
         tenantId: defaultUser.tenantId,
         createdBy: defaultUser.id,
-        assetId: payload.assetId?.trim() || undefined,
+        assetId: payload.assetId ?? undefined,
         lineName: payload.lineName?.trim() || undefined,
         stationNumber: payload.stationNumber?.trim() || undefined,
         assignees: normalizedAssignees,
