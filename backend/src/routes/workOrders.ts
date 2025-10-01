@@ -15,6 +15,7 @@ const router = Router();
 
 router.use(authenticateToken);
 
+
 const updateWorkOrderSchema = z.object({
   title: z.string().trim().min(3).max(120).optional(),
   description: z.string().trim().max(4000).optional(),
@@ -45,6 +46,7 @@ const updateWorkOrderSchema = z.object({
     }),
   attachments: z.array(objectIdSchema).optional(),
 }).strict();
+
 
 const workOrderInclude = {
   assignedToUser: {
@@ -133,6 +135,7 @@ router.post('/', asyncHandler(async (req: AuthRequest, res) => {
       tenantId: req.user.tenantId,
       createdBy: req.user.id,
 
+
     },
     include: workOrderInclude,
   });
@@ -187,6 +190,7 @@ router.put('/:id', asyncHandler(async (req: AuthRequest, res) => {
 
   if (data.attachments !== undefined) {
     updateData.attachments = data.attachments;
+
   }
 
   const workOrder = await prisma.workOrder.update({

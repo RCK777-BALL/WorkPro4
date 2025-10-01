@@ -51,6 +51,7 @@ async function main(): Promise<void> {
         status: 'requested',
         assignedTo: adminUser.id,
         createdBy: adminUser.id,
+
       },
     });
     workOrderCreated = true;
