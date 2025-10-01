@@ -96,12 +96,7 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
     throw new Error('Invalid tenantId provided to ensureAdminNoTxn');
   }
 
-  return normalizeObjectId(tenantId, 'ensureValidTenantId.tenantId');
-}
-
-export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<EnsureAdminResult> {
-  const { prisma, tenantId, email, name, passwordHash, role } = options;
-
+  const normalizedTenantId = normalizeObjectId(tenantId, 'ensureAdminNoTxn.tenantId');
   const normalizedEmail = normalizeEmail(email);
   const normalizedRole = normalizeRole(role);
 
@@ -122,7 +117,6 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
       throw new Error('Failed to create admin user: missing id in response.');
     }
 
-
     const normalizedAdmin = normalizeUser({
       ...admin,
       tenantId: normalizedTenantId,
@@ -133,8 +127,8 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
     return {
       admin: normalizedAdmin,
       created: true,
+      updated: false,
     };
-
   }
 
   const admin = await prisma.user.update({
@@ -157,7 +151,7 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
 
   return {
     admin: normalizedAdmin,
+    created: false,
     updated: true,
   };
-
 }
