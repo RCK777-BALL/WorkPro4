@@ -43,6 +43,8 @@ DATABASE_URL="mongodb+srv://<user>:<password>@<cluster-host>/workpro4?retryWrite
 
 Remember to configure IP allow lists, TLS certificates, and credentials as required by your provider. After updating the URI, rerun `pnpm --filter backend db:push` to sync the Prisma schema.
 
+> **Note:** The backend's connection-string sanitizer automatically appends `directConnection=true` to standalone `mongodb://` URIs that do not already set `directConnection` or `replicaSet`. SRV-style (`mongodb+srv://`) and multi-host replica-set URLs are left untouched so managed-cluster options continue to work as provided.
+
 Once the database is reachable you can start the backend with:
 
 ```bash
