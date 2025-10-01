@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import type { PrismaClient, Tenant, User } from '@prisma/client';
 
 import { normalizeObjectId } from './normalizeObjectId';
+import bcrypt from './bcrypt';
 
 export interface EnsureTenantResult {
   tenant: Tenant;
@@ -56,7 +57,7 @@ export interface EnsureAdminOptions {
   tenantId: string;
   email: string;
   name: string;
-  passwordHash: string;
+  password: string;
   role: string;
 }
 
@@ -90,7 +91,7 @@ function normalizeUser(user: User): User {
 }
 
 export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<EnsureAdminResult> {
-  const { prisma, tenantId, email, name, passwordHash, role } = options;
+  const { prisma, tenantId, email, name, password, role } = options;
 
   if (!tenantId) {
     throw new Error('Invalid tenantId provided to ensureAdminNoTxn');
@@ -103,6 +104,7 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
   const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
   if (!existing) {
+    const passwordHash = await bcrypt.hash(password, 10);
     const admin = await prisma.user.create({
       data: {
         tenantId: normalizedTenantId,
@@ -131,15 +133,74 @@ export async function ensureAdminNoTxn(options: EnsureAdminOptions): Promise<Ens
     };
   }
 
-  const admin = await prisma.user.update({
-    where: { email: normalizedEmail },
-    data: {
+  if (!existing.id) {
+    throw new Error('Existing admin user is missing an id.');
+  }
+
+  const existingTenantId = normalizeObjectId(existing.tenantId, 'ensureAdminNoTxn.existing.tenantId');
+  if (existingTenantId !== normalizedTenantId) {
+    throw new Error(
+      `Existing admin tenant (${existingTenantId}) does not match expected tenant (${normalizedTenantId}).`,
+    );
+  }
+
+  if (existing.email !== normalizedEmail) {
+    throw new Error(
+      `Existing admin email (${existing.email}) does not match expected email (${normalizedEmail}).`,
+    );
+  }
+
+  const passwordMatches = await bcrypt.compare(password, existing.passwordHash);
+  const nameMatches = existing.name === name;
+  const roleMatches = existing.role === normalizedRole;
+
+  if (passwordMatches && nameMatches && roleMatches) {
+    const normalizedAdmin = normalizeUser({
+      ...existing,
       tenantId: normalizedTenantId,
       email: normalizedEmail,
-      name,
       role: normalizedRole,
-      passwordHash,
-    },
+    });
+
+    return {
+      admin: normalizedAdmin,
+      created: false,
+      updated: false,
+    };
+  }
+
+  const updateData: Prisma.UserUpdateInput = {};
+
+  if (!nameMatches) {
+    updateData.name = name;
+  }
+
+  if (!roleMatches) {
+    updateData.role = normalizedRole;
+  }
+
+  if (!passwordMatches) {
+    updateData.passwordHash = await bcrypt.hash(password, 10);
+  }
+
+  if (Object.keys(updateData).length === 0) {
+    const normalizedAdmin = normalizeUser({
+      ...existing,
+      tenantId: normalizedTenantId,
+      email: normalizedEmail,
+      role: normalizedRole,
+    });
+
+    return {
+      admin: normalizedAdmin,
+      created: false,
+      updated: false,
+    };
+  }
+
+  const admin = await prisma.user.update({
+    where: { id: existing.id },
+    data: updateData,
   });
 
   const normalizedAdmin = normalizeUser({

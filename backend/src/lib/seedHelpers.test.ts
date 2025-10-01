@@ -40,6 +40,21 @@ vi.mock('@prisma/client', () => {
   };
 });
 
+const bcryptMocks = vi.hoisted(() => {
+  const hash = vi.fn();
+  const hashSync = vi.fn();
+  const compare = vi.fn();
+  const compareSync = vi.fn();
+  return { hash, hashSync, compare, compareSync };
+});
+
+vi.mock('./bcrypt', () => ({
+  default: bcryptMocks,
+  ...bcryptMocks,
+}));
+
+const { hash, hashSync, compare, compareSync } = bcryptMocks;
+
 import type { PrismaClient } from '@prisma/client';
 
 import { ensureAdminNoTxn, ensureTenantNoTxn } from './seedHelpers';
@@ -140,12 +155,22 @@ describe('ensureTenantNoTxn', () => {
 });
 
 describe('ensureAdminNoTxn', () => {
+  beforeEach(() => {
+    hash.mockReset();
+    hashSync.mockReset();
+    compare.mockReset();
+    compareSync.mockReset();
+  });
+
   it('creates an admin when none exists with normalized inputs', async () => {
     const tenantId = '507F1F77BCF86CD799439011';
     const email = ' Admin@example.com ';
     const name = 'Admin User';
-    const passwordHash = 'hash';
+    const password = 'Password123!';
     const role = ' admin ';
+    const hashed = 'derived-hash';
+
+    hash.mockResolvedValueOnce(hashed);
 
     const findUnique = vi.fn().mockResolvedValue(null);
     const create = vi.fn().mockResolvedValue({
@@ -154,7 +179,7 @@ describe('ensureAdminNoTxn', () => {
       email,
       name,
       role,
-      passwordHash,
+      passwordHash: hashed,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -173,18 +198,20 @@ describe('ensureAdminNoTxn', () => {
       tenantId,
       email,
       name,
-      passwordHash,
+      password,
       role,
     });
 
     expect(findUnique).toHaveBeenCalledWith({ where: { email: 'admin@example.com' } });
+    expect(hash).toHaveBeenCalledWith(password, 10);
+    expect(compare).not.toHaveBeenCalled();
     expect(create).toHaveBeenCalledWith({
       data: {
         tenantId: '507f1f77bcf86cd799439011',
         email: 'admin@example.com',
         name,
         role: 'admin',
-        passwordHash,
+        passwordHash: hashed,
       },
     });
     expect(update).not.toHaveBeenCalled();
@@ -195,21 +222,25 @@ describe('ensureAdminNoTxn', () => {
         email: 'admin@example.com',
         name,
         role: 'admin',
-        passwordHash,
+        passwordHash: hashed,
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date),
       }),
       created: true,
+      updated: false,
     });
-    expect(result.updated).toBeUndefined();
   });
 
-  it('updates an existing admin with normalized inputs', async () => {
+  it('updates an existing admin when fields change', async () => {
     const tenantId = '507F1F77BCF86CD799439011';
     const email = 'Admin@example.com';
     const name = 'Admin User';
-    const passwordHash = 'hash';
+    const password = 'Password123!';
     const role = 'ADMIN';
+    const newHash = 'new-hash';
+
+    compare.mockResolvedValueOnce(false);
+    hash.mockResolvedValueOnce(newHash);
 
     const findUnique = vi.fn().mockResolvedValue({
       id: '507F1F77BCF86CD799439012',
@@ -225,7 +256,7 @@ describe('ensureAdminNoTxn', () => {
       email: 'admin@example.com',
       name,
       role,
-      passwordHash,
+      passwordHash: newHash,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -244,20 +275,20 @@ describe('ensureAdminNoTxn', () => {
       tenantId,
       email,
       name,
-      passwordHash,
+      password,
       role,
     });
 
     expect(findUnique).toHaveBeenCalledWith({ where: { email: 'admin@example.com' } });
+    expect(compare).toHaveBeenCalledWith(password, 'old-hash');
+    expect(hash).toHaveBeenCalledWith(password, 10);
     expect(create).not.toHaveBeenCalled();
     expect(update).toHaveBeenCalledWith({
-      where: { email: 'admin@example.com' },
+      where: { id: '507F1F77BCF86CD799439012' },
       data: {
-        tenantId: '507f1f77bcf86cd799439011',
-        email: 'admin@example.com',
         name,
         role: 'ADMIN',
-        passwordHash,
+        passwordHash: newHash,
       },
     });
     expect(result).toEqual({
@@ -267,13 +298,75 @@ describe('ensureAdminNoTxn', () => {
         email: 'admin@example.com',
         name,
         role: 'ADMIN',
-        passwordHash,
+        passwordHash: newHash,
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date),
       }),
+      created: false,
       updated: true,
     });
-    expect(result.created).toBeUndefined();
+  });
+
+  it('short-circuits when the existing admin matches expectations', async () => {
+    const tenantId = '507F1F77BCF86CD799439011';
+    const email = 'admin@example.com';
+    const name = 'Admin User';
+    const password = 'Password123!';
+    const role = 'admin';
+
+    compare.mockResolvedValueOnce(true);
+
+    const existing = {
+      id: '507F1F77BCF86CD799439012',
+      tenantId,
+      email,
+      name,
+      role,
+      passwordHash: 'stored-hash',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const findUnique = vi.fn().mockResolvedValue(existing);
+    const update = vi.fn();
+    const create = vi.fn();
+
+    const prisma = {
+      user: {
+        findUnique,
+        update,
+        create,
+      },
+    } as unknown as PrismaClient;
+
+    const result = await ensureAdminNoTxn({
+      prisma,
+      tenantId,
+      email,
+      name,
+      password,
+      role,
+    });
+
+    expect(findUnique).toHaveBeenCalledWith({ where: { email } });
+    expect(compare).toHaveBeenCalledWith(password, 'stored-hash');
+    expect(hash).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      admin: expect.objectContaining({
+        id: '507f1f77bcf86cd799439012',
+        tenantId: '507f1f77bcf86cd799439011',
+        email,
+        name,
+        role,
+        passwordHash: 'stored-hash',
+        createdAt: expect.any(Date),
+        updatedAt: expect.any(Date),
+      }),
+      created: false,
+      updated: false,
+    });
   });
 });
 

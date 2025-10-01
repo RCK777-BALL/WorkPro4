@@ -40,6 +40,7 @@ const helmetMiddleware = vi.fn();
 const helmetFactory = vi.fn(() => helmetMiddleware);
 const rateLimitMiddleware = vi.fn();
 const rateLimitFactory = vi.fn(() => rateLimitMiddleware);
+const ensureJwtSecrets = vi.fn();
 
 vi.mock('dotenv', () => ({
   default: { config: dotenvConfig },
@@ -68,6 +69,10 @@ vi.mock('express-rate-limit', () => ({
 vi.mock('./db', () => ({
   prisma: {},
   verifyDatabaseConnection,
+}));
+
+vi.mock('./config/auth', () => ({
+  ensureJwtSecrets,
 }));
 
 vi.mock('./lib/seedHelpers', () => ({
@@ -123,6 +128,58 @@ describe('server startup', () => {
       await import('./index');
       expect(exitSpy).toHaveBeenCalledWith(1);
       expect(verifyDatabaseConnection).not.toHaveBeenCalled();
+    } finally {
+      exitSpy.mockRestore();
+    }
+  });
+
+  it('starts successfully when the default admin already exists', async () => {
+    process.env.DATABASE_URL = 'mongodb://localhost:27017/app?directConnection=true';
+    ensureTenantNoTxn.mockResolvedValue({
+      tenant: { id: '507F1F77BCF86CD799439011', slug: 'demo-tenant' },
+      created: false,
+    });
+    ensureAdminNoTxn.mockResolvedValue({
+      admin: {
+        id: '507F1F77BCF86CD799439012',
+        tenantId: '507F1F77BCF86CD799439011',
+        email: 'admin@demo.com',
+        name: 'Admin',
+        role: 'admin',
+        passwordHash: 'stored-hash',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      created: false,
+      updated: false,
+    });
+    verifyDatabaseConnection.mockResolvedValue(undefined);
+    expressApp.listen.mockImplementation(((_port: number, callback?: () => void) => {
+      callback?.();
+      return { close: vi.fn() } as never;
+    }) as never);
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+
+    try {
+      await import('./index');
+
+      await vi.waitFor(() => {
+        expect(expressApp.listen).toHaveBeenCalled();
+      });
+
+      expect(ensureTenantNoTxn).toHaveBeenCalledTimes(1);
+      expect(ensureAdminNoTxn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prisma: expect.any(Object),
+          email: 'admin@demo.com',
+          name: 'Admin',
+          password: 'Admin@123',
+          role: 'admin',
+        }),
+      );
+      expect(ensureAdminNoTxn).toHaveBeenCalledTimes(1);
+      expect(exitSpy).not.toHaveBeenCalled();
     } finally {
       exitSpy.mockRestore();
     }
