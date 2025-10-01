@@ -62,10 +62,10 @@ describe('workOrderController.createWorkOrder', () => {
     expect(res.json).toHaveBeenCalledWith({
       ok: false,
       error: {
-        code: 'VALIDATION_ERROR',
-        fields: {
-          assetId: ['Invalid assetId'],
-        },
+        code: 400,
+        message: 'Value must be a valid ObjectId string',
+        details: undefined,
+
       },
     });
     expect(prismaMock.workOrder.create).not.toHaveBeenCalled();
@@ -83,21 +83,17 @@ describe('workOrderController.createWorkOrder', () => {
       priority: 'high',
       status: 'requested',
       assetId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
-      requestedBy: 'user-1',
-      assignedTo: 'bbbbbbbbbbbbbbbbbbbbbbbb',
-      dueDate: now,
-      category: 'maintenance',
-      attachments: [
-        {
-          id: 'cccccccccccccccccccccccc',
-          url: 'https://example.com/report.pdf',
-          filename: 'report.pdf',
-          contentType: 'application/pdf',
-          size: 1234,
-        },
-      ],
+      asset: null,
+      assignedTo: null,
+      assignedToUser: null,
+      category: null,
+      attachments: [],
+      dueDate: null,
+      createdByUser: { id: 'user-1', name: 'Requester' },
       createdAt: now,
       updatedAt: now,
+      timeSpentMin: null,
+
     });
 
     const req = {
@@ -124,7 +120,21 @@ describe('workOrderController.createWorkOrder', () => {
       userId: 'user-1',
     } as unknown as Request & { tenantId: string; siteId: string; userId: string };
 
-    const res = createResponse();
+    expect(prismaMock.user.findFirst).toHaveBeenCalledTimes(1);
+    expect(prismaMock.workOrder.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          assetId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+          attachments: [],
+          assignedTo: null,
+          category: undefined,
+          dueDate: undefined,
+          priority: 'medium',
+          status: 'requested',
+        }),
+      }),
+    );
+
 
     await createWorkOrder(req, res);
 
@@ -137,9 +147,11 @@ describe('workOrderController.createWorkOrder', () => {
         priority: 'high',
         status: 'requested',
         assetId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
-        requestedBy: 'user-1',
-        assignedTo: 'bbbbbbbbbbbbbbbbbbbbbbbb',
-        category: 'maintenance',
+        attachments: [],
+        assignedTo: null,
+        category: null,
+        dueDate: null,
+
       }),
     });
 

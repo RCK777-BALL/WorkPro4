@@ -49,10 +49,9 @@ async function main(): Promise<void> {
         description: 'Inspect the demo asset and confirm it is running.',
         priority: 'medium',
         status: 'requested',
-        assignees: [adminUser.id],
-        requestedBy: adminUser.id,
         assignedTo: adminUser.id,
-        attachments: [],
+        createdBy: adminUser.id,
+
       },
     });
     workOrderCreated = true;
