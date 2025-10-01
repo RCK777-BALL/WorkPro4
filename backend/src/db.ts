@@ -11,6 +11,24 @@ type PrismaOptions = Prisma.PrismaClientOptions;
 export function sanitizeDatabaseUrl(rawUrl: string | undefined): string | undefined {
   if (!rawUrl) return undefined;
   const trimmed = rawUrl.trim();
+
+  if (!trimmed.startsWith("mongodb://") && !trimmed.startsWith("mongodb+srv://")) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith("mongodb+srv://")) {
+    return trimmed;
+  }
+
+  const withoutScheme = trimmed.slice("mongodb://".length);
+  const pathIdx = withoutScheme.indexOf("/");
+  const authority = pathIdx === -1 ? withoutScheme : withoutScheme.slice(0, pathIdx);
+  const hostPortPart = authority.split("@").pop() ?? authority;
+
+  if (hostPortPart.includes(",")) {
+    return trimmed;
+  }
+
   const qIdx = trimmed.indexOf("?");
 
   if (qIdx === -1) return `${trimmed}?directConnection=true`;

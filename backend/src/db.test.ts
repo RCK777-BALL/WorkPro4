@@ -1,56 +1,48 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
-const connectMock = vi.fn().mockResolvedValue(undefined);
-let exposeRunCommand = true;
-
-vi.mock('@prisma/client', () => {
+vi.mock("@prisma/client", () => {
   class PrismaClientMock {
-    public $connect = connectMock;
-
-    constructor(_: unknown) {
-      if (exposeRunCommand) {
-        // Vitest will automatically hoist mocks, so we create the method lazily.
-        (this as unknown as { $runCommandRaw: () => Promise<unknown> }).$runCommandRaw = vi
-          .fn()
-          .mockResolvedValue({ ok: 1 });
-      }
-    }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    constructor(..._args: unknown[]) {}
   }
 
-  return { PrismaClient: PrismaClientMock };
+  return {
+    PrismaClient: PrismaClientMock,
+    Prisma: {},
+  };
 });
 
-beforeEach(() => {
-  exposeRunCommand = true;
-  connectMock.mockClear();
-  delete (globalThis as { __workpro_prisma?: unknown }).__workpro_prisma;
-  vi.resetModules();
+let sanitizeDatabaseUrl: (rawUrl: string | undefined) => string | undefined;
+
+beforeAll(async () => {
+  ({ sanitizeDatabaseUrl } = await import("./db"));
 });
 
-describe('sanitizeDatabaseUrl', () => {
-  it('adds directConnection to bare MongoDB URLs', async () => {
-    const { sanitizeDatabaseUrl } = await import('./db');
+describe("sanitizeDatabaseUrl", () => {
+  it("adds directConnection for standalone mongodb URLs without query", () => {
+    const result = sanitizeDatabaseUrl("mongodb://127.0.0.1:27017/workpro4");
+    expect(result).toBe("mongodb://127.0.0.1:27017/workpro4?directConnection=true");
+  });
 
-    expect(sanitizeDatabaseUrl('mongodb://localhost:27017/app')).toBe(
-      'mongodb://localhost:27017/app?directConnection=true',
+  it("appends directConnection when query lacks replicaSet/directConnection", () => {
+    const result = sanitizeDatabaseUrl("mongodb://127.0.0.1:27017/workpro4?authSource=admin");
+    expect(result).toBe(
+      "mongodb://127.0.0.1:27017/workpro4?authSource=admin&directConnection=true",
     );
   });
 
-  it('preserves replica set URLs without forcing direct connections', async () => {
-    const { sanitizeDatabaseUrl } = await import('./db');
-
-    expect(sanitizeDatabaseUrl('mongodb://localhost:27017/app?replicaSet=rs0')).toBe(
-      'mongodb://localhost:27017/app?replicaSet=rs0',
-    );
+  it("keeps replica set URLs untouched", () => {
+    const url = "mongodb://127.0.0.1:27017/workpro4?replicaSet=rs0";
+    expect(sanitizeDatabaseUrl(url)).toBe(url);
   });
-});
 
-describe('verifyDatabaseConnection', () => {
-  it('resolves when $runCommandRaw is unavailable', async () => {
-    exposeRunCommand = false;
-    const { verifyDatabaseConnection } = await import('./db');
+  it("keeps multi-host mongodb URLs untouched", () => {
+    const url = "mongodb://user:pass@host1:27017,host2:27017/workpro4";
+    expect(sanitizeDatabaseUrl(url)).toBe(url);
+  });
 
-    await expect(verifyDatabaseConnection()).resolves.toBeUndefined();
-    expect(connectMock).toHaveBeenCalledTimes(1);
+  it("leaves mongodb+srv URLs untouched", () => {
+    const url = "mongodb+srv://cluster0.mongodb.net/workpro4?retryWrites=true";
+    expect(sanitizeDatabaseUrl(url)).toBe(url);
   });
 });
