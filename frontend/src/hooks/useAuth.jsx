@@ -35,7 +35,7 @@ export function AuthProvider({ children }) {
     setError('');
 
     try {
-      const res = await api.post('/api/auth/login', { email, password });
+      const res = await api.post('/auth/login', { email, password });
       const { token: nextToken, user: nextUser } = res?.data ?? {};
 
       if (!nextToken) {

@@ -123,7 +123,19 @@ export function WorkOrderForm({ onClose, onSuccess, defaultValues }) {
       });
     }
 
-    if (Array.isArray(error.details)) {
+    if (error.fields && typeof error.fields === 'object') {
+      Object.entries(error.fields).forEach(([fieldPath, fieldError]) => {
+        if (!fieldPath) return;
+
+        const messages = Array.isArray(fieldError) ? fieldError : [fieldError];
+        const message = messages.find((msg) => typeof msg === 'string' && msg.trim().length > 0);
+
+        setError(fieldPath, {
+          type: 'server',
+          message: message || error.message || 'Validation error',
+        });
+      });
+    } else if (Array.isArray(error.details)) {
       error.details.forEach((detail) => {
         if (!detail?.path) return;
         const fieldPath = Array.isArray(detail.path)
@@ -165,21 +177,8 @@ export function WorkOrderForm({ onClose, onSuccess, defaultValues }) {
 
     try {
       const result = await api.post('/work-orders', payload);
-      form.reset({
-        title: '',
-        description: '',
-        assetId: assetIdentifier || '',
-        priority: 'medium',
-        dueDate: '',
-        assignedTo: '',
-        category: '',
-        attachments: [],
-      });
-      toast({
-        title: 'Work order created',
-        description: 'The work order was created successfully.',
-        variant: 'success',
-      });
+      reset();
+
       if (typeof onSuccess === 'function') {
         onSuccess(result?.data ?? result);
       }
