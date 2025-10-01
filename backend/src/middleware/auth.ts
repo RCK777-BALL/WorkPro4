@@ -4,6 +4,21 @@ import { fail } from '../utils/response';
 import { getJwtSecret } from '../config/auth';
 import { prisma } from '../db';
 
+declare module 'express-serve-static-core' {
+  interface Request {
+    userId?: string;
+    tenantId?: string;
+    siteId?: string;
+  }
+}
+
+type DecodedToken = {
+  userId?: string;
+  tenantId?: string;
+  siteId?: string;
+  [key: string]: unknown;
+};
+
 export interface AuthRequest extends Request {
   user?: {
     id: string;
@@ -12,6 +27,56 @@ export interface AuthRequest extends Request {
     role: string;
     tenantId: string;
   };
+}
+
+export async function authOptional(req: Request, _res: Response, next: NextFunction) {
+  const authHeader = req.headers?.authorization;
+
+  if (!authHeader || typeof authHeader !== 'string' || !authHeader.toLowerCase().startsWith('bearer ')) {
+    return next();
+  }
+
+  const token = authHeader.split(' ')[1];
+
+  if (!token) {
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, getJwtSecret()) as DecodedToken;
+
+    if (!decoded?.userId || typeof decoded.userId !== 'string') {
+      return next();
+    }
+
+    req.userId = decoded.userId;
+
+    if (typeof decoded.tenantId === 'string' && decoded.tenantId.trim()) {
+      req.tenantId = decoded.tenantId.trim();
+    }
+
+    if (typeof decoded.siteId === 'string' && decoded.siteId.trim()) {
+      req.siteId = decoded.siteId.trim();
+    }
+
+    if (!req.tenantId) {
+      const user = await prisma.user.findUnique({
+        where: { id: decoded.userId },
+        select: { tenantId: true },
+      });
+
+      if (user?.tenantId) {
+        req.tenantId = user.tenantId;
+      }
+    }
+  } catch (error) {
+    // Ignore token errors for optional auth and fall through without context
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('[authOptional] Failed to decode token:', error);
+    }
+  }
+
+  next();
 }
 
 export function authenticateToken(req: AuthRequest, res: Response, next: NextFunction) {

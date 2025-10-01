@@ -50,7 +50,9 @@ async function main(): Promise<void> {
         priority: 'medium',
         status: 'requested',
         assignees: [adminUser.id],
-        createdBy: adminUser.id,
+        requestedBy: adminUser.id,
+        assignedTo: adminUser.id,
+        attachments: [],
       },
     });
     workOrderCreated = true;

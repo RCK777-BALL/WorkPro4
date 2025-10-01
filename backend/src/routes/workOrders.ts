@@ -15,14 +15,14 @@ const createWorkOrderSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
   status: statusEnum.optional(),
-  assigneeId: z.string().optional(),
+  assignedTo: z.string().optional(),
 });
 
 const updateWorkOrderSchema = z.object({
   title: z.string().min(1).optional(),
   description: z.string().optional(),
   status: statusEnum.optional(),
-  assigneeId: z.string().nullable().optional(),
+  assignedTo: z.string().nullable().optional(),
 });
 
 const workOrderInclude = {
@@ -85,10 +85,10 @@ router.post('/', asyncHandler(async (req: AuthRequest, res) => {
       title: data.title,
       description: data.description,
       status: (data.status ?? 'requested') as WorkOrderStatus,
-      assigneeId: data.assigneeId,
+      assignedTo: data.assignedTo,
       tenantId: req.user.tenantId,
-      createdBy: req.user.id,
-      assignees: data.assigneeId ? [data.assigneeId] : [],
+      requestedBy: req.user.id,
+      assignees: data.assignedTo ? [data.assignedTo] : [],
 
     },
     include: workOrderInclude,
@@ -114,8 +114,8 @@ router.put('/:id', asyncHandler(async (req: AuthRequest, res) => {
     ...(data.status !== undefined ? { status: data.status as WorkOrderStatus } : {}),
   };
 
-  if ('assigneeId' in data) {
-    updateData.assigneeId = data.assigneeId ?? null;
+  if ('assignedTo' in data) {
+    updateData.assignedTo = data.assignedTo ?? null;
   }
 
   const workOrder = await prisma.workOrder.update({
