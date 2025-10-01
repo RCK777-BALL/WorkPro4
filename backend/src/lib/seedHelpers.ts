@@ -8,8 +8,16 @@ export interface EnsureTenantResult {
   created: boolean;
 }
 
+function normalizeTenant(tenant: Tenant): Tenant {
+  return {
+    ...tenant,
+    id: normalizeObjectId(tenant.id, 'tenant.id'),
+  };
+}
+
 export async function ensureTenantNoTxn(prisma: PrismaClient, tenantName: string): Promise<EnsureTenantResult> {
-  const slug = tenantName.toLowerCase().replace(/\s+/g, '-');
+  const normalizedName = tenantName.trim() || tenantName;
+  const slug = normalizedName.toLowerCase().replace(/\s+/g, '-');
   let existing: Tenant | null = null;
 
   try {
@@ -24,7 +32,7 @@ export async function ensureTenantNoTxn(prisma: PrismaClient, tenantName: string
   }
 
   if (existing) {
-    if (!existing.slug) {
+    if (!existing.slug || existing.slug !== slug) {
       const updated = await prisma.tenant.update({
         where: { id: existing.id },
         data: { slug },
@@ -33,22 +41,14 @@ export async function ensureTenantNoTxn(prisma: PrismaClient, tenantName: string
       return { tenant: normalizeTenant(updated), created: false };
     }
 
-
-  if (!tenant) {
-    tenant = await prisma.tenant.create({ data: { name: trimmed } });
-    created = true;
+    return { tenant: normalizeTenant(existing), created: false };
   }
 
-  try {
-    const tenant = await prisma.tenant.create({
-      data: { name: tenantName, slug },
-    });
+  const tenant = await prisma.tenant.create({
+    data: { name: normalizedName, slug },
+  });
 
-    return { tenant: normalizeTenant(tenant), created: true };
-  } catch (error) {
-    throw error;
-  }
-
+  return { tenant: normalizeTenant(tenant), created: true };
 }
 
 export interface EnsureAdminOptions {
