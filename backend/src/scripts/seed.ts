@@ -167,7 +167,6 @@ async function ensureAdminNoTxn(params: EnsureAdminParams): Promise<EnsureAdminR
         name,
         passwordHash,
         role,
-        roles: [role],
         tenantId: normalizedTenantId,
 
       },
@@ -179,16 +178,12 @@ async function ensureAdminNoTxn(params: EnsureAdminParams): Promise<EnsureAdminR
   }
 
   const needsNameUpdate = existingUser.name !== name;
-  const existingRoles = existingUser.roles ?? [];
-  const needsRolesUpdate = existingRoles.length !== 1 || existingRoles[0] !== role;
   const needsPasswordUpdate = existingUser.passwordHash !== passwordHash;
   const needsTenantUpdate = existingUser.tenantId !== normalizedTenantId;
-  const existingRole = (existingUser as User & { role?: string | null }).role ?? existingRoles[0];
-  const needsRoleUpdate = existingRole !== role;
+  const needsRoleUpdate = existingUser.role !== role;
 
   if (
     !needsNameUpdate &&
-    !needsRolesUpdate &&
     !needsPasswordUpdate &&
     !needsTenantUpdate &&
     !needsRoleUpdate
@@ -203,7 +198,6 @@ async function ensureAdminNoTxn(params: EnsureAdminParams): Promise<EnsureAdminR
     data: {
       name,
       role,
-      roles: [role],
 
       passwordHash,
       tenantId: normalizedTenantId,
