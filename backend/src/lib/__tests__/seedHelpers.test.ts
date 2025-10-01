@@ -40,129 +40,95 @@ vi.mock('@prisma/client', () => {
   };
 });
 
-import { Prisma } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
 
 import { ensureAdminNoTxn, ensureTenantNoTxn } from '../seedHelpers';
 
 describe('ensureTenantNoTxn', () => {
-  it('recovers from P2032 error by backfilling timestamps and returns the tenant', async () => {
+  it('returns an existing tenant without performing raw updates', async () => {
     const tenantName = 'Acme Corp';
-    const slug = tenantName.toLowerCase().replace(/\s+/g, '-');
-    const tenant = { id: '507f1f77bcf86cd799439011', name: tenantName, slug };
+    const slug = 'acme-corp';
+    const tenant = { id: '507F1F77BCF86CD799439011', name: tenantName, slug };
 
-    const recoveryError = Object.assign(new Error('missing timestamps'), {
-      code: 'P2032',
-      clientVersion: 'test',
+    const findUnique = vi.fn().mockResolvedValue(tenant);
+    const update = vi.fn();
+    const create = vi.fn();
+
+    const prisma = {
+      tenant: {
+        findUnique,
+        update,
+        create,
+      },
+    } as unknown as PrismaClient;
+
+    const result = await ensureTenantNoTxn(prisma, tenantName);
+
+    expect(findUnique).toHaveBeenCalledWith({ where: { slug } });
+    expect(update).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      tenant: { id: '507f1f77bcf86cd799439011', name: tenantName, slug },
+      created: false,
     });
-    Object.setPrototypeOf(recoveryError, Prisma.PrismaClientKnownRequestError.prototype);
+  });
 
-    const findUnique = vi
-      .fn()
-      .mockRejectedValueOnce(recoveryError as Prisma.PrismaClientKnownRequestError)
-      .mockResolvedValueOnce(tenant);
-    const runCommandRaw = vi.fn().mockResolvedValue({ ok: 1 });
+  it('creates a tenant when none exists', async () => {
+    const tenantName = 'New Tenant';
+    const slug = 'new-tenant';
+    const createdTenant = { id: '507F1F77BCF86CD799439012', name: tenantName, slug };
+
+    const findUnique = vi.fn().mockResolvedValue(null);
+    const create = vi.fn().mockResolvedValue(createdTenant);
 
     const prisma = {
       tenant: {
         findUnique,
         update: vi.fn(),
-        create: vi.fn(),
+        create,
       },
-      $runCommandRaw: runCommandRaw,
     } as unknown as PrismaClient;
 
     const result = await ensureTenantNoTxn(prisma, tenantName);
 
-    expect(findUnique).toHaveBeenCalledTimes(2);
-    expect(runCommandRaw).toHaveBeenCalledTimes(1);
-
-    const updateArgs = runCommandRaw.mock.calls[0][0];
-    expect(updateArgs.update).toBe('tenants');
-    expect(updateArgs.updates).toHaveLength(1);
-
-    const [update] = updateArgs.updates;
-    expect(update.q.slug).toBe(slug);
-    expect(update.q.$or).toEqual([
-      { createdAt: { $exists: false } },
-      { createdAt: { $type: 10 } },
-      { createdAt: { $type: 'string' } },
-      { updatedAt: { $exists: false } },
-      { updatedAt: { $type: 10 } },
-      { updatedAt: { $type: 'string' } },
-    ]);
-    expect(Array.isArray(update.u)).toBe(true);
-    expect(update.u).toHaveLength(1);
-
-    const [updateStage] = update.u;
-    const createdAtFallback = updateStage.$set.createdAt.$cond?.[2]?.$ifNull?.[1];
-    const updatedAtFallback = updateStage.$set.updatedAt.$cond?.[2]?.$ifNull?.[1];
-
-    expect(createdAtFallback).toBeInstanceOf(Date);
-    expect(updatedAtFallback).toBeInstanceOf(Date);
-    expect(update.multi).toBe(true);
-
-    expect(result).toEqual({ tenant, created: false });
+    expect(findUnique).toHaveBeenCalledWith({ where: { slug } });
+    expect(create).toHaveBeenCalledWith({ data: { name: tenantName, slug } });
+    expect(result).toEqual({
+      tenant: { id: '507f1f77bcf86cd799439012', name: tenantName, slug },
+      created: true,
+    });
   });
 });
 
 describe('ensureAdminNoTxn', () => {
-  it('recovers from P2023 error by backfilling timestamps and upserting via raw command', async () => {
-    const tenantId = '507f1f77bcf86cd799439011';
-    const email = 'Admin@example.com';
-    const normalizedEmail = email.toLowerCase();
+  it('creates an admin with normalized inputs when no user exists', async () => {
+    const tenantId = '507F1F77BCF86CD799439011';
+    const email = ' Admin@example.com ';
+    const normalizedEmail = 'admin@example.com';
+    const normalizedTenantId = '507f1f77bcf86cd799439011';
     const name = 'Admin';
     const role = 'ADMIN';
     const passwordHash = 'hash';
 
-    const existingUser = {
-      id: '507f1f77bcf86cd799439012',
+    const findUnique = vi.fn().mockResolvedValue(null);
+    const create = vi.fn().mockResolvedValue({
+      id: '507F1F77BCF86CD799439012',
       tenantId,
       email,
-      name: 'Old Name',
-      role: 'USER',
-      passwordHash: 'old-hash',
-    } satisfies Record<string, unknown>;
-
-    const updatedUser = {
-      ...existingUser,
       name,
       role,
       passwordHash,
-    } satisfies Record<string, unknown>;
-
-
-    const recoveryError = Object.assign(new Error('malformed document'), {
-      code: 'P2023',
-      clientVersion: 'test',
+      createdAt: new Date(),
+      updatedAt: new Date(),
     });
-    Object.setPrototypeOf(recoveryError, Prisma.PrismaClientKnownRequestError.prototype);
-
-    const now = new Date();
-    const findUnique = vi.fn().mockRejectedValue(recoveryError as Prisma.PrismaClientKnownRequestError);
-    const rawUser = {
-      _id: { toString: () => '507f1f77bcf86cd799439012', toHexString: () => '507f1f77bcf86cd799439012' },
-      tenant_id: { toString: () => tenantId, toHexString: () => tenantId },
-      email: normalizedEmail,
-      password_hash: passwordHash,
-      name,
-      role,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    const runCommandRaw = vi
-      .fn()
-      .mockResolvedValueOnce({ ok: 1 })
-      .mockResolvedValueOnce({ value: rawUser, lastErrorObject: { updatedExisting: true } });
+    const update = vi.fn();
 
     const prisma = {
       user: {
         findUnique,
-        update: vi.fn(),
-        create: vi.fn(),
+        create,
+        update,
       },
-      $runCommandRaw: runCommandRaw,
     } as unknown as PrismaClient;
 
     const result = await ensureAdminNoTxn({
@@ -174,34 +140,104 @@ describe('ensureAdminNoTxn', () => {
       role,
     });
 
-    expect(findUnique).toHaveBeenCalledTimes(1);
     expect(findUnique).toHaveBeenCalledWith({ where: { email: normalizedEmail } });
-    expect(runCommandRaw).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenCalledWith({
+      data: {
+        tenantId: normalizedTenantId,
+        email: normalizedEmail,
+        name,
+        role,
+        passwordHash,
+      },
+    });
+    expect(update).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      admin: expect.objectContaining({
+        id: '507f1f77bcf86cd799439012',
+        tenantId: normalizedTenantId,
+        email: normalizedEmail,
+        name,
+        role,
+        passwordHash,
+        createdAt: expect.any(Date),
+        updatedAt: expect.any(Date),
+      }),
+      created: true,
+    });
+    expect(result.updated).toBeUndefined();
+  });
 
-    const [backfillCommand, upsertCommand] = runCommandRaw.mock.calls.map(([arg]) => arg);
+  it('updates an existing admin with normalized inputs', async () => {
+    const tenantId = '507F1F77BCF86CD799439011';
+    const normalizedTenantId = '507f1f77bcf86cd799439011';
+    const email = 'Admin@example.com';
+    const normalizedEmail = 'admin@example.com';
+    const name = 'Admin';
+    const role = 'ADMIN';
+    const passwordHash = 'hash';
 
-    expect(backfillCommand.update).toBe('users');
-    expect(backfillCommand.updates).toHaveLength(1);
-    const [backfillOperation] = backfillCommand.updates;
-    expect(backfillOperation.q.email).toBe(normalizedEmail);
-    expect(Array.isArray(backfillOperation.u)).toBe(true);
+    const findUnique = vi.fn().mockResolvedValue({
+      id: '507F1F77BCF86CD799439012',
+      tenantId,
+      email: 'admin@example.com',
+      name: 'Old Name',
+      role: 'USER',
+      passwordHash: 'old-hash',
+    });
+    const update = vi.fn().mockResolvedValue({
+      id: '507F1F77BCF86CD799439012',
+      tenantId: normalizedTenantId,
+      email: normalizedEmail,
+      name,
+      role,
+      passwordHash,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const create = vi.fn();
 
-    expect(prisma.user.update).not.toHaveBeenCalled();
-    expect(upsertCommand.upsert).toBe(true);
-    expect(upsertCommand.new).toBe(true);
+    const prisma = {
+      user: {
+        findUnique,
+        update,
+        create,
+      },
+    } as unknown as PrismaClient;
 
-    const updateSet = upsertCommand.update.$set;
-    expect(updateSet.role).toBe(role);
-    expect(updateSet.roles).toBeUndefined();
+    const result = await ensureAdminNoTxn({
+      prisma,
+      tenantId,
+      email,
+      name,
+      passwordHash,
+      role,
+    });
 
-    expect(result.created).toBe(false);
-    expect(result.admin.id).toBe('507f1f77bcf86cd799439012');
-    expect(result.admin.tenantId).toBe(tenantId);
-    expect(result.admin.email).toBe(normalizedEmail);
-    expect(result.admin.passwordHash).toBe(passwordHash);
-    expect(result.admin.name).toBe(name);
-    expect(result.admin.role).toBe(role);
-    expect(result.admin.createdAt).toBeInstanceOf(Date);
-    expect(result.admin.updatedAt).toBeInstanceOf(Date);
+    expect(findUnique).toHaveBeenCalledWith({ where: { email: normalizedEmail } });
+    expect(create).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith({
+      where: { email: normalizedEmail },
+      data: {
+        tenantId: normalizedTenantId,
+        email: normalizedEmail,
+        name,
+        role,
+        passwordHash,
+      },
+    });
+    expect(result).toEqual({
+      admin: expect.objectContaining({
+        id: '507f1f77bcf86cd799439012',
+        tenantId: normalizedTenantId,
+        email: normalizedEmail,
+        name,
+        role,
+        passwordHash,
+        createdAt: expect.any(Date),
+        updatedAt: expect.any(Date),
+      }),
+      updated: true,
+    });
+    expect(result.created).toBeUndefined();
   });
 });
