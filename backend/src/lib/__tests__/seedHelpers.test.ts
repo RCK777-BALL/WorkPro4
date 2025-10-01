@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('mongodb', () => ({
   ObjectId: class {
@@ -39,6 +39,21 @@ vi.mock('@prisma/client', () => {
     PrismaClient: class {},
   };
 });
+
+const bcryptMocks = vi.hoisted(() => {
+  const hash = vi.fn();
+  const hashSync = vi.fn();
+  const compare = vi.fn();
+  const compareSync = vi.fn();
+  return { hash, hashSync, compare, compareSync };
+});
+
+vi.mock('../bcrypt', () => ({
+  default: bcryptMocks,
+  ...bcryptMocks,
+}));
+
+const { hash, hashSync, compare, compareSync } = bcryptMocks;
 
 import type { PrismaClient } from '@prisma/client';
 
@@ -100,8 +115,16 @@ describe('ensureTenantNoTxn', () => {
       created: true,
     });
   });
+});
 
 describe('ensureAdminNoTxn', () => {
+  beforeEach(() => {
+    hash.mockReset();
+    hashSync.mockReset();
+    compare.mockReset();
+    compareSync.mockReset();
+  });
+
   it('creates an admin with normalized inputs when no user exists', async () => {
     const tenantId = '507F1F77BCF86CD799439011';
     const email = ' Admin@example.com ';
@@ -110,17 +133,18 @@ describe('ensureAdminNoTxn', () => {
 
     const name = 'Admin';
     const role = 'admin';
-    const passwordHash = 'hash';
+    const password = 'SuperSecret!';
+    const derivedHash = 'derived-hash';
 
+    hash.mockResolvedValueOnce(derivedHash);
     const findUnique = vi.fn().mockResolvedValue(null);
     const create = vi.fn().mockResolvedValue({
       id: '507F1F77BCF86CD799439012',
       tenantId,
       email,
-
       name,
       role,
-      passwordHash,
+      passwordHash: derivedHash,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -139,18 +163,20 @@ describe('ensureAdminNoTxn', () => {
       tenantId,
       email,
       name,
-      passwordHash,
+      password,
       role,
     });
 
     expect(findUnique).toHaveBeenCalledWith({ where: { email: normalizedEmail } });
+    expect(hash).toHaveBeenCalledWith(password, 10);
+    expect(compare).not.toHaveBeenCalled();
     expect(create).toHaveBeenCalledWith({
       data: {
         tenantId: normalizedTenantId,
         email: normalizedEmail,
         name,
-        role,
-        passwordHash,
+        role: 'admin',
+        passwordHash: derivedHash,
       },
     });
     expect(update).not.toHaveBeenCalled();
@@ -160,24 +186,26 @@ describe('ensureAdminNoTxn', () => {
         tenantId: normalizedTenantId,
         email: normalizedEmail,
         name,
-        role,
-        passwordHash,
+        role: 'admin',
+        passwordHash: derivedHash,
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date),
       }),
       created: true,
+      updated: false,
     });
-    expect(result.updated).toBeUndefined();
   });
 
-  it('updates an existing admin with normalized inputs', async () => {
+  it('updates an existing admin when fields change and only touches non-relational columns', async () => {
     const tenantId = '507F1F77BCF86CD799439011';
-    const normalizedTenantId = '507f1f77bcf86cd799439011';
     const email = 'Admin@example.com';
-    const normalizedEmail = 'admin@example.com';
     const name = 'Admin';
     const role = 'ADMIN';
-    const passwordHash = 'hash';
+    const password = 'SuperSecret!';
+    const newHash = 'new-hash';
+
+    compare.mockResolvedValueOnce(false);
+    hash.mockResolvedValueOnce(newHash);
 
     const findUnique = vi.fn().mockResolvedValue({
       id: '507F1F77BCF86CD799439012',
@@ -189,11 +217,11 @@ describe('ensureAdminNoTxn', () => {
     });
     const update = vi.fn().mockResolvedValue({
       id: '507F1F77BCF86CD799439012',
-      tenantId: normalizedTenantId,
-      email: normalizedEmail,
+      tenantId,
+      email: 'admin@example.com',
       name,
-      role,
-      passwordHash,
+      role: 'ADMIN',
+      passwordHash: newHash,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -204,7 +232,6 @@ describe('ensureAdminNoTxn', () => {
         findUnique,
         update,
         create,
-
       },
     } as unknown as PrismaClient;
 
@@ -213,37 +240,97 @@ describe('ensureAdminNoTxn', () => {
       tenantId,
       email,
       name,
-      passwordHash,
+      password,
       role,
     });
 
-    expect(findUnique).toHaveBeenCalledWith({ where: { email: normalizedEmail } });
+    expect(findUnique).toHaveBeenCalledWith({ where: { email: 'admin@example.com' } });
+    expect(compare).toHaveBeenCalledWith(password, 'old-hash');
+    expect(hash).toHaveBeenCalledWith(password, 10);
     expect(create).not.toHaveBeenCalled();
     expect(update).toHaveBeenCalledWith({
-      where: { email: normalizedEmail },
+      where: { id: '507F1F77BCF86CD799439012' },
       data: {
-        tenantId: normalizedTenantId,
-        email: normalizedEmail,
-
         name,
-        role,
-        passwordHash,
+        role: 'ADMIN',
+        passwordHash: newHash,
       },
     });
     expect(result).toEqual({
       admin: expect.objectContaining({
         id: '507f1f77bcf86cd799439012',
-        tenantId: normalizedTenantId,
-        email: normalizedEmail,
+        tenantId: '507f1f77bcf86cd799439011',
+        email: 'admin@example.com',
         name,
-        role,
-        passwordHash,
+        role: 'ADMIN',
+        passwordHash: newHash,
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date),
       }),
+      created: false,
       updated: true,
     });
-    expect(result.created).toBeUndefined();
- main
+  });
+
+  it('returns existing admin without updates when nothing changed', async () => {
+    const tenantId = '507F1F77BCF86CD799439011';
+    const email = 'admin@example.com';
+    const name = 'Admin';
+    const role = 'admin';
+    const password = 'SuperSecret!';
+
+    compare.mockResolvedValueOnce(true);
+
+    const existing = {
+      id: '507F1F77BCF86CD799439012',
+      tenantId,
+      email,
+      name,
+      role,
+      passwordHash: 'stored-hash',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const findUnique = vi.fn().mockResolvedValue(existing);
+    const update = vi.fn();
+    const create = vi.fn();
+
+    const prisma = {
+      user: {
+        findUnique,
+        update,
+        create,
+      },
+    } as unknown as PrismaClient;
+
+    const result = await ensureAdminNoTxn({
+      prisma,
+      tenantId,
+      email,
+      name,
+      password,
+      role,
+    });
+
+    expect(findUnique).toHaveBeenCalledWith({ where: { email } });
+    expect(compare).toHaveBeenCalledWith(password, 'stored-hash');
+    expect(hash).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      admin: expect.objectContaining({
+        id: '507f1f77bcf86cd799439012',
+        tenantId: '507f1f77bcf86cd799439011',
+        email,
+        name,
+        role,
+        passwordHash: 'stored-hash',
+        createdAt: expect.any(Date),
+        updatedAt: expect.any(Date),
+      }),
+      created: false,
+      updated: false,
+    });
   });
 });

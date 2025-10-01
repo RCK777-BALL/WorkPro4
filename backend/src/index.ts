@@ -165,13 +165,12 @@ async function seedDefaultsNoTxn(): Promise<void> {
 
   const tenantId = normalizeObjectId(tenant?.id, 'tenant.id');
 
-  const passwordHash = await bcrypt.hash(adminPassword, 10);
   const { admin } = await ensureAdminNoTxn({
     prisma,
     tenantId,
     email: adminEmail,
     name: adminName,
-    passwordHash,
+    password: adminPassword,
     role: 'admin',
   });
 
