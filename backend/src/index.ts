@@ -73,6 +73,7 @@ app.get('/health/db', handleHealthCheck);
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/work-orders', workOrderRoutes);
+app.use('/api/assets', assetRoutes);
 
 // Error handling
 app.use(errorHandler);

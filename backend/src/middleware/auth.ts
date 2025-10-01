@@ -11,6 +11,7 @@ export interface AuthRequest extends Request {
     name: string;
     role: string;
     tenantId: string;
+    siteId?: string | null;
   };
 }
 
@@ -43,7 +44,8 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
         return fail(res, 403, 'User not found');
       }
 
-      req.user = { ...user, role: user.role ?? 'user' };
+      const userSiteId = (user as { siteId?: string | null }).siteId ?? null;
+      req.user = { ...user, role: user.role ?? 'user', siteId: userSiteId };
       next();
     } catch (error) {
       return fail(res, 500, 'Authentication error');

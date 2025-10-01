@@ -58,8 +58,14 @@ enum WorkOrderStatus {
 model Asset {
   id       String @id @map("_id") @default(auto()) @db.ObjectId
   tenantId String @map("tenant_id") @db.ObjectId
+  siteId   String? @map("site_id") @db.ObjectId
   code     String
   name     String
+  location String?
+  category String?
+  purchaseDate DateTime? @map("purchase_date")
+  cost     Float?   @map("cost")
+  status   String   @default("operational")
 
   tenant    Tenant     @relation(fields: [tenantId], references: [id])
   workOrders WorkOrder[]
