@@ -59,7 +59,7 @@ export const createWorkOrderValidator = z
     status: statusEnum.optional(),
     priority: priorityEnum.optional(),
     assetId: objectIdSchema.optional(),
-    assignedTo: z.union([objectIdSchema, z.null()]).optional(),
+    assigneeId: z.union([objectIdSchema, z.null()]).optional(),
     category: z
       .string({ invalid_type_error: 'Category must be a string' })
       .trim()

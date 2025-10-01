@@ -73,17 +73,17 @@ export const createWorkOrderValidator = z
       .trim()
       .datetime({ message: 'dueDate must be an ISO 8601 date string' })
       .optional(),
-    assignedTo: z
-      .string({ invalid_type_error: 'assignedTo must be a string' })
+    assigneeId: z
+      .string({ invalid_type_error: 'assigneeId must be a string' })
       .trim()
-      .min(1, 'assignedTo is required')
+      .min(1, 'assigneeId is required')
       .transform((value, ctx) => {
         try {
           return normalizeToObjectIdString(value);
         } catch (error) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: 'Invalid assignedTo',
+            message: 'Invalid assigneeId',
           });
           return z.NEVER;
         }

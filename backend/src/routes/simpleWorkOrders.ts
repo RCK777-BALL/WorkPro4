@@ -12,7 +12,7 @@ type WorkOrderWithRelations = Prisma.WorkOrderGetPayload<{
   include: {
     asset: { select: { id: true; code: true; name: true } };
     createdByUser: { select: { id: true; name: true } };
-    assignedToUser: { select: { id: true; name: true } };
+    assignee: { select: { id: true; name: true } };
   };
 }>;
 
@@ -26,8 +26,8 @@ function mapWorkOrder(workOrder: WorkOrderWithRelations) {
     assetId: workOrder.assetId ?? null,
     assetName: workOrder.asset?.name ?? null,
     assetCode: workOrder.asset?.code ?? null,
-    assignedTo: workOrder.assignedTo ?? null,
-    assignedToName: workOrder.assignedToUser?.name ?? null,
+    assigneeId: workOrder.assigneeId ?? null,
+    assigneeName: workOrder.assignee?.name ?? null,
     category: workOrder.category ?? null,
     attachments: Array.isArray(workOrder.attachments) ? workOrder.attachments : [],
     requestedById: workOrder.createdByUser?.id ?? null,
@@ -82,7 +82,7 @@ router.get(
     }
 
     if (typeof assignee === 'string' && assignee) {
-      where.assignedTo = assignee;
+      where.assigneeId = assignee;
     }
 
     if (typeof category === 'string' && category.trim().length > 0) {
@@ -125,7 +125,7 @@ router.get(
       include: {
         asset: { select: { id: true, code: true, name: true } },
         createdByUser: { select: { id: true, name: true } },
-        assignedToUser: { select: { id: true, name: true } },
+        assignee: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -165,7 +165,7 @@ router.post(
         tenantId: defaultUser.tenantId,
         createdBy: defaultUser.id,
         assetId: payload.assetId ?? undefined,
-        assignedTo: payload.assignedTo ?? null,
+        assigneeId: payload.assigneeId ?? null,
         category: payload.category ?? undefined,
         dueDate: payload.dueDate ? new Date(payload.dueDate) : undefined,
         attachments: payload.attachments ?? [],
@@ -173,7 +173,7 @@ router.post(
       include: {
         asset: { select: { id: true, code: true, name: true } },
         createdByUser: { select: { id: true, name: true } },
-        assignedToUser: { select: { id: true, name: true } },
+        assignee: { select: { id: true, name: true } },
       },
     });
 
