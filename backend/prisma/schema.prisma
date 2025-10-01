@@ -32,7 +32,7 @@ model User {
 
   tenant            Tenant      @relation(fields: [tenantId], references: [id])
   createdWorkOrders WorkOrder[] @relation("CreatedBy")
-  assignedWorkOrders WorkOrder[] @relation("Assignee")
+  assignedWorkOrders WorkOrder[] @relation("AssignedTo")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -74,27 +74,28 @@ model Asset {
 model WorkOrder {
   id            String            @id @map("_id") @default(auto()) @db.ObjectId
   tenantId      String            @map("tenant_id") @db.ObjectId
+  siteId        String?           @map("site_id") @db.ObjectId
   title         String
   description   String?
   priority      WorkOrderPriority @default(medium)
   status        WorkOrderStatus   @default(requested)
   assetId       String?           @map("asset_id") @db.ObjectId
-  lineName      String?           @map("line_name")
-  stationNumber String?           @map("station_number")
-  assigneeId    String?           @map("assignee_id") @db.ObjectId
-  assignees     String[]          @default([])
-  checklists    Json?
+  assignedTo    String?           @map("assigned_to") @db.ObjectId
+  category      String?
+  dueDate       DateTime?         @map("due_date")
+  attachments   String[]          @default([])
+
   partsUsed     Json?             @map("parts_used")
   signatures    Json?
   timeSpentMin  Int?              @map("time_spent_min")
-  photos        String[]          @default([])
   failureCode   String?           @map("failure_code")
   pmTaskId      String?           @map("pm_task_id") @db.ObjectId
-  createdBy     String            @map("created_by") @db.ObjectId
+  requestedBy   String            @map("created_by") @db.ObjectId
 
   tenant        Tenant   @relation(fields: [tenantId], references: [id])
-  assignee      User?    @relation("Assignee", fields: [assigneeId], references: [id])
+  assignedToUser User?    @relation("AssignedTo", fields: [assignedTo], references: [id])
   createdByUser User     @relation("CreatedBy", fields: [createdBy], references: [id])
+
   asset         Asset?   @relation(fields: [assetId], references: [id])
 
 
@@ -102,4 +103,7 @@ model WorkOrder {
   updatedAt DateTime @updatedAt
 
   @@map("work_orders")
+  @@index([tenantId, siteId], map: "work_orders_tenant_site_idx")
+  @@index([tenantId, status], map: "work_orders_tenant_status_idx")
+  @@index([tenantId, dueDate], map: "work_orders_tenant_duedate_idx")
 }
