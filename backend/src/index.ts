@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import bcrypt from './lib/bcrypt';
 import { requestLogger } from './middleware/requestLogger';
 import { errorHandler } from './middleware/errorHandler';
+import { Prisma } from '@prisma/client';
 import { prisma, verifyDatabaseConnection } from './db';
 import { ensureJwtSecrets } from './config/auth';
 import { ensureAdminNoTxn, ensureTenantNoTxn } from './lib/seedHelpers';
@@ -203,19 +204,30 @@ async function seedDefaultsNoTxn(): Promise<void> {
     return;
   }
 
-  const workOrder = await prisma.workOrder.create({
-    data: {
-      tenantId,
-      title: workOrderTitle,
-      description: workOrderDescription,
-      priority: 'medium',
-      status: 'requested',
-      assignees: [adminId],
-      createdBy: adminId,
-    },
-  });
+  try {
+    const workOrder = await prisma.workOrder.create({
+      data: {
+        tenantId,
+        title: workOrderTitle,
+        description: workOrderDescription,
+        priority: 'medium',
+        status: 'requested',
+        assignees: [adminId],
+        createdBy: adminId,
+      },
+    });
 
-  console.log('[seed] sample work order created:', workOrder.id);
+    console.log('[seed] sample work order created:', workOrder.id);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2031') {
+      console.warn(
+        '[seed] skipping sample work order seeding: Mongo transactions require a replica set. Server will continue starting.',
+      );
+      return;
+    }
+
+    throw error;
+  }
 }
 
 function isReplicaSetPrimaryError(error: unknown): boolean {
