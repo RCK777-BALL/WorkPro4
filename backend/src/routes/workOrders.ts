@@ -1,32 +1,55 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { Prisma, WorkOrderStatus } from '@prisma/client';
 import { ok, fail, asyncHandler } from '../utils/response';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { prisma } from '../db';
-import { Prisma, WorkOrderStatus } from '@prisma/client';
+import {
+  createWorkOrderValidator,
+  objectIdSchema,
+  priorityEnum,
+  statusEnum,
+} from '../validators/workOrderValidators';
 
 const router = Router();
 
 router.use(authenticateToken);
 
-const statusEnum = z.enum(['requested', 'assigned', 'in_progress', 'completed', 'cancelled']);
-
-const createWorkOrderSchema = z.object({
-  title: z.string().min(1),
-  description: z.string().optional(),
-  status: statusEnum.optional(),
-  assigneeId: z.string().optional(),
-});
 
 const updateWorkOrderSchema = z.object({
-  title: z.string().min(1).optional(),
-  description: z.string().optional(),
+  title: z.string().trim().min(3).max(120).optional(),
+  description: z.string().trim().max(4000).optional(),
   status: statusEnum.optional(),
-  assigneeId: z.string().nullable().optional(),
-});
+  priority: priorityEnum.optional(),
+  assetId: objectIdSchema.optional().nullable(),
+  assignedTo: z.union([objectIdSchema, z.null()]).optional(),
+  category: z.string().trim().max(120).optional().nullable(),
+  dueDate: z
+    .union([
+      z.string().min(1),
+      z.null(),
+    ])
+    .optional()
+    .superRefine((value, ctx) => {
+      if (value === undefined || value === null) {
+        return;
+      }
+
+      const parsed = new Date(value);
+
+      if (Number.isNaN(parsed.getTime())) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'dueDate must be an ISO 8601 date string',
+        });
+      }
+    }),
+  attachments: z.array(objectIdSchema).optional(),
+}).strict();
+
 
 const workOrderInclude = {
-  assignee: {
+  assignedToUser: {
     select: {
       id: true,
       name: true,
@@ -39,7 +62,25 @@ type WorkOrderWithRelations = Prisma.WorkOrderGetPayload<{ include: typeof workO
 
 function serializeWorkOrder(workOrder: WorkOrderWithRelations) {
   return {
-    ...workOrder,
+    id: workOrder.id,
+    tenantId: workOrder.tenantId,
+    title: workOrder.title,
+    description: workOrder.description ?? null,
+    priority: workOrder.priority,
+    status: workOrder.status,
+    assetId: workOrder.assetId ?? null,
+    assignedTo: workOrder.assignedTo ?? null,
+    assignedToUser: workOrder.assignedToUser
+      ? {
+          id: workOrder.assignedToUser.id,
+          name: workOrder.assignedToUser.name,
+          email: workOrder.assignedToUser.email,
+        }
+      : null,
+    category: workOrder.category ?? null,
+    dueDate: workOrder.dueDate ? workOrder.dueDate.toISOString() : null,
+    attachments: Array.isArray(workOrder.attachments) ? workOrder.attachments : [],
+    createdBy: workOrder.createdBy,
     createdAt: workOrder.createdAt.toISOString(),
     updatedAt: workOrder.updatedAt.toISOString(),
   };
@@ -74,7 +115,7 @@ router.get('/:id', asyncHandler(async (req: AuthRequest, res) => {
 
 // POST /work-orders
 router.post('/', asyncHandler(async (req: AuthRequest, res) => {
-  const data = createWorkOrderSchema.parse(req.body);
+  const data = createWorkOrderValidator.parse(req.body);
 
   if (!req.user) {
     return fail(res, 401, 'Authentication required');
@@ -85,10 +126,15 @@ router.post('/', asyncHandler(async (req: AuthRequest, res) => {
       title: data.title,
       description: data.description,
       status: (data.status ?? 'requested') as WorkOrderStatus,
-      assigneeId: data.assigneeId,
+      priority: data.priority ?? 'medium',
+      assetId: data.assetId ?? undefined,
+      assignedTo: data.assignedTo ?? null,
+      category: data.category ?? undefined,
+      dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
+      attachments: data.attachments ?? [],
       tenantId: req.user.tenantId,
       createdBy: req.user.id,
-      assignees: data.assigneeId ? [data.assigneeId] : [],
+
 
     },
     include: workOrderInclude,
@@ -108,14 +154,43 @@ router.put('/:id', asyncHandler(async (req: AuthRequest, res) => {
     return fail(res, 404, 'Work order not found');
   }
 
-  const updateData: { [key: string]: unknown } = {
-    ...(data.title !== undefined ? { title: data.title } : {}),
-    ...(data.description !== undefined ? { description: data.description } : {}),
-    ...(data.status !== undefined ? { status: data.status as WorkOrderStatus } : {}),
-  };
+  const updateData: { [key: string]: unknown } = {};
 
-  if ('assigneeId' in data) {
-    updateData.assigneeId = data.assigneeId ?? null;
+  if (data.title !== undefined) {
+    updateData.title = data.title;
+  }
+
+  if (data.description !== undefined) {
+    updateData.description = data.description || null;
+  }
+
+  if (data.status !== undefined) {
+    updateData.status = data.status as WorkOrderStatus;
+  }
+
+  if (data.priority !== undefined) {
+    updateData.priority = data.priority;
+  }
+
+  if ('assetId' in data) {
+    updateData.assetId = data.assetId ?? null;
+  }
+
+  if ('assignedTo' in data) {
+    updateData.assignedTo = data.assignedTo ?? null;
+  }
+
+  if ('category' in data) {
+    updateData.category = data.category && data.category.length > 0 ? data.category : null;
+  }
+
+  if ('dueDate' in data) {
+    updateData.dueDate = data.dueDate ? new Date(data.dueDate) : null;
+  }
+
+  if (data.attachments !== undefined) {
+    updateData.attachments = data.attachments;
+
   }
 
   const workOrder = await prisma.workOrder.update({

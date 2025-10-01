@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
+
 import {
   Building2,
   Calendar as CalendarIcon,
@@ -36,6 +37,7 @@ const STATUS_SUMMARY_OPTIONS = [
   { value: 'down', label: 'Down' },
   { value: 'decommissioned', label: 'Decommissioned' },
 ];
+
 
 function normalizeAssetsResponse(response) {
   if (!response) {
@@ -86,6 +88,7 @@ export function Assets() {
       });
 
       setSearchParams(next, options);
+
     },
     [searchParams, setSearchParams]
   );
@@ -169,6 +172,22 @@ export function Assets() {
     queryClient.invalidateQueries({ queryKey: ['assets'] });
   };
 
+
+  const handleOpenWorkOrder = (asset) => {
+    setSelectedAsset(asset);
+    setShowWorkOrder(true);
+  };
+
+  const handleCloseWorkOrder = () => {
+    setShowWorkOrder(false);
+    setSelectedAsset(null);
+  };
+
+  const handleWorkOrderSuccess = () => {
+    handleCloseWorkOrder();
+    queryClient.invalidateQueries({ queryKey: ['work-orders'] });
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -177,6 +196,20 @@ export function Assets() {
           {Array.from({ length: 5 }).map((_, index) => (
             <div key={index} className="h-32 animate-pulse rounded bg-gray-200" />
           ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <p className="font-medium">Unable to load assets</p>
+          <p className="mt-1 text-red-600">{error?.message || 'Please try again later.'}</p>
+          <Button className="mt-4" onClick={() => refetch()}>
+            Retry
+          </Button>
         </div>
       </div>
     );
@@ -281,6 +314,7 @@ export function Assets() {
                       {asset.tag && (
                         <Badge variant="outline" className="font-mono text-xs">
                           {asset.tag}
+
                         </Badge>
                       )}
                       {asset.status && (
@@ -294,6 +328,7 @@ export function Assets() {
                         </Badge>
                       )}
                       </div>
+
 
                       {asset.description && (
                         <p className="text-gray-600 mb-3">{asset.description}</p>
@@ -314,6 +349,7 @@ export function Assets() {
                         <div className="flex items-center">
                           <DollarSign className="w-4 h-4 mr-1" />
                           ${purchaseCost.toLocaleString()}
+
                         </div>
                       )}
                     </div>
@@ -337,6 +373,7 @@ export function Assets() {
                   <div className="flex flex-col items-end space-y-2">
                     <div className="flex space-x-2">
                       <Button variant="outline" size="sm" onClick={() => handleOpenWorkOrder(asset)}>
+
                         <Wrench className="w-4 h-4 mr-1" />
                         Work Order
                       </Button>
@@ -501,12 +538,14 @@ export function Assets() {
                     Assigning work for <span className="font-medium">{selectedAsset.name}</span>
                   </p>
                 )}
+
               </div>
               <button
                 type="button"
                 aria-label="Close"
                 onClick={closeWorkOrderModal}
                 className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+
               >
                 <X className="h-5 w-5" />
               </button>
@@ -521,6 +560,7 @@ export function Assets() {
                     ? String(selectedAsset.id)
                     : selectedAsset?.tag || selectedAsset?.name || '',
                 }}
+
               />
             </div>
           </div>
@@ -529,3 +569,4 @@ export function Assets() {
     </div>
   );
 }
+

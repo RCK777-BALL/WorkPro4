@@ -22,6 +22,7 @@ export const useToastStore = create((set) => ({
   dismissToast: (id) =>
     set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),
   clear: () => set({ toasts: [] }),
+
 }));
 
 export function useToast() {
@@ -31,5 +32,6 @@ export function useToast() {
   return {
     toast: addToast,
     dismiss: dismissToast,
+
   };
 }
