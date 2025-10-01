@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Building2,
   Calendar as CalendarIcon,
@@ -10,6 +10,7 @@ import {
   QrCode,
   Search,
   Wrench,
+  X,
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -18,69 +19,72 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatDate, getStatusColor } from '@/lib/utils';
-
-const mockAssets = [
-  {
-    id: '1',
-    tag: 'PUMP-001',
-    name: 'Main Water Pump',
-    description: 'Primary water circulation pump for cooling system',
-    status: 'operational',
-    type: 'equipment',
-    location: 'Building A - Mechanical Room',
-    purchasedDate: '2023-01-15',
-    warrantyExpires: '2025-01-15',
-    purchaseCost: 15000,
-    qrCodeUrl: '/qr/asset-1.png',
-  },
-  {
-    id: '2',
-    tag: 'CONV-002',
-    name: 'Production Line Conveyor',
-    status: 'maintenance',
-    type: 'equipment',
-    location: 'Building B - Production Floor',
-    purchasedDate: '2022-06-10',
-    warrantyExpires: '2024-06-10',
-    purchaseCost: 25000,
-  },
-  {
-    id: '3',
-    tag: 'HVAC-003',
-    name: 'HVAC Unit #3',
-    status: 'down',
-    type: 'equipment',
-    location: 'Building A - Roof',
-    purchasedDate: '2021-03-20',
-    warrantyExpires: '2024-03-20',
-    purchaseCost: 8000,
-  },
-];
+import { WorkOrderForm } from '@/components/work-orders/WorkOrderForm';
+import { api } from '@/lib/api';
 
 export function Assets() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [selectedAsset, setSelectedAsset] = useState(null);
+  const [showWorkOrder, setShowWorkOrder] = useState(false);
+  const queryClient = useQueryClient();
 
-  const { data: assets = mockAssets, isLoading } = useQuery({
+  const {
+    data: assets = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ['assets', { search, status: statusFilter, type: typeFilter }],
     queryFn: async () => {
-      return mockAssets.filter((asset) => {
-        const matchesSearch =
-          !search ||
-          asset.name.toLowerCase().includes(search.toLowerCase()) ||
-          asset.tag.toLowerCase().includes(search.toLowerCase());
-        const matchesStatus = !statusFilter || asset.status === statusFilter;
-        const matchesType = !typeFilter || asset.type === typeFilter;
-        return matchesSearch && matchesStatus && matchesType;
-      });
+      const params = new URLSearchParams();
+      if (search) params.set('search', search);
+      if (statusFilter) params.set('status', statusFilter);
+      if (typeFilter) params.set('type', typeFilter);
+
+      const queryString = params.toString();
+      const response = await api.get(
+        queryString ? `/api/assets?${queryString}` : '/api/assets',
+      );
+
+      const items = Array.isArray(response) ? response : response?.data ?? [];
+
+      return items.map((asset, index) => ({
+        ...asset,
+        id:
+          asset?._id ??
+          asset?.id ??
+          asset?.assetId ??
+          asset?.tag ??
+          asset?.name ??
+          String(index),
+      }));
     },
   });
 
   const statusCounts = assets.reduce((acc, asset) => {
-    acc[asset.status] = (acc[asset.status] || 0) + 1;
+    if (asset.status) {
+      acc[asset.status] = (acc[asset.status] || 0) + 1;
+    }
     return acc;
   }, {});
+
+  const handleOpenWorkOrder = (asset) => {
+    setSelectedAsset(asset);
+    setShowWorkOrder(true);
+  };
+
+  const handleCloseWorkOrder = () => {
+    setShowWorkOrder(false);
+    setSelectedAsset(null);
+  };
+
+  const handleWorkOrderSuccess = () => {
+    handleCloseWorkOrder();
+    queryClient.invalidateQueries({ queryKey: ['work-orders'] });
+  };
 
   if (isLoading) {
     return (
@@ -90,6 +94,20 @@ export function Assets() {
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="h-32 bg-gray-200 rounded animate-pulse" />
           ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <p className="font-medium">Unable to load assets</p>
+          <p className="mt-1 text-red-600">{error?.message || 'Please try again later.'}</p>
+          <Button className="mt-4" onClick={() => refetch()}>
+            Retry
+          </Button>
         </div>
       </div>
     );
@@ -154,37 +172,57 @@ export function Assets() {
 
         <TabsContent value="list" className="space-y-4">
           {assets.map((asset) => (
-            <Card key={asset.id} className="hover:shadow-md transition-shadow cursor-pointer">
+            <Card
+              key={asset.id}
+              className="transition-shadow hover:shadow-md cursor-pointer"
+            >
               <CardContent className="p-6">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center space-x-3 mb-2">
                       <h3 className="text-lg font-semibold text-gray-900">{asset.name}</h3>
-                      <Badge variant="outline" className="font-mono text-xs">
-                        {asset.tag}
-                      </Badge>
-                      <Badge className={getStatusColor(asset.status)}>
-                        {asset.status}
-                      </Badge>
+                      {(asset.tag || asset.assetTag || asset.assetId) && (
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {asset.tag || asset.assetTag || asset.assetId}
+                        </Badge>
+                      )}
+                      {asset.status && (
+                        <Badge className={getStatusColor(asset.status)}>
+                          {asset.status}
+                        </Badge>
+                      )}
                     </div>
 
                     {asset.description && (
                       <p className="text-gray-600 mb-3">{asset.description}</p>
                     )}
 
-                    <div className="flex items-center space-x-6 text-sm text-gray-500">
-                      <div className="flex items-center">
-                        <MapPin className="w-4 h-4 mr-1" />
-                        {asset.location}
-                      </div>
-                      <div className="flex items-center">
-                        <CalendarIcon className="w-4 h-4 mr-1" />
-                        Purchased: {formatDate(asset.purchasedDate)}
-                      </div>
+                    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-500">
+                      {asset.location && (
+                        <div className="flex items-center">
+                          <MapPin className="w-4 h-4 mr-1" />
+                          {asset.location}
+                        </div>
+                      )}
+                      {asset.purchasedDate && (
+                        <div className="flex items-center">
+                          <CalendarIcon className="w-4 h-4 mr-1" />
+                          Purchased: {formatDate(asset.purchasedDate)}
+                        </div>
+                      )}
+                      {asset.warrantyExpires && !asset.purchasedDate && (
+                        <div className="flex items-center">
+                          <CalendarIcon className="w-4 h-4 mr-1" />
+                          Warranty: {formatDate(asset.warrantyExpires)}
+                        </div>
+                      )}
                       {asset.purchaseCost && (
                         <div className="flex items-center">
                           <DollarSign className="w-4 h-4 mr-1" />
-                          ${asset.purchaseCost.toLocaleString()}
+                          $
+                          {Number.isFinite(Number(asset.purchaseCost))
+                            ? Number(asset.purchaseCost).toLocaleString()
+                            : asset.purchaseCost}
                         </div>
                       )}
                     </div>
@@ -207,7 +245,11 @@ export function Assets() {
 
                   <div className="flex flex-col items-end space-y-2">
                     <div className="flex space-x-2">
-                      <Button variant="outline" size="sm">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleOpenWorkOrder(asset)}
+                      >
                         <Wrench className="w-4 h-4 mr-1" />
                         Work Order
                       </Button>
@@ -276,6 +318,37 @@ export function Assets() {
           </CardContent>
         </Card>
       )}
+
+      {showWorkOrder && selectedAsset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="flex w-full max-w-3xl max-h-[90vh] flex-col overflow-hidden rounded-lg bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b px-6 py-4">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Create Work Order</h2>
+                <p className="text-sm text-gray-500">
+                  Asset: {selectedAsset.name}
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={handleCloseWorkOrder}
+                className="rounded-md p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto px-6 py-4">
+              <WorkOrderForm
+                asset={selectedAsset}
+                onClose={handleCloseWorkOrder}
+                onSuccess={handleWorkOrderSuccess}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
