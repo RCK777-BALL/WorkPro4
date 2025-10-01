@@ -262,9 +262,9 @@ async function ensureDemoUsers() {
   const defaultPassword = bcrypt.hashSync('Password123');
 
   const demoUsers = [
-    { email: 'admin@demo.com', name: 'Admin User', roles: ['admin'] },
-    { email: 'planner@demo.com', name: 'Maintenance Planner', roles: ['planner'] },
-    { email: 'tech@demo.com', name: 'Maintenance Tech', roles: ['tech'] },
+    { email: 'admin@demo.com', name: 'Admin User', role: 'admin' },
+    { email: 'planner@demo.com', name: 'Maintenance Planner', role: 'planner' },
+    { email: 'tech@demo.com', name: 'Maintenance Tech', role: 'tech' },
   ];
 
   const createdUsers: string[] = [];
@@ -276,7 +276,7 @@ async function ensureDemoUsers() {
     const userData = {
       passwordHash: defaultPassword,
       name: demoUser.name,
-      roles: demoUser.roles,
+      role: demoUser.role,
       tenantId,
     } as const;
 
