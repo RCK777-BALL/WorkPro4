@@ -119,7 +119,7 @@ describe('simpleWorkOrders POST /', () => {
       data: null,
       error: {
         code: 400,
-        message: 'Invalid assetId',
+        message: 'Value must be a valid ObjectId string',
         details: undefined,
       },
     });
@@ -144,13 +144,14 @@ describe('simpleWorkOrders POST /', () => {
       priority: 'medium',
       assetId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
       asset: null,
-      lineName: null,
-      stationNumber: null,
-      assignees: [],
+      assignedTo: null,
+      assignedToUser: null,
+      category: null,
+      attachments: [],
+      dueDate: null,
       createdByUser: { id: 'user-1', name: 'Requester' },
       createdAt: now,
       updatedAt: now,
-      checklists: [],
       timeSpentMin: null,
     });
 
@@ -165,6 +166,12 @@ describe('simpleWorkOrders POST /', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           assetId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+          attachments: [],
+          assignedTo: null,
+          category: undefined,
+          dueDate: undefined,
+          priority: 'medium',
+          status: 'requested',
         }),
       }),
     );
@@ -174,6 +181,10 @@ describe('simpleWorkOrders POST /', () => {
       data: expect.objectContaining({
         id: 'order-1',
         assetId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+        attachments: [],
+        assignedTo: null,
+        category: null,
+        dueDate: null,
       }),
       error: null,
     });

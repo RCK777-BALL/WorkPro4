@@ -49,7 +49,7 @@ async function main(): Promise<void> {
         description: 'Inspect the demo asset and confirm it is running.',
         priority: 'medium',
         status: 'requested',
-        assignees: [adminUser.id],
+        assignedTo: adminUser.id,
         createdBy: adminUser.id,
       },
     });
