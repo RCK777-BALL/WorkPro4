@@ -70,7 +70,19 @@ export function WorkOrderForm({ onClose, onSuccess }) {
   const handleApiErrors = (error) => {
     if (!error) return;
 
-    if (Array.isArray(error.details)) {
+    if (error.fields && typeof error.fields === 'object') {
+      Object.entries(error.fields).forEach(([fieldPath, fieldError]) => {
+        if (!fieldPath) return;
+
+        const messages = Array.isArray(fieldError) ? fieldError : [fieldError];
+        const message = messages.find((msg) => typeof msg === 'string' && msg.trim().length > 0);
+
+        setError(fieldPath, {
+          type: 'server',
+          message: message || error.message || 'Validation error',
+        });
+      });
+    } else if (Array.isArray(error.details)) {
       error.details.forEach((detail) => {
         if (!detail?.path) return;
         const fieldPath = Array.isArray(detail.path)
@@ -109,7 +121,7 @@ export function WorkOrderForm({ onClose, onSuccess }) {
     };
 
     try {
-      const result = await api.post('/api/work-orders', payload);
+      const result = await api.post('/work-orders', payload);
       reset();
       if (typeof onSuccess === 'function') {
         onSuccess(result?.data ?? result);
