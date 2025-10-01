@@ -5,10 +5,18 @@ import api from '../lib/api';
 const TOKEN_KEY = 'token';
 const USER_KEY = 'user';
 
+function normalizeUser(user) {
+  if (!user) {
+    return null;
+  }
+
+  return { ...user, role: user.role ?? 'user' };
+}
+
 function readStoredUser() {
   try {
     const raw = localStorage.getItem(USER_KEY);
-    return raw ? JSON.parse(raw) : null;
+    return raw ? normalizeUser(JSON.parse(raw)) : null;
   } catch {
     return null;
   }
@@ -34,12 +42,14 @@ export function AuthProvider({ children }) {
         throw new Error('Missing token in login response');
       }
 
-      localStorage.setItem(TOKEN_KEY, nextToken);
-      localStorage.setItem(USER_KEY, JSON.stringify(nextUser ?? null));
-      setToken(nextToken);
-      setUser(nextUser ?? null);
+      const normalizedUser = normalizeUser(nextUser);
 
-      return { ok: true, user: nextUser };
+      localStorage.setItem(TOKEN_KEY, nextToken);
+      localStorage.setItem(USER_KEY, JSON.stringify(normalizedUser));
+      setToken(nextToken);
+      setUser(normalizedUser);
+
+      return { ok: true, user: normalizedUser };
     } catch (err) {
       if (err?.status === 401) {
         setError('Invalid email or password.');

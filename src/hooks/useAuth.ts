@@ -22,6 +22,14 @@ interface LoginResponse {
   user: User;
 }
 
+function normalizeUser(user: User | null): User | null {
+  if (!user) {
+    return null;
+  }
+
+  return { ...user, role: user.role || 'user' };
+}
+
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
@@ -47,8 +55,9 @@ export const useAuth = create<AuthState>()(
           api.setToken(response.token);
 
           const user = await api.get<User>('/auth/me');
+          const normalizedUser = normalizeUser(user);
 
-          set({ user, isAuthenticated: true, isLoading: false, error: null });
+          set({ user: normalizedUser, isAuthenticated: true, isLoading: false, error: null });
         } catch (error) {
           api.clearToken();
           const message = error instanceof Error ? error.message : 'Login failed';
@@ -74,7 +83,8 @@ export const useAuth = create<AuthState>()(
           }
 
           const user = await api.get<User>('/auth/me');
-          set({ user, isAuthenticated: true, isLoading: false, error: null });
+          const normalizedUser = normalizeUser(user);
+          set({ user: normalizedUser, isAuthenticated: true, isLoading: false, error: null });
         } catch (error) {
           api.clearToken();
           const message = error instanceof Error ? error.message : 'Authentication failed';
