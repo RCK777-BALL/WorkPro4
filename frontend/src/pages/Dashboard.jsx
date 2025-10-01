@@ -41,7 +41,10 @@ export function Dashboard() {
     },
   });
 
-  const sparklineData = trends?.slice(-7).map((t) => t.workOrdersCompleted) ?? [];
+  const recentTrends = Array.isArray(trends) ? trends.slice(-7) : [];
+  const recentActivity = Array.isArray(activity) ? activity.slice(0, 10) : [];
+  const latestTrend = recentTrends[recentTrends.length - 1] ?? null;
+  const sparklineData = recentTrends.map((t) => t.workOrdersCompleted);
 
   return (
     <div className="space-y-6">
@@ -132,7 +135,7 @@ export function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {activity?.slice(0, 10).map((item) => (
+              {recentActivity.map((item) => (
                 <div key={item.id} className="flex items-start space-x-3 py-2">
                   <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -144,7 +147,7 @@ export function Dashboard() {
                       </Badge>
                     </div>
                     <p className="text-sm text-gray-500 mt-1">
-                      {item.entityName || `${item.entityType} ${item.entityId.slice(0, 8)}`}
+                      {item.entityName || `${item.entityType} ${item.entityId?.slice?.(0, 8)}`}
                     </p>
                     <p className="text-xs text-gray-400 mt-1">
                       {formatDateTime(item.createdAt)}
@@ -166,13 +169,13 @@ export function Dashboard() {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Work Orders Today</span>
                 <span className="font-medium">
-                  {trends?.slice(-1)[0]?.workOrdersCreated ?? 0}
+                  {latestTrend?.workOrdersCreated ?? 0}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Completed Today</span>
                 <span className="font-medium text-green-600">
-                  {trends?.slice(-1)[0]?.workOrdersCompleted ?? 0}
+                  {latestTrend?.workOrdersCompleted ?? 0}
                 </span>
               </div>
               <div className="flex items-center justify-between">
