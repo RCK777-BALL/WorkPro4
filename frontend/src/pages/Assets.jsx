@@ -172,22 +172,6 @@ export function Assets() {
     queryClient.invalidateQueries({ queryKey: ['assets'] });
   };
 
-
-  const handleOpenWorkOrder = (asset) => {
-    setSelectedAsset(asset);
-    setShowWorkOrder(true);
-  };
-
-  const handleCloseWorkOrder = () => {
-    setShowWorkOrder(false);
-    setSelectedAsset(null);
-  };
-
-  const handleWorkOrderSuccess = () => {
-    handleCloseWorkOrder();
-    queryClient.invalidateQueries({ queryKey: ['work-orders'] });
-  };
-
   if (isLoading) {
     return (
       <div className="space-y-6">
