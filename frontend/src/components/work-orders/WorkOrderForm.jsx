@@ -60,10 +60,12 @@ const DEFAULT_VALUES = {
   checklists: [{ text: '', note: '' }],
 };
 
-export function WorkOrderForm({ onClose, onSuccess, defaultValues }) {
+export function WorkOrderForm({ onClose, onSuccess, defaultValues, asset: assetProp }) {
 
   const [submitError, setSubmitError] = useState('');
   const { toast } = useToast();
+
+  const asset = assetProp ?? defaultValues?.asset;
 
   const assetIdentifier = useMemo(
     () => asset?._id ?? asset?.id ?? asset?.assetId ?? asset?.tag ?? '',
