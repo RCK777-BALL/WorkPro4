@@ -49,7 +49,19 @@ const workOrderSchema = z.object({
   attachments: z.array(fileSchema).default([]),
 });
 
-export function WorkOrderForm({ asset, onClose, onSuccess }) {
+const DEFAULT_VALUES = {
+  title: '',
+  description: '',
+  priority: 'medium',
+  assetId: '',
+  lineName: '',
+  stationNumber: '',
+  assignees: [''],
+  checklists: [{ text: '', note: '' }],
+};
+
+export function WorkOrderForm({ onClose, onSuccess, defaultValues }) {
+
   const [submitError, setSubmitError] = useState('');
   const { toast } = useToast();
 
@@ -60,16 +72,8 @@ export function WorkOrderForm({ asset, onClose, onSuccess }) {
 
   const form = useForm({
     resolver: zodResolver(workOrderSchema),
-    defaultValues: {
-      title: '',
-      description: '',
-      assetId: assetIdentifier,
-      priority: 'medium',
-      dueDate: '',
-      assignedTo: '',
-      category: '',
-      attachments: [],
-    },
+    defaultValues: { ...DEFAULT_VALUES, ...(defaultValues || {}) },
+
   });
 
   const { register, handleSubmit, setError, setValue, watch, formState } = form;

@@ -1,67 +1,37 @@
 import { create } from 'zustand';
 
-const generateId = () => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return Math.random().toString(36).slice(2);
-};
+let toastId = 0;
 
-const DEFAULT_DURATION = 4000;
-
-export const useToastStore = create((set, get) => ({
+export const useToastStore = create((set) => ({
   toasts: [],
   addToast: (toast) => {
-    const id = toast.id ?? generateId();
-    const duration =
-      typeof toast.duration === 'number' && toast.duration > 0
-        ? toast.duration
-        : DEFAULT_DURATION;
+    const id = toast?.id ?? `toast-${Date.now()}-${++toastId}`;
+    const nextToast = {
+      id,
+      title: '',
+      description: '',
+      variant: 'default',
+      duration: 4000,
+      ...toast,
+    };
 
-    set((state) => ({
-      toasts: [
-        ...state.toasts,
-        {
-          id,
-          title: toast.title,
-          description: toast.description,
-          variant: toast.variant || 'default',
-          duration,
-        },
-      ],
-    }));
+    set((state) => ({ toasts: [...state.toasts, nextToast] }));
 
-    if (duration !== Infinity) {
-      const timeoutId = setTimeout(() => {
-        const toastExists = get().toasts.some((item) => item.id === id);
-        if (toastExists) {
-          set((state) => ({
-            toasts: state.toasts.filter((item) => item.id !== id),
-          }));
-        }
-      }, duration);
-
-      return { id, timeoutId };
-    }
-
-    return { id };
+    return id;
   },
-  dismiss: (id) => {
-    set((state) => ({
-      toasts: state.toasts.filter((toast) => toast.id !== id),
-    }));
-  },
+  dismissToast: (id) =>
+    set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),
+  clear: () => set({ toasts: [] }),
+
 }));
 
 export function useToast() {
   const addToast = useToastStore((state) => state.addToast);
-  const dismiss = useToastStore((state) => state.dismiss);
+  const dismissToast = useToastStore((state) => state.dismissToast);
 
   return {
-    toast: (toast) => {
-      const result = addToast(toast);
-      return result.id;
-    },
-    dismiss,
+    toast: addToast,
+    dismiss: dismissToast,
+
   };
 }
