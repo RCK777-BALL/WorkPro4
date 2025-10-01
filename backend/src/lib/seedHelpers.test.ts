@@ -1,7 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ensureTenantNoTxn } from './seedHelpers';
-
 vi.mock('mongodb', () => ({
   ObjectId: class {
     value: string;
@@ -24,47 +22,34 @@ vi.mock('mongodb', () => ({
   },
 }));
 
-vi.mock('@prisma/client', () => {
-  class PrismaClientKnownRequestError extends Error {
-    public code: string;
+vi.mock('@prisma/client', () => ({
+  Prisma: { PrismaClientKnownRequestError: class extends Error {} },
+}));
 
-    public clientVersion: string;
-
-    constructor(message: string, options: { code: string; clientVersion: string }) {
-      super(message);
-      this.code = options.code;
-      this.clientVersion = options.clientVersion;
-    }
-  }
-
-  return { Prisma: { PrismaClientKnownRequestError } };
-});
+import { ensureTenantNoTxn } from './seedHelpers';
 
 describe('ensureTenantNoTxn', () => {
-  const findUnique = vi.fn();
+  const findFirst = vi.fn();
   const create = vi.fn();
   const update = vi.fn();
+
   const prisma = {
     tenant: {
-      findUnique,
+      findFirst,
       create,
-      update,
     },
   } as unknown as Parameters<typeof ensureTenantNoTxn>[0];
 
   beforeEach(() => {
-    findUnique.mockReset();
+    findFirst.mockReset();
     create.mockReset();
     update.mockReset();
+
   });
 
-  it('creates a tenant with a slug when none exists', async () => {
-    findUnique.mockResolvedValue(null);
-    const createdTenant = {
-      id: '507f1f77bcf86cd799439011',
-      name: 'Demo Tenant',
-      slug: 'demo-tenant',
-    };
+  it('creates a tenant when one does not exist', async () => {
+    const createdTenant = { id: 'tenant-id', name: 'Demo Tenant' };
+    findFirst.mockResolvedValue(null);
     create.mockResolvedValue(createdTenant);
 
     const result = await ensureTenantNoTxn(prisma, 'Demo Tenant');
@@ -106,5 +91,9 @@ describe('ensureTenantNoTxn', () => {
     });
     expect(result).toEqual({ tenant: updatedTenant, created: false });
 
+
+    expect(findFirst).toHaveBeenCalledWith({ where: { name: 'Demo Tenant' } });
+    expect(create).toHaveBeenCalledWith({ data: { name: 'Demo Tenant' } });
   });
+
 });

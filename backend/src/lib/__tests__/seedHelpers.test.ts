@@ -45,7 +45,7 @@ import type { PrismaClient } from '@prisma/client';
 import { ensureAdminNoTxn, ensureTenantNoTxn } from '../seedHelpers';
 
 describe('ensureTenantNoTxn', () => {
-  it('returns an existing tenant without performing raw updates', async () => {
+   it('returns an existing tenant without performing raw updates', async () => {
     const tenantName = 'Acme Corp';
     const slug = 'acme-corp';
     const tenant = { id: '507F1F77BCF86CD799439011', name: tenantName, slug };
@@ -85,20 +85,21 @@ describe('ensureTenantNoTxn', () => {
       tenant: {
         findUnique,
         update: vi.fn(),
+
         create,
       },
     } as unknown as PrismaClient;
 
-    const result = await ensureTenantNoTxn(prisma, tenantName);
+    const result = await ensureTenantNoTxn(prisma, `  ${tenantName}  `);
 
     expect(findUnique).toHaveBeenCalledWith({ where: { slug } });
     expect(create).toHaveBeenCalledWith({ data: { name: tenantName, slug } });
     expect(result).toEqual({
       tenant: { id: '507f1f77bcf86cd799439012', name: tenantName, slug },
+
       created: true,
     });
   });
-});
 
 describe('ensureAdminNoTxn', () => {
   it('creates an admin with normalized inputs when no user exists', async () => {
@@ -106,8 +107,9 @@ describe('ensureAdminNoTxn', () => {
     const email = ' Admin@example.com ';
     const normalizedEmail = 'admin@example.com';
     const normalizedTenantId = '507f1f77bcf86cd799439011';
+
     const name = 'Admin';
-    const role = 'ADMIN';
+    const role = 'admin';
     const passwordHash = 'hash';
 
     const findUnique = vi.fn().mockResolvedValue(null);
@@ -115,6 +117,7 @@ describe('ensureAdminNoTxn', () => {
       id: '507F1F77BCF86CD799439012',
       tenantId,
       email,
+
       name,
       role,
       passwordHash,
@@ -201,6 +204,7 @@ describe('ensureAdminNoTxn', () => {
         findUnique,
         update,
         create,
+
       },
     } as unknown as PrismaClient;
 
@@ -220,6 +224,7 @@ describe('ensureAdminNoTxn', () => {
       data: {
         tenantId: normalizedTenantId,
         email: normalizedEmail,
+
         name,
         role,
         passwordHash,
@@ -239,5 +244,6 @@ describe('ensureAdminNoTxn', () => {
       updated: true,
     });
     expect(result.created).toBeUndefined();
+ main
   });
 });
