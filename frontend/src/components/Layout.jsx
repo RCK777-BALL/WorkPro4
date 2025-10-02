@@ -2,7 +2,7 @@ import { Outlet } from 'react-router-dom';
 
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
-import { ToastViewport } from './ui/toast';
+import { Toaster } from '@/components/ui/toaster';
 
 export function Layout({ children }) {
   return (
@@ -12,9 +12,9 @@ export function Layout({ children }) {
         <Sidebar />
         <main className="flex-1 p-6">
           {children || <Outlet />}
+          <Toaster />
         </main>
       </div>
-      <ToastViewport />
     </div>
   );
 }
