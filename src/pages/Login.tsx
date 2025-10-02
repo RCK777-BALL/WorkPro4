@@ -22,7 +22,7 @@ export default function Login() {
     event.preventDefault();
     setFormError('');
     try {
-      await login({ email, password });
+      await login({ email, username: email, password });
       navigate('/');
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Unable to sign in.');
