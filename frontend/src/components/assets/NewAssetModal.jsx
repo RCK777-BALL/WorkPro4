@@ -4,7 +4,7 @@ import { X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useToast } from '@/hooks/useToast';
+import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
 
 const STATUS_OPTIONS = [
@@ -81,7 +81,7 @@ export function NewAssetModal({ open, onClose, onSuccess }) {
       }
 
       toast({
-        variant: 'success',
+        variant: 'default',
         title: 'Asset created',
         description: `${values.name} has been added to your asset list.`,
       });
@@ -94,7 +94,7 @@ export function NewAssetModal({ open, onClose, onSuccess }) {
         error?.data?.error?.message || error?.message || 'Unable to create the asset.';
 
       toast({
-        variant: 'error',
+        variant: 'destructive',
         title: 'Failed to create asset',
         description,
       });
