@@ -16,7 +16,7 @@ export default defineConfig({
     },
   },
   esbuild: {
-    loader: 'jsx',
+    loader: 'tsx',
     include: /src\/.*\.[jt]sx?$/,
   },
   server: {
@@ -38,6 +38,8 @@ export default defineConfig({
       loader: {
         '.js': 'jsx',
         '.jsx': 'jsx',
+        '.ts': 'ts',
+        '.tsx': 'tsx',
       },
     },
   },
