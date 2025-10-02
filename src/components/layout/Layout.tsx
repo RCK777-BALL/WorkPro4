@@ -9,23 +9,47 @@ const SIDEBAR_STORAGE_KEY = 'wp3.sidebar.collapsed';
 
 export function Layout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : false;
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    try {
+      const stored = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
+      return stored ? JSON.parse(stored) : false;
+    } catch (error) {
+      return false;
+    }
   });
   
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
-    localStorage.setItem(SIDEBAR_STORAGE_KEY, JSON.stringify(sidebarCollapsed));
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        SIDEBAR_STORAGE_KEY,
+        JSON.stringify(sidebarCollapsed),
+      );
+    } catch (error) {
+      // Ignore storage write errors (e.g., unavailable localStorage)
+    }
   }, [sidebarCollapsed]);
 
   const handleToggleSidebar = () => {
+    if (typeof window === 'undefined') {
+      setSidebarCollapsed((prev) => !prev);
+      return;
+    }
+
     // On mobile, toggle mobile nav
     if (window.innerWidth < 1024) {
-      setMobileNavOpen(!mobileNavOpen);
+      setMobileNavOpen((prev) => !prev);
     } else {
       // On desktop, toggle sidebar collapse
-      setSidebarCollapsed(!sidebarCollapsed);
+      setSidebarCollapsed((prev) => !prev);
     }
   };
 
