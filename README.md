@@ -91,7 +91,14 @@ The backend reads its MongoDB connection string from the `DATABASE_URL` value in
 
 Set `FRONTEND_ORIGIN` in `backend/.env` to the fully qualified origin (scheme + host + port) that should be allowed by CORS in production. When the variable is omitted the backend falls back to the local development origin (`http://localhost:5173`).
 
-4. **Start development servers:**
+4. **Configure the frontend API base URL:**
+```bash
+echo "VITE_API_URL=http://localhost:5010/api" > frontend/.env
+```
+
+This file is consumed by both the Vite dev server and production build so the frontend consistently points at the same API base URL. After adding or updating environment variables, restart any running `pnpm dev`/`pnpm dev:all` process to reload Vite with the new values.
+
+5. **Start development servers:**
 ```bash
 pnpm dev:all
 ```
@@ -100,7 +107,6 @@ This starts both the backend server (localhost:5010) and frontend app (localhost
 
 The API exposes a lightweight readiness probe at `http://localhost:5010/api/health` and a database-specific check at `http://localhost:5010/health/db`.
 
-> ℹ️ Configure the frontend API base URL by setting `VITE_API_URL=http://localhost:5010/api` in `backend/.env` (and update `.env.example` if you share environment templates). After changing environment variables, restart your `pnpm dev`/`pnpm dev:all` process so Vite picks up the updates.
 
 ### Production Build
 ```bash
