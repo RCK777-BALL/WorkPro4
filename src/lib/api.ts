@@ -410,21 +410,59 @@ export class ApiClient {
   }
 
   private async handleResponse<T>(response: Response): Promise<ApiResult<T>> {
-    let result: ApiResult<T>;
+    let payload: unknown = null;
 
     try {
-      result = await response.json();
+      payload = await response.json();
     } catch {
-      result = {
-        data: null,
-        error: {
-          code: response.status,
-          message: response.statusText || 'Request failed'
-        }
-      };
+      // Swallow JSON parse errors so we can construct a consistent ApiResult below
     }
 
-    return result;
+    const maybeResult = this.normalizePayload<T>(payload, response);
+
+    if (!response.ok && maybeResult.error == null) {
+      return {
+        data: null,
+        error: {
+          code: response.status || 500,
+          message: response.statusText || 'Request failed',
+          details: payload,
+        },
+      } satisfies ApiResult<T>;
+    }
+
+    return maybeResult;
+  }
+
+  private normalizePayload<T>(payload: unknown, response: Response): ApiResult<T> {
+    if (payload && typeof payload === 'object') {
+      const maybeRecord = payload as Record<string, unknown>;
+      const hasData = 'data' in maybeRecord;
+      const hasError = 'error' in maybeRecord;
+
+      if (hasData || hasError) {
+        return {
+          data: (maybeRecord['data'] ?? null) as T | null,
+          error: (maybeRecord['error'] ?? null) as ApiResult<T>['error'],
+        } satisfies ApiResult<T>;
+      }
+    }
+
+    if (response.ok) {
+      return {
+        data: (payload as T | null) ?? null,
+        error: null,
+      } satisfies ApiResult<T>;
+    }
+
+    return {
+      data: null,
+      error: {
+        code: response.status || 500,
+        message: response.statusText || 'Request failed',
+        details: payload,
+      },
+    } satisfies ApiResult<T>;
   }
 
   async get<T>(endpoint: string): Promise<T> {
