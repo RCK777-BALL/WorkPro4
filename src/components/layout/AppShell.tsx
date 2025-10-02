@@ -1,6 +1,7 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 import { Bell, ChevronLeft, ChevronRight, LogOut, Menu, Moon, Search, Settings, Sun, User } from 'lucide-react';
+import { useAuth } from '../../hooks/useAuth';
 
 const STORAGE_KEY = 'workpro4.sidebar.collapsed';
 const THEME_KEY = 'workpro4.theme';
@@ -15,6 +16,8 @@ const navItems = [
 
 export default function AppShell() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     const stored = typeof window !== 'undefined' ? window.localStorage.getItem(STORAGE_KEY) : null;
     return stored ? stored === 'true' : false;
@@ -164,7 +167,15 @@ export default function AppShell() {
                   >
                     <Settings size={16} /> Settings
                   </NavLink>
-                  <button className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-danger hover:bg-danger/10" role="menuitem">
+                  <button
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-danger hover:bg-danger/10"
+                    role="menuitem"
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      logout();
+                      navigate('/login');
+                    }}
+                  >
                     <LogOut size={16} />
                     Sign out
                   </button>
