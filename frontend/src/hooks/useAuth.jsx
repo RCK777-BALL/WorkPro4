@@ -36,7 +36,8 @@ export function AuthProvider({ children }) {
 
     try {
       const res = await api.post('/auth/login', { email, password });
-      const { token: nextToken, user: nextUser } = res?.data ?? {};
+      const { token: nextToken, user: nextUser } =
+        res?.data?.data ?? res?.data ?? {};
 
       if (!nextToken) {
         throw new Error('Missing token in login response');
