@@ -1,9 +1,10 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { Layout } from './components/Layout';
 import { Toaster } from './components/ui/toaster';
 import { AuthProvider, useAuth } from './hooks/useAuth';
+import ErrorBoundary from './components/ErrorBoundary';
 import { Dashboard } from './pages/Dashboard';
 import { WorkOrders } from './pages/WorkOrders';
 import { Assets } from './pages/Assets';
@@ -33,38 +34,48 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
+function AppRoutes() {
+  const location = useLocation();
+
+  return (
+    <ErrorBoundary resetKeys={[location.pathname, location.search]}>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<Dashboard />} />
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="work-orders" element={<WorkOrders />} />
+          <Route path="pm" element={<PreventiveMaintenance />} />
+          <Route path="assets" element={<Assets />} />
+          <Route path="inventory" element={<Inventory />} />
+          <Route path="purchasing" element={<Purchasing />} />
+          <Route path="reports" element={<Reports />} />
+          <Route path="settings" element={<Settings />} />
+          <Route
+            path="addons/*"
+            element={<div className="p-8 text-center text-gray-500">Add-ons - Coming Soon</div>}
+          />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </ErrorBoundary>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Toaster />
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <Layout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<Dashboard />} />
-              <Route path="dashboard" element={<Dashboard />} />
-              <Route path="work-orders" element={<WorkOrders />} />
-              <Route path="pm" element={<PreventiveMaintenance />} />
-              <Route path="assets" element={<Assets />} />
-              <Route path="inventory" element={<Inventory />} />
-              <Route path="purchasing" element={<Purchasing />} />
-              <Route path="reports" element={<Reports />} />
-              <Route path="settings" element={<Settings />} />
-              <Route
-                path="addons/*"
-                element={<div className="p-8 text-center text-gray-500">Add-ons - Coming Soon</div>}
-              />
-            </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <AppRoutes />
         </BrowserRouter>
       </AuthProvider>
     </QueryClientProvider>
