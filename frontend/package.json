@@ -12,7 +12,8 @@
     "@radix-ui/react-toast": "^1.1.5",
     "@hookform/resolvers": "^5.2.2",
     "@tanstack/react-query": "^4.41.0",
-    "class-variance-authority": "^0.7.0",
+    "axios": "^1.12.2",
+
     "concurrently": "^9.2.1",
     "date-fns": "^4.1.0",
     "lucide-react": "^0.544.0",
