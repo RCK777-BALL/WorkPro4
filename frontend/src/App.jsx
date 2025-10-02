@@ -2,7 +2,6 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { Layout } from './components/Layout';
-import { Toaster } from './components/ui/toaster';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { Dashboard } from './pages/Dashboard';
 import { WorkOrders } from './pages/WorkOrders';
@@ -38,7 +37,6 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <Toaster />
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route
