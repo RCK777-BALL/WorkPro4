@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
-import api from '../lib/api';
+import { api } from '@/lib/api';
 
 const TOKEN_KEY = 'token';
 const USER_KEY = 'user';

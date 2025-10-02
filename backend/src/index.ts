@@ -16,6 +16,7 @@ import { normalizeObjectId } from './lib/normalizeObjectId';
 import authRoutes from './routes/auth';
 import summaryRoutes from './routes/summary';
 import workOrderRoutes from './routes/simpleWorkOrders';
+import dashboardRoutes from './routes/dashboard';
 import assetRoutes from './routes/assets';
 import partRoutes from './routes/parts';
 import vendorRoutes from './routes/vendors';
@@ -74,6 +75,7 @@ app.get('/health/db', handleHealthCheck);
 app.use('/api/auth', authRoutes);
 app.use('/api/work-orders', workOrderRoutes);
 app.use('/api/assets', assetRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // Error handling
 app.use(errorHandler);

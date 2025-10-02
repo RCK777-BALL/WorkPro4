@@ -2,7 +2,6 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { Layout } from './components/Layout';
-import { Toaster } from './components/ui/toaster';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Dashboard } from './pages/Dashboard';
@@ -76,6 +75,7 @@ function App() {
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Toaster />
           <AppRoutes />
+
         </BrowserRouter>
       </AuthProvider>
     </QueryClientProvider>

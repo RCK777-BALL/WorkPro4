@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
-import { useToast } from '@/hooks/useToast';
+import { useToast } from '@/hooks/use-toast';
 import { formatDate } from '@/lib/utils';
 
 const fileSchema = z.custom(
@@ -195,7 +195,7 @@ export function WorkOrderForm({ onClose, onSuccess, defaultValues, asset: assetP
       toast({
         title: 'Failed to create work order',
         description: message,
-        variant: 'error',
+        variant: 'destructive',
       });
     }
   });

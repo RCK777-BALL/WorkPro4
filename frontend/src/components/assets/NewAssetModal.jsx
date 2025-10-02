@@ -4,7 +4,7 @@ import { X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useToast } from '@/hooks/useToast';
+import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
 
 const STATUS_OPTIONS = [
@@ -74,14 +74,23 @@ export function NewAssetModal({ open, onClose, onSuccess }) {
         result = await api.post('/assets', payload);
       } catch (error) {
         if (error?.status === 404) {
-          result = await api.post('/api/assets', payload);
+          const fallbackBaseURL =
+            typeof api.defaults?.baseURL === 'string'
+              ? api.defaults.baseURL.replace(/\/api\/?$/, '')
+              : api.defaults?.baseURL;
+
+          if (fallbackBaseURL && fallbackBaseURL !== api.defaults?.baseURL) {
+            result = await api.post('/assets', payload, { baseURL: fallbackBaseURL });
+          } else {
+            throw error;
+          }
         } else {
           throw error;
         }
       }
 
       toast({
-        variant: 'success',
+        variant: 'default',
         title: 'Asset created',
         description: `${values.name} has been added to your asset list.`,
       });
@@ -94,7 +103,7 @@ export function NewAssetModal({ open, onClose, onSuccess }) {
         error?.data?.error?.message || error?.message || 'Unable to create the asset.';
 
       toast({
-        variant: 'error',
+        variant: 'destructive',
         title: 'Failed to create asset',
         description,
       });
