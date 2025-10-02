@@ -6,7 +6,6 @@ import rateLimit from 'express-rate-limit';
 import bcrypt from './lib/bcrypt';
 import { requestLogger } from './middleware/requestLogger';
 import { errorHandler } from './middleware/errorHandler';
-import { Prisma } from '@prisma/client';
 import { prisma, verifyDatabaseConnection } from './db';
 import { ensureJwtSecrets } from './config/auth';
 import { ensureAdminNoTxn, ensureTenantNoTxn } from './lib/seedHelpers';
@@ -223,7 +222,7 @@ async function seedDefaultsNoTxn(): Promise<void> {
 
     console.log('[seed] sample work order created:', workOrder.id);
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2031') {
+    if (isPrismaKnownRequestError(error, 'P2031')) {
       console.warn(
         '[seed] skipping sample work order seeding: Mongo transactions require a replica set. Server will continue starting.',
       );
@@ -232,6 +231,16 @@ async function seedDefaultsNoTxn(): Promise<void> {
 
     throw error;
   }
+}
+
+function isPrismaKnownRequestError(error: unknown, code: string): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const candidate = error as { code?: unknown };
+
+  return typeof candidate.code === 'string' && candidate.code === code;
 }
 
 function isReplicaSetPrimaryError(error: unknown): boolean {
