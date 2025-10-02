@@ -1,4 +1,8 @@
-const BASE = import.meta?.env?.VITE_API_URL || 'http://localhost:5010/api';
+import axios from 'axios';
+
+const DEFAULT_BASE_URL = 'http://localhost:5010/api';
+const rawBaseUrl = import.meta?.env?.VITE_API_URL || DEFAULT_BASE_URL;
+const baseURL = typeof rawBaseUrl === 'string' ? rawBaseUrl.replace(/\/+$/, '') : DEFAULT_BASE_URL;
 
 function readToken() {
   if (typeof window === 'undefined') {
@@ -7,59 +11,75 @@ function readToken() {
 
   try {
     return window.localStorage.getItem('token');
-  } catch {
+  } catch (error) {
+    console.warn('Unable to access localStorage for auth token.', error);
     return null;
   }
 }
 
-async function request(path, options = {}) {
-  const token = readToken();
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
-  };
-
-  if (token && !headers.Authorization) {
-    headers.Authorization = `Bearer ${token}`;
+function setHeader(headers, key, value) {
+  if (!headers || value == null) {
+    return;
   }
 
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'GET',
-    ...options,
-    headers,
-  });
-
-  const contentType = res.headers.get('content-type') || '';
-  const isJson = contentType.includes('application/json');
-  const data = isJson ? await res.json().catch(() => ({})) : null;
-
-  if (!res.ok) {
-    const errorPayload = data?.error ?? {};
-    const rawData = data && typeof data === 'object' ? data : {};
-    const normalizedError = {
-      code: errorPayload.code ?? `HTTP_${res.status}`,
-      message:
-        errorPayload.message || data?.message || data?.error?.message || `HTTP ${res.status}`,
-      fields: errorPayload.fields ?? data?.fields ?? null,
-    };
-
-    const error = new Error(normalizedError.message);
-    error.status = res.status;
-    error.code = normalizedError.code;
-    error.fields = normalizedError.fields;
-    error.data = { ...rawData, error: normalizedError };
-
-    throw error;
+  if (typeof headers.set === 'function') {
+    if (!headers.has || !headers.has(key)) {
+      headers.set(key, value);
+    }
+    return;
   }
 
-  return data;
+  if (!headers[key]) {
+    headers[key] = value;
+  }
 }
 
-export const api = {
-  get: (path) => request(path),
-  post: (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) }),
-  put: (path, body) => request(path, { method: 'PUT', body: JSON.stringify(body) }),
-  del: (path) => request(path, { method: 'DELETE' }),
-};
+export const api = axios.create({
+  baseURL,
+  withCredentials: true,
+});
 
-export default api;
+api.interceptors.request.use((config) => {
+  const nextConfig = config;
+  nextConfig.headers = nextConfig.headers ?? {};
+
+  setHeader(nextConfig.headers, 'Content-Type', 'application/json');
+
+  const token = readToken();
+  if (token) {
+    setHeader(nextConfig.headers, 'Authorization', `Bearer ${token}`);
+  }
+
+  if (typeof nextConfig.url === 'string' && nextConfig.url.length > 0) {
+    const isAbsolute = /^https?:\/\//i.test(nextConfig.url);
+    if (!isAbsolute) {
+      nextConfig.url = nextConfig.url.startsWith('/') ? nextConfig.url : `/${nextConfig.url}`;
+    }
+  }
+
+  return nextConfig;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (!error || !error.response) {
+      return Promise.reject(error);
+    }
+
+    const { status, data } = error.response;
+    const errorPayload = data?.error ?? {};
+
+    const normalizedError = new Error(
+      errorPayload.message || data?.message || error.message || `HTTP ${status}`,
+    );
+
+    normalizedError.status = status;
+    normalizedError.code = errorPayload.code ?? `HTTP_${status}`;
+    normalizedError.fields = errorPayload.fields ?? data?.fields ?? null;
+    normalizedError.data = data;
+
+    return Promise.reject(normalizedError);
+  },
+);
+

@@ -74,7 +74,16 @@ export function NewAssetModal({ open, onClose, onSuccess }) {
         result = await api.post('/assets', payload);
       } catch (error) {
         if (error?.status === 404) {
-          result = await api.post('/api/assets', payload);
+          const fallbackBaseURL =
+            typeof api.defaults?.baseURL === 'string'
+              ? api.defaults.baseURL.replace(/\/api\/?$/, '')
+              : api.defaults?.baseURL;
+
+          if (fallbackBaseURL && fallbackBaseURL !== api.defaults?.baseURL) {
+            result = await api.post('/assets', payload, { baseURL: fallbackBaseURL });
+          } else {
+            throw error;
+          }
         } else {
           throw error;
         }

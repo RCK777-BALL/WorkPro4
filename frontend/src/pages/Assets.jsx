@@ -119,7 +119,7 @@ export function Assets() {
       if (filters.location) params.set('location', filters.location);
 
       const query = params.toString();
-      const response = await api.get(`/api/assets${query ? `?${query}` : ''}`);
+      const response = await api.get(`/assets${query ? `?${query}` : ''}`);
       return normalizeAssetsResponse(response);
     },
     keepPreviousData: true,
