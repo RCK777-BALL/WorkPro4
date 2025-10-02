@@ -41,6 +41,8 @@ workpro-cmms/
 └── docker-compose.yml # Development services
 ```
 
+> 🧭 **New here?** Start with the [Newcomer Onboarding Guide](docs/newcomer-onboarding.md) for a tour of the codebase structure, core technologies, and suggested first steps before diving deeper.
+
 ## 🚀 Quick Start
 
 ### Prerequisites
