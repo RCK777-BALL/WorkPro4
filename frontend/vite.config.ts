@@ -10,10 +10,17 @@ export default defineConfig({
       clsx: path.resolve(__dirname, './src/vendor/clsx.js'),
       'tailwind-merge': path.resolve(__dirname, './src/vendor/tailwind-merge.js'),
       'class-variance-authority': path.resolve(__dirname, './src/vendor/class-variance-authority.js'),
-      '@radix-ui/react-slot': path.resolve(__dirname, './src/vendor/react-slot.js'),
       '@radix-ui/react-tabs': path.resolve(__dirname, './src/vendor/react-tabs.js'),
       '@radix-ui/react-select': path.resolve(__dirname, './src/vendor/react-select.js'),
     },
+    dedupe: [
+      'react',
+      'react-dom',
+      '@radix-ui/react-slot',
+      '@radix-ui/react-tabs',
+      '@radix-ui/react-select',
+      '@radix-ui/react-toast',
+    ],
   },
   esbuild: {
     loader: 'tsx',
@@ -33,6 +40,7 @@ export default defineConfig({
   },
   preview: { host: true, port: 4173 },
   optimizeDeps: {
+    include: ['@radix-ui/react-slot'],
     exclude: ['lucide-react'],
     esbuildOptions: {
       loader: {
