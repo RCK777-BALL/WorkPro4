@@ -1,101 +1,537 @@
 import { Router, type Response } from 'express';
+import { z } from 'zod';
 import { prisma } from '../db';
 import { authenticateToken, type AuthRequest } from '../middleware/auth';
 import { asyncHandler, fail, ok } from '../utils/response';
 
-const router = Router();
+const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
+
+const querySchema = z
+  .object({
+    siteId: z
+      .string()
+      .trim()
+      .regex(OBJECT_ID_REGEX, 'siteId must be a valid object id')
+      .optional(),
+    lineId: z
+      .string()
+      .trim()
+      .regex(OBJECT_ID_REGEX, 'lineId must be a valid object id')
+      .optional(),
+    assetId: z
+      .string()
+      .trim()
+      .regex(OBJECT_ID_REGEX, 'assetId must be a valid object id')
+      .optional(),
+    from: z
+      .string()
+      .datetime({ offset: true })
+      .optional(),
+    to: z
+      .string()
+      .datetime({ offset: true })
+      .optional(),
+    rolePreset: z.enum(['admin', 'manager', 'planner', 'technician']).optional(),
+  })
+  .refine((value) => {
+    if (!value.from || !value.to) {
+      return true;
+    }
+
+    return new Date(value.from).getTime() <= new Date(value.to).getTime();
+  }, 'from date must be before to date');
+
+type DashboardFilters = z.infer<typeof querySchema>;
+
+type TenantScopedFilters = DashboardFilters & { tenantId: string; userId: string };
+
+type PriorityBuckets = Record<'critical' | 'high' | 'medium' | 'low', number>;
+
+type StatusBuckets = Record<'requested' | 'approved' | 'in_progress' | 'completed' | 'cancelled', number>;
+
+const OPEN_STATUSES: Array<'requested' | 'approved' | 'in_progress'> = [
+  'requested',
+  'approved',
+  'in_progress',
+];
+
+const STATUS_MAP: Record<string, keyof StatusBuckets> = {
+  requested: 'requested',
+  approved: 'approved',
+  assigned: 'approved',
+  in_progress: 'in_progress',
+  completed: 'completed',
+  cancelled: 'cancelled',
+};
+
+const PRIORITY_MAP: Record<string, keyof PriorityBuckets> = {
+  critical: 'critical',
+  high: 'high',
+  medium: 'medium',
+  low: 'low',
+  urgent: 'critical',
+};
+
+function asPriority(value: string | null | undefined): keyof PriorityBuckets {
+  if (!value) {
+    return 'medium';
+  }
+
+  return PRIORITY_MAP[value] ?? 'medium';
+}
+
+function asStatus(value: string | null | undefined): keyof StatusBuckets {
+  if (!value) {
+    return 'requested';
+  }
+
+  return STATUS_MAP[value] ?? 'requested';
+}
+
+function createPriorityBuckets(): PriorityBuckets {
+  return {
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+  };
+}
+
+function clamp(value: number, min = 0, max = 1) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function percentageDelta(current: number, previous: number): number {
+  if (previous === 0) {
+    return current === 0 ? 0 : 100;
+  }
+
+  return Number((((current - previous) / previous) * 100).toFixed(1));
+}
+
+function minutesBetween(start?: Date | null, end?: Date | null): number {
+  if (!start || !end) {
+    return 0;
+  }
+
+  const diff = end.getTime() - start.getTime();
+  return diff > 0 ? Math.round(diff / 60000) : 0;
+}
+
+function getDateRange(filters: DashboardFilters) {
+  const to = filters.to ? new Date(filters.to) : new Date();
+  const from = filters.from ? new Date(filters.from) : new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  return { from, to };
+}
+
+function normalizeNumber(value: number | null | undefined, precision = 1) {
+  if (!value || Number.isNaN(value)) {
+    return 0;
+  }
+
+  return Number(value.toFixed(precision));
+}
+
+async function loadOpenWorkOrders(scope: TenantScopedFilters & { to: Date }) {
+  const where = buildWorkOrderWhere(scope, { status: { in: OPEN_STATUSES } });
+  const openOrders = await prisma.workOrder.findMany({
+    where,
+    select: {
+      priority: true,
+      createdAt: true,
+    },
+  });
+
+  const priorityBuckets = createPriorityBuckets();
+  const now = new Date(scope.to ?? new Date());
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const prevStart = new Date(sevenDaysAgo.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  let currentWindow = 0;
+  let previousWindow = 0;
+
+  for (const order of openOrders) {
+    priorityBuckets[asPriority(order.priority)] += 1;
+
+    if (order.createdAt && order.createdAt >= sevenDaysAgo) {
+      currentWindow += 1;
+    } else if (order.createdAt && order.createdAt >= prevStart && order.createdAt < sevenDaysAgo) {
+      previousWindow += 1;
+    }
+  }
+
+  return {
+    total: openOrders.length,
+    byPriority: priorityBuckets,
+    delta7d: percentageDelta(currentWindow, previousWindow),
+  };
+}
+
+async function loadMttr(scope: TenantScopedFilters & { from: Date; to: Date }) {
+  const where = buildWorkOrderWhere(scope, {
+    status: 'completed',
+    completedAt: {
+      gte: scope.from,
+      lte: scope.to,
+    },
+  });
+
+  const completed = await prisma.workOrder.findMany({
+    where,
+    select: {
+      startedAt: true,
+      completedAt: true,
+      timeSpentMin: true,
+    },
+  });
+
+  if (!completed.length) {
+    return { value: 0, delta30d: 0 };
+  }
+
+  let totalMinutes = 0;
+  let previousMinutes = 0;
+  let previousCount = 0;
+
+  const previousFrom = new Date(scope.from.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const previousTo = new Date(scope.from.getTime());
+
+  for (const order of completed) {
+    const minutes = order.timeSpentMin ?? minutesBetween(order.startedAt, order.completedAt);
+    totalMinutes += minutes;
+  }
+
+  const previousWhere = buildWorkOrderWhere(scope, {
+    status: 'completed',
+    completedAt: {
+      gte: previousFrom,
+      lt: previousTo,
+    },
+  });
+
+  const previousCompleted = await prisma.workOrder.findMany({
+    where: previousWhere,
+    select: {
+      startedAt: true,
+      completedAt: true,
+      timeSpentMin: true,
+    },
+  });
+
+  for (const order of previousCompleted) {
+    const minutes = order.timeSpentMin ?? minutesBetween(order.startedAt, order.completedAt);
+    previousMinutes += minutes;
+    previousCount += 1;
+  }
+
+  const currentAvg = totalMinutes / completed.length;
+  const previousAvg = previousCount ? previousMinutes / previousCount : 0;
+
+  return {
+    value: normalizeNumber(currentAvg / 60, 2),
+    delta30d: percentageDelta(currentAvg, previousAvg),
+  };
+}
+
+async function loadUptime(scope: TenantScopedFilters & { from: Date; to: Date }) {
+  const assetWhere = buildAssetWhere(scope);
+  const assetCount = await prisma.asset.count({ where: assetWhere });
+
+  if (assetCount === 0) {
+    return { value: 100, delta30d: 0 };
+  }
+
+  const downtimeLogs = await prisma.downtimeLog.findMany({
+    where: {
+      tenantId: scope.tenantId,
+      startedAt: {
+        gte: scope.from,
+        lte: scope.to,
+      },
+      ...(scope.siteId ? { siteId: scope.siteId } : {}),
+      ...(scope.lineId ? { lineId: scope.lineId } : {}),
+      ...(scope.assetId ? { assetId: scope.assetId } : {}),
+    },
+    select: {
+      minutes: true,
+    },
+  });
+
+  const totalDowntimeMinutes = downtimeLogs.reduce((sum, log) => sum + (log.minutes ?? 0), 0);
+  const windowMinutes = Math.max(1, Math.round((scope.to.getTime() - scope.from.getTime()) / 60000));
+  const uptimeRatio = clamp(1 - totalDowntimeMinutes / (assetCount * windowMinutes));
+
+  const previousLogs = await prisma.downtimeLog.findMany({
+    where: {
+      tenantId: scope.tenantId,
+      startedAt: {
+        gte: new Date(scope.from.getTime() - (scope.to.getTime() - scope.from.getTime())),
+        lt: scope.from,
+      },
+      ...(scope.siteId ? { siteId: scope.siteId } : {}),
+      ...(scope.lineId ? { lineId: scope.lineId } : {}),
+      ...(scope.assetId ? { assetId: scope.assetId } : {}),
+    },
+    select: {
+      minutes: true,
+    },
+  });
+
+  const previousDowntime = previousLogs.reduce((sum, log) => sum + (log.minutes ?? 0), 0);
+  const previousUptime = clamp(1 - previousDowntime / (assetCount * windowMinutes));
+
+  return {
+    value: normalizeNumber(uptimeRatio * 100, 1),
+    delta30d: percentageDelta(uptimeRatio, previousUptime),
+  };
+}
+
+async function loadStockout(scope: TenantScopedFilters) {
+  const parts = await prisma.part.findMany({
+    where: {
+      tenantId: scope.tenantId,
+      ...(scope.siteId ? { siteId: scope.siteId } : {}),
+    },
+    select: {
+      id: true,
+      name: true,
+      onHand: true,
+      minLevel: true,
+    },
+  });
+
+  const items = parts
+    .filter((part) => (part.onHand ?? 0) <= (part.minLevel ?? 0))
+    .map((part) => ({
+      partId: part.id,
+      name: part.name,
+      onHand: part.onHand ?? 0,
+      min: part.minLevel ?? 0,
+    }));
+
+  return {
+    count: items.length,
+    items,
+  };
+}
+
+async function loadWorkOrdersByStatus(scope: TenantScopedFilters & { from: Date; to: Date }) {
+  const technicianScoped = scope.rolePreset === 'technician';
+  const where = buildWorkOrderWhere(scope, {
+    ...(technicianScoped ? { assigneeId: scope.userId } : {}),
+    createdAt: {
+      gte: scope.from,
+      lte: scope.to,
+    },
+  });
+
+  const orders = await prisma.workOrder.findMany({
+    where,
+    select: {
+      status: true,
+      priority: true,
+    },
+  });
+
+  const buckets: Record<keyof StatusBuckets, PriorityBuckets> = {
+    requested: createPriorityBuckets(),
+    approved: createPriorityBuckets(),
+    in_progress: createPriorityBuckets(),
+    completed: createPriorityBuckets(),
+    cancelled: createPriorityBuckets(),
+  };
+
+  for (const order of orders) {
+    const status = asStatus(order.status);
+    buckets[status][asPriority(order.priority)] += 1;
+  }
+
+  return Object.entries(buckets).map(([status, priorities]) => ({
+    status,
+    ...priorities,
+  }));
+}
+
+async function loadTopDowntime(scope: TenantScopedFilters & { from: Date; to: Date }) {
+  const logs = await prisma.downtimeLog.findMany({
+    where: {
+      tenantId: scope.tenantId,
+      startedAt: {
+        gte: scope.from,
+        lte: scope.to,
+      },
+      ...(scope.siteId ? { siteId: scope.siteId } : {}),
+      ...(scope.lineId ? { lineId: scope.lineId } : {}),
+      ...(scope.assetId ? { assetId: scope.assetId } : {}),
+    },
+    select: {
+      assetId: true,
+      minutes: true,
+      asset: {
+        select: {
+          name: true,
+        },
+      },
+    },
+  });
+
+  const totals = new Map<string, { name: string; downtimeMinutes: number }>();
+
+  for (const log of logs) {
+    const entry = totals.get(log.assetId) ?? {
+      name: log.asset?.name ?? 'Unknown Asset',
+      downtimeMinutes: 0,
+    };
+
+    entry.downtimeMinutes += log.minutes ?? 0;
+    totals.set(log.assetId, entry);
+  }
+
+  return Array.from(totals.entries())
+    .map(([assetId, value]) => ({
+      assetId,
+      name: value.name,
+      downtimeHours: normalizeNumber(value.downtimeMinutes / 60, 2),
+    }))
+    .sort((a, b) => b.downtimeHours - a.downtimeHours)
+    .slice(0, 10);
+}
+
+async function loadUpcomingPm(scope: TenantScopedFilters) {
+  const now = new Date();
+  const horizon = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+  const technicianScoped = scope.rolePreset === 'technician';
+
+  const where = buildWorkOrderWhere(scope, {
+    isPreventive: true,
+    dueDate: {
+      gte: now,
+      lte: horizon,
+    },
+    ...(technicianScoped ? { assigneeId: scope.userId } : {}),
+  });
+
+  const upcoming = await prisma.workOrder.findMany({
+    where,
+    select: {
+      dueDate: true,
+    },
+  });
+
+  const schedule = new Map<string, number>();
+
+  for (const workOrder of upcoming) {
+    if (!workOrder.dueDate) {
+      continue;
+    }
+
+    const dateKey = workOrder.dueDate.toISOString().slice(0, 10);
+    schedule.set(dateKey, (schedule.get(dateKey) ?? 0) + 1);
+  }
+
+  return Array.from(schedule.entries())
+    .map(([date, count]) => ({
+      date: new Date(date).toISOString(),
+      count,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function buildWorkOrderWhere(
+  scope: TenantScopedFilters & Partial<{ from: Date; to: Date }>,
+  extra: Record<string, unknown> = {},
+) {
+  return {
+    tenantId: scope.tenantId,
+    ...(scope.siteId ? { siteId: scope.siteId } : {}),
+    ...(scope.lineId ? { lineId: scope.lineId } : {}),
+    ...(scope.assetId ? { assetId: scope.assetId } : {}),
+    ...extra,
+  };
+}
+
+function buildAssetWhere(scope: TenantScopedFilters) {
+  return {
+    tenantId: scope.tenantId,
+    ...(scope.siteId ? { siteId: scope.siteId } : {}),
+    ...(scope.lineId ? { lineId: scope.lineId } : {}),
+    ...(scope.assetId ? { id: scope.assetId } : {}),
+  };
+}
+
+export const router = Router();
 
 router.use(authenticateToken);
-
-type TenantScopedWhere = {
-  tenantId: string;
-  siteId?: string | null;
-};
-
-type TenantScopeFilter = {
-  tenantId: string;
-  siteId?: string;
-};
-
-function buildTenantScope({ tenantId, siteId }: TenantScopedWhere): TenantScopeFilter {
-  return siteId ? { tenantId, siteId } : { tenantId };
-}
 
 export async function getDashboardMetrics(req: AuthRequest, res: Response) {
   if (!req.user) {
     return fail(res, 401, 'Authentication required');
   }
 
-  const scope = buildTenantScope({ tenantId: req.user.tenantId, siteId: req.user.siteId ?? null });
-  const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  let filters: DashboardFilters;
 
-  const [openWorkOrders, overdueWorkOrders, completedThisMonth, totalAssets, downAssets] = await Promise.all([
-    prisma.workOrder.count({
-      where: {
-        ...scope,
-        status: {
-          in: ['requested', 'assigned', 'in_progress'],
-        },
-      },
-    }),
-    prisma.workOrder.count({
-      where: {
-        ...scope,
-        status: {
-          in: ['requested', 'assigned', 'in_progress'],
-        },
-        dueDate: {
-          lt: now,
-        },
-      },
-    }),
-    prisma.workOrder.count({
-      where: {
-        ...scope,
-        status: 'completed',
-        updatedAt: {
-          gte: startOfMonth,
-        },
-      },
-    }),
-    prisma.asset.count({
-      where: {
-        ...scope,
-      },
-    }),
-    prisma.asset.count({
-      where: {
-        ...scope,
-        status: {
-          not: 'operational',
-        },
-      },
-    }),
-  ]);
+  try {
+    filters = querySchema.parse(req.query);
+  } catch (error) {
+    return fail(res, 400, 'Invalid filters', error instanceof Error ? error.message : error);
+  }
 
-  const operationalAssets = totalAssets - downAssets;
-  const uptime = totalAssets > 0 ? Number(((operationalAssets / totalAssets) * 100).toFixed(1)) : 100;
+  const { from, to } = getDateRange(filters);
 
-  return ok(res, {
-    workOrders: {
-      open: openWorkOrders,
-      overdue: overdueWorkOrders,
-      completedThisMonth,
-      completedTrend: 18,
+  if (from.getTime() > to.getTime()) {
+    return fail(res, 400, 'Invalid filters', 'from date must be before to date');
+  }
+
+  const rolePreset = filters.rolePreset ?? (req.user.role?.toLowerCase?.() as DashboardFilters['rolePreset']);
+
+  const scope: TenantScopedFilters & { from: Date; to: Date } = {
+    ...filters,
+    rolePreset,
+    tenantId: req.user.tenantId,
+    userId: req.user.id,
+    from,
+    to,
+  };
+
+  const [openWorkOrders, mttrHours, uptimePct, stockoutRisk, workOrdersByStatusPriority, topDowntimeAssets, upcomingPm] =
+    await Promise.all([
+      loadOpenWorkOrders(scope),
+      loadMttr(scope),
+      loadUptime(scope),
+      loadStockout(scope),
+      loadWorkOrdersByStatus(scope),
+      loadTopDowntime(scope),
+      loadUpcomingPm(scope),
+    ]);
+
+  const responsePayload = {
+    kpis: {
+      openWorkOrders,
+      mttrHours,
+      uptimePct,
+      stockoutRisk: (rolePreset ?? filters.rolePreset) === 'technician'
+        ? { count: stockoutRisk.count, items: [] }
+        : stockoutRisk,
     },
-    assets: {
-      uptime,
-      total: totalAssets,
-      down: downAssets,
-      operational: operationalAssets,
+    charts: {
+      workOrdersByStatusPriority,
+      topDowntimeAssets,
+      upcomingPm,
     },
-    inventory: {
-      totalParts: 1284,
-      lowStock: 7,
-      stockHealth: 92.5,
+    context: {
+      tenantId: req.user.tenantId,
+      filters: {
+        ...(filters.siteId ? { siteId: filters.siteId } : {}),
+        ...(filters.lineId ? { lineId: filters.lineId } : {}),
+        ...(filters.assetId ? { assetId: filters.assetId } : {}),
+        from: scope.from.toISOString(),
+        to: scope.to.toISOString(),
+      },
     },
-  });
+  } as const;
+
+  return ok(res, responsePayload);
 }
 
 router.get(
@@ -103,128 +539,13 @@ router.get(
   asyncHandler(getDashboardMetrics),
 );
 
-router.get(
-  '/trends',
-  asyncHandler(async (_req, res) => {
-    const trends = [
-      { date: '2024-01-15', workOrdersCreated: 8, workOrdersCompleted: 6 },
-      { date: '2024-01-16', workOrdersCreated: 11, workOrdersCompleted: 9 },
-      { date: '2024-01-17', workOrdersCreated: 10, workOrdersCompleted: 12 },
-      { date: '2024-01-18', workOrdersCreated: 9, workOrdersCompleted: 10 },
-      { date: '2024-01-19', workOrdersCreated: 13, workOrdersCompleted: 11 },
-      { date: '2024-01-20', workOrdersCreated: 12, workOrdersCompleted: 13 },
-      { date: '2024-01-21', workOrdersCreated: 14, workOrdersCompleted: 15 },
-      { date: '2024-01-22', workOrdersCreated: 15, workOrdersCompleted: 14 },
-      { date: '2024-01-23', workOrdersCreated: 13, workOrdersCompleted: 12 },
-      { date: '2024-01-24', workOrdersCreated: 12, workOrdersCompleted: 13 },
-      { date: '2024-01-25', workOrdersCreated: 16, workOrdersCompleted: 15 },
-      { date: '2024-01-26', workOrdersCreated: 14, workOrdersCompleted: 15 },
-      { date: '2024-01-27', workOrdersCreated: 12, workOrdersCompleted: 13 },
-      { date: '2024-01-28', workOrdersCreated: 11, workOrdersCompleted: 12 },
-    ];
-
-    return ok(res, trends);
-  }),
-);
-
-router.get(
-  '/activity',
-  asyncHandler(async (_req, res) => {
-    const activity = [
-      {
-        id: 'evt-1',
-        action: 'completed a work order',
-        userName: 'Jamie Rivera',
-        entityType: 'work_order',
-        entityId: 'wo-1001',
-        entityName: 'Inspect HVAC filters',
-        createdAt: new Date('2024-01-28T08:32:00Z').toISOString(),
-      },
-      {
-        id: 'evt-2',
-        action: 'updated asset status',
-        userName: 'Taylor Chen',
-        entityType: 'asset',
-        entityId: 'asset-204',
-        entityName: 'Packaging Conveyor Belt',
-        createdAt: new Date('2024-01-28T07:50:00Z').toISOString(),
-      },
-      {
-        id: 'evt-3',
-        action: 'added a comment',
-        userName: 'Morgan Lee',
-        entityType: 'work_order',
-        entityId: 'wo-1003',
-        entityName: 'Replace hydraulic seals',
-        createdAt: new Date('2024-01-28T07:18:00Z').toISOString(),
-      },
-      {
-        id: 'evt-4',
-        action: 'assigned a technician',
-        userName: 'Alex Gomez',
-        entityType: 'work_order',
-        entityId: 'wo-1004',
-        entityName: 'Calibrate pressure sensors',
-        createdAt: new Date('2024-01-28T06:45:00Z').toISOString(),
-      },
-      {
-        id: 'evt-5',
-        action: 'logged new downtime',
-        userName: 'Jordan Smith',
-        entityType: 'asset',
-        entityId: 'asset-209',
-        entityName: 'Boiler Feed Pump',
-        createdAt: new Date('2024-01-28T06:02:00Z').toISOString(),
-      },
-      {
-        id: 'evt-6',
-        action: 'restocked inventory',
-        userName: 'Priya Patel',
-        entityType: 'inventory',
-        entityId: 'part-552',
-        entityName: 'SKF Bearing Set',
-        createdAt: new Date('2024-01-28T05:40:00Z').toISOString(),
-      },
-      {
-        id: 'evt-7',
-        action: 'created a work order',
-        userName: 'Chris Johnson',
-        entityType: 'work_order',
-        entityId: 'wo-1005',
-        entityName: 'Lubricate gear assembly',
-        createdAt: new Date('2024-01-28T05:05:00Z').toISOString(),
-      },
-      {
-        id: 'evt-8',
-        action: 'uploaded inspection photos',
-        userName: 'Robin Kim',
-        entityType: 'work_order',
-        entityId: 'wo-1006',
-        entityName: 'Safety compliance audit',
-        createdAt: new Date('2024-01-28T04:46:00Z').toISOString(),
-      },
-      {
-        id: 'evt-9',
-        action: 'closed a work order',
-        userName: 'Avery Morgan',
-        entityType: 'work_order',
-        entityId: 'wo-1007',
-        entityName: 'Replace coolant valves',
-        createdAt: new Date('2024-01-28T04:20:00Z').toISOString(),
-      },
-      {
-        id: 'evt-10',
-        action: 'flagged low stock',
-        userName: 'Dakota Nguyen',
-        entityType: 'inventory',
-        entityId: 'part-610',
-        entityName: 'Hydraulic Hose Kit',
-        createdAt: new Date('2024-01-28T03:55:00Z').toISOString(),
-      },
-    ];
-
-    return ok(res, activity);
-  }),
-);
+export const __testables = {
+  percentageDelta,
+  minutesBetween,
+  clamp,
+  getDateRange,
+  asPriority,
+  asStatus,
+};
 
 export default router;
