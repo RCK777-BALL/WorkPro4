@@ -124,10 +124,28 @@ The system uses MongoDB with Prisma's MongoDB connector. The schema lives in `ba
 - **Users** - Authentication, role management, and audit authorship tracking
 - **Assets** - Equipment hierarchy and maintenance history
 - **WorkOrders** - Maintenance requests and execution tracking with creator references
+- **DowntimeLogs** - Time-stamped downtime spans used to calculate uptime KPIs
+- **Parts** - Inventory levels with vendor relationships and stockout tracking
 - **PMTasks** - Preventive maintenance scheduling rules and generated tasks
-- **Parts** - Inventory levels with vendor relationships
 - **PurchaseOrders** - Procurement workflow and approvals
 - **AuditLogs** - Complete activity trail for compliance
+
+### Dashboard Metrics & Extensibility
+
+The premium dashboard aggregates KPI and chart data from `/api/dashboard/metrics`. The handler applies tenant- and role-aware filters and returns a normalized payload:
+
+- **KPI suite** – Open work orders (with priority mix & Δ), MTTR, asset uptime, and stockout risk details
+- **Visual panels** – Stacked status/priority analysis, top downtime assets, and a 14-day PM calendar
+- **Context** – Echoes active filters (`siteId`, `lineId`, `assetId`, and date range) for URL persistence
+
+To add a new metric:
+
+1. Extend the Prisma schema or leverage existing collections with efficient indexes
+2. Create an async loader alongside the existing helpers in `backend/src/routes/dashboard.ts`
+3. Append the result to the `responsePayload` while respecting technician visibility rules
+4. Update the React page (e.g. add a new `KpiCard` or chart component) and wire it through the `useDashboardMetrics` hook
+
+Seed realistic data for demos using `pnpm --filter backend db:seed:demo`. The script populates ~200 assets, 2k work orders, downtime logs, and inventory so the dashboard instantly showcases trends. Use this dataset for Lighthouse/QA runs before layering in custom tenants.
 
 ## 🔐 Security & Compliance
 

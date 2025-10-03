@@ -67,6 +67,7 @@ model Asset {
   id       String @id @map("_id") @default(auto()) @db.ObjectId
   tenantId String @map("tenant_id") @db.ObjectId
   siteId   String? @map("site_id") @db.ObjectId
+  lineId   String? @map("line_id") @db.ObjectId
   code     String
   name     String
   location String?
@@ -77,6 +78,7 @@ model Asset {
 
   tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   workOrders WorkOrder[]
+  downtimeLogs DowntimeLog[]
 
 
   createdAt DateTime @default(now())
@@ -85,12 +87,15 @@ model Asset {
   @@map("assets")
   @@index([tenantId])
   @@index([tenantId, status])
+  @@index([tenantId, siteId])
+  @@index([tenantId, lineId])
 }
 
 model WorkOrder {
   id            String            @id @map("_id") @default(auto()) @db.ObjectId
   tenantId      String            @map("tenant_id") @db.ObjectId
   siteId        String?           @map("site_id") @db.ObjectId
+  lineId        String?           @map("line_id") @db.ObjectId
   title         String
   description   String?
   priority      WorkOrderPriority @default(medium)
@@ -107,6 +112,9 @@ model WorkOrder {
   failureCode   String?           @map("failure_code")
   pmTaskId      String?           @map("pm_task_id") @db.ObjectId
   createdBy     String            @map("created_by") @db.ObjectId
+  startedAt     DateTime?         @map("started_at")
+  completedAt   DateTime?         @map("completed_at")
+  isPreventive  Boolean           @map("is_preventive") @default(false)
 
   tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   assignee      User?    @relation("Assignee", fields: [assigneeId], references: [id])
@@ -122,4 +130,48 @@ model WorkOrder {
   @@index([tenantId, siteId], map: "work_orders_tenant_site_idx")
   @@index([tenantId, status], map: "work_orders_tenant_status_idx")
   @@index([tenantId, dueDate], map: "work_orders_tenant_duedate_idx")
+  @@index([tenantId, status, priority], map: "work_orders_tenant_status_priority_idx")
+  @@index([tenantId, completedAt], map: "work_orders_tenant_completed_idx")
+}
+
+model DowntimeLog {
+  id        String   @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId  String   @map("tenant_id") @db.ObjectId
+  assetId   String   @map("asset_id") @db.ObjectId
+  siteId    String?  @map("site_id") @db.ObjectId
+  lineId    String?  @map("line_id") @db.ObjectId
+  startedAt DateTime @map("started_at")
+  endedAt   DateTime @map("ended_at")
+  minutes   Int      @default(0)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  asset  Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("downtime_logs")
+  @@index([tenantId, startedAt], map: "downtime_tenant_started_idx")
+  @@index([tenantId, assetId], map: "downtime_tenant_asset_idx")
+}
+
+model Part {
+  id        String @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId  String @map("tenant_id") @db.ObjectId
+  siteId    String? @map("site_id") @db.ObjectId
+  name      String
+  sku       String? @unique
+  onHand    Int     @map("on_hand") @default(0)
+  minLevel  Int     @map("min_level") @default(0)
+  cost      Float?  @map("cost")
+  vendor    String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("parts")
+  @@index([tenantId])
+  @@index([minLevel, onHand, tenantId], map: "parts_min_onhand_tenant_idx")
 }
