@@ -90,7 +90,7 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
 
   jwt.verify(token, getJwtSecret(), async (err: any, decoded: any) => {
     if (err) {
-      return fail(res, 403, 'Invalid or expired token');
+      return fail(res, 401, 'Invalid or expired token');
     }
 
     try {
@@ -106,7 +106,7 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
       });
 
       if (!user) {
-        return fail(res, 403, 'User not found');
+        return fail(res, 401, 'Invalid or expired token');
       }
 
       const userSiteId = (user as { siteId?: string | null }).siteId ?? null;
