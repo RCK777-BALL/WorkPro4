@@ -42,6 +42,7 @@ function createResponse() {
 describe('workOrderController.createWorkOrder', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prismaMock.workOrder.create.mockReset();
   });
 
   it('returns validation error when assetId is invalid', async () => {
@@ -62,10 +63,10 @@ describe('workOrderController.createWorkOrder', () => {
     expect(res.json).toHaveBeenCalledWith({
       ok: false,
       error: {
-        code: 400,
-        message: 'Value must be a valid ObjectId string',
-        details: undefined,
-
+        code: 'VALIDATION_ERROR',
+        fields: {
+          assetId: ['Invalid assetId'],
+        },
       },
     });
     expect(prismaMock.workOrder.create).not.toHaveBeenCalled();
@@ -119,41 +120,63 @@ describe('workOrderController.createWorkOrder', () => {
       siteId: 'site-1',
       userId: 'user-1',
     } as unknown as Request & { tenantId: string; siteId: string; userId: string };
+    const res = createResponse();
 
-    expect(prismaMock.user.findFirst).toHaveBeenCalledTimes(1);
-    expect(prismaMock.workOrder.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          assetId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
-          attachments: [],
-          assigneeId: null,
-          category: undefined,
-          dueDate: undefined,
-          priority: 'medium',
-          status: 'requested',
-        }),
-      }),
-    );
-
+    prismaMock.workOrder.create.mockResolvedValue({
+      id: 'order-1',
+      tenantId: 'tenant-1',
+      siteId: 'site-1',
+      title: 'Broken conveyor',
+      description: 'Inspect the conveyor for issues',
+      priority: 'high',
+      status: 'requested',
+      assetId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+      createdBy: 'user-1',
+      assigneeId: 'bbbbbbbbbbbbbbbbbbbbbbbb',
+      dueDate: new Date(now.toISOString()),
+      category: 'maintenance',
+      attachments: [
+        {
+          id: 'cccccccccccccccccccccccc',
+          url: 'https://example.com/report.pdf',
+          filename: 'report.pdf',
+          contentType: 'application/pdf',
+          size: 1234,
+        },
+      ],
+      createdAt: now,
+      updatedAt: now,
+    });
 
     await createWorkOrder(req, res);
 
-    expect(prismaMock.workOrder.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        tenantId: 'tenant-1',
-        siteId: 'site-1',
-        title: 'Broken conveyor',
-        description: 'Inspect the conveyor for issues',
-        priority: 'high',
-        status: 'requested',
-        assetId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
-        attachments: [],
-        assigneeId: null,
-        category: null,
-        dueDate: null,
+    expect(prismaMock.workOrder.create).toHaveBeenCalledTimes(1);
+    const createArgs = prismaMock.workOrder.create.mock.calls[0][0];
 
-      }),
+    expect(createArgs.data).toMatchObject({
+      tenantId: 'tenant-1',
+      siteId: 'site-1',
+      title: 'Broken conveyor',
+      description: 'Inspect the conveyor for issues',
+      priority: 'high',
+      status: 'requested',
+      assetId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+      createdBy: 'user-1',
+      assigneeId: 'bbbbbbbbbbbbbbbbbbbbbbbb'.toLowerCase(),
+      category: 'maintenance',
+      attachments: [
+        {
+          id: 'cccccccccccccccccccccccc',
+          url: 'https://example.com/report.pdf',
+          filename: 'report.pdf',
+          contentType: 'application/pdf',
+          size: 1234,
+        },
+      ],
     });
+
+    expect(createArgs.data.dueDate).toBeInstanceOf(Date);
+    expect(createArgs.data.dueDate?.toISOString()).toBe(now.toISOString());
 
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith({
