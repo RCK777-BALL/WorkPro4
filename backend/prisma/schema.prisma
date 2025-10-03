@@ -55,6 +55,14 @@ enum WorkOrderStatus {
   cancelled
 }
 
+enum AssetStatus {
+  operational
+  maintenance
+  down
+  retired
+  decommissioned
+}
+
 model Asset {
   id       String @id @map("_id") @default(auto()) @db.ObjectId
   tenantId String @map("tenant_id") @db.ObjectId
@@ -65,7 +73,7 @@ model Asset {
   category String?
   purchaseDate DateTime? @map("purchase_date")
   cost     Float?   @map("cost")
-  status   String   @default("operational")
+  status   AssetStatus @default(operational)
 
   tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   workOrders WorkOrder[]
