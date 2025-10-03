@@ -17,20 +17,28 @@ function readToken() {
   }
 }
 
-function setHeader(headers, key, value) {
+function setHeader(headers, key, value, options = {}) {
   if (!headers || value == null) {
     return;
   }
 
+  const { override = true } = options;
+
   if (typeof headers.set === 'function') {
-    if (!headers.has || !headers.has(key)) {
+    if (override || !headers.has || !headers.has(key)) {
       headers.set(key, value);
     }
     return;
   }
 
-  if (!headers[key]) {
-    headers[key] = value;
+  const existingKey =
+    typeof headers === 'object' && headers !== null
+      ? Object.keys(headers).find((headerKey) => headerKey.toLowerCase() === key.toLowerCase())
+      : undefined;
+
+  if (override || typeof existingKey === 'undefined') {
+    const targetKey = typeof existingKey === 'string' ? existingKey : key;
+    headers[targetKey] = value;
   }
 }
 
@@ -43,7 +51,7 @@ api.interceptors.request.use((config) => {
   const nextConfig = config;
   nextConfig.headers = nextConfig.headers ?? {};
 
-  setHeader(nextConfig.headers, 'Content-Type', 'application/json');
+  setHeader(nextConfig.headers, 'Content-Type', 'application/json', { override: false });
 
   const token = readToken();
   if (token) {
