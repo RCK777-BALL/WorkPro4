@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { Prisma } from '@prisma/client';
 import { fail } from '../utils/response';
 import { getJwtSecret } from '../config/auth';
 import { prisma } from '../db';
@@ -30,6 +31,22 @@ export interface AuthRequest extends Request {
   };
 }
 
+const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
+
+function normalizeUserId(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (!OBJECT_ID_REGEX.test(trimmed)) {
+    return null;
+  }
+
+  return trimmed;
+}
+
 export async function authOptional(req: Request, _res: Response, next: NextFunction) {
   const authHeader = req.headers?.authorization;
 
@@ -45,12 +62,13 @@ export async function authOptional(req: Request, _res: Response, next: NextFunct
 
   try {
     const decoded = jwt.verify(token, getJwtSecret()) as DecodedToken;
+    const userId = normalizeUserId(decoded?.userId);
 
-    if (!decoded?.userId || typeof decoded.userId !== 'string') {
+    if (!userId) {
       return next();
     }
 
-    req.userId = decoded.userId;
+    req.userId = userId;
 
     if (typeof decoded.tenantId === 'string' && decoded.tenantId.trim()) {
       req.tenantId = decoded.tenantId.trim();
@@ -62,7 +80,7 @@ export async function authOptional(req: Request, _res: Response, next: NextFunct
 
     if (!req.tenantId) {
       const user = await prisma.user.findUnique({
-        where: { id: decoded.userId },
+        where: { id: userId },
         select: { tenantId: true },
       });
 
@@ -93,9 +111,16 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
       return fail(res, 401, 'Invalid or expired token');
     }
 
+    const decodedToken = decoded as DecodedToken;
+    const userId = normalizeUserId(decodedToken?.userId);
+
+    if (!userId) {
+      return fail(res, 401, 'Invalid or expired token');
+    }
+
     try {
       const user = await prisma.user.findUnique({
-        where: { id: decoded.userId },
+        where: { id: userId },
         select: {
           id: true,
           email: true,
@@ -113,6 +138,13 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
       req.user = { ...user, role: user.role ?? 'user', siteId: userSiteId };
       next();
     } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        (error.code === 'P2023' || error.code === 'P2009')
+      ) {
+        return fail(res, 401, 'Invalid or expired token');
+      }
+
       return fail(res, 500, 'Authentication error');
     }
   });
