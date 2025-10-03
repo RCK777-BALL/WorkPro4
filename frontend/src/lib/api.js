@@ -1,36 +1,31 @@
 import axios from 'axios';
 
-const DEFAULT_BASE_URL = 'http://localhost:5010/api';
-const TOKEN_STORAGE_KEY = 'wp_token';
+const DEFAULT_API_BASE = 'http://localhost:5010/api';
+const rawApiBase = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL
+  : DEFAULT_API_BASE;
 
-const rawBaseUrl = import.meta?.env?.VITE_API_URL || DEFAULT_BASE_URL;
-const baseURL = typeof rawBaseUrl === 'string' ? rawBaseUrl.replace(/\/+$/, '') : DEFAULT_BASE_URL;
-const TOKEN_STORAGE_KEY = 'token';
+export const API_BASE = typeof rawApiBase === 'string' && rawApiBase.length > 0
+  ? rawApiBase.replace(/\/+$/, '')
+  : DEFAULT_API_BASE;
 
-let inMemoryToken = null;
+export const TOKEN_STORAGE_KEY = 'wp_token';
 
-function readToken() {
-  if (inMemoryToken) {
-    return inMemoryToken;
-  }
-
-
-  if (typeof window === 'undefined') {
+export function getToken() {
+  if (typeof window === 'undefined' || !window.localStorage) {
     return null;
   }
 
   try {
-    inMemoryToken = window.localStorage.getItem(TOKEN_STORAGE_KEY);
-    return inMemoryToken;
-
+    return window.localStorage.getItem(TOKEN_STORAGE_KEY);
   } catch (error) {
-    console.warn('Unable to access localStorage for auth token.', error);
+    console.warn('Unable to read auth token from storage.', error);
     return null;
   }
 }
 
 export function setToken(token) {
-  if (typeof window === 'undefined') {
+  if (typeof window === 'undefined' || !window.localStorage) {
     return;
   }
 
@@ -46,7 +41,7 @@ export function setToken(token) {
 }
 
 export function clearToken() {
-  if (typeof window === 'undefined') {
+  if (typeof window === 'undefined' || !window.localStorage) {
     return;
   }
 
@@ -58,17 +53,12 @@ export function clearToken() {
 }
 
 export const api = axios.create({
-  baseURL,
+  baseURL: API_BASE,
   withCredentials: false,
 });
 
-const existingToken = readToken();
-if (existingToken) {
-  applyTokenToClient(existingToken);
-}
-
 api.interceptors.request.use((config) => {
-  const nextConfig = config;
+  const nextConfig = { ...config };
   nextConfig.headers = nextConfig.headers ?? {};
 
   if (typeof nextConfig.url === 'string' && nextConfig.url.length > 0) {
@@ -101,6 +91,7 @@ api.interceptors.response.use(
 
     if (status === 401 || status === 403) {
       clearToken();
+
       if (typeof window !== 'undefined') {
         try {
           window.location.assign('/login');
