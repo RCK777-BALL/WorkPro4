@@ -1,67 +1,74 @@
 import axios from 'axios';
 
 const DEFAULT_BASE_URL = 'http://localhost:5010/api';
+const TOKEN_STORAGE_KEY = 'wp_token';
+
 const rawBaseUrl = import.meta?.env?.VITE_API_URL || DEFAULT_BASE_URL;
 const baseURL = typeof rawBaseUrl === 'string' ? rawBaseUrl.replace(/\/+$/, '') : DEFAULT_BASE_URL;
 
-function readToken() {
+export function getToken() {
   if (typeof window === 'undefined') {
     return null;
   }
 
   try {
-    return window.localStorage.getItem('token');
+    return window.localStorage.getItem(TOKEN_STORAGE_KEY);
   } catch (error) {
     console.warn('Unable to access localStorage for auth token.', error);
     return null;
   }
 }
 
-function setHeader(headers, key, value, options = {}) {
-  if (!headers || value == null) {
+export function setToken(token) {
+  if (typeof window === 'undefined') {
     return;
   }
 
-  const { override = true } = options;
-
-  if (typeof headers.set === 'function') {
-    if (override || !headers.has || !headers.has(key)) {
-      headers.set(key, value);
+  try {
+    if (typeof token === 'string' && token.length > 0) {
+      window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    } else {
+      window.localStorage.removeItem(TOKEN_STORAGE_KEY);
     }
+  } catch (error) {
+    console.warn('Unable to persist auth token.', error);
+  }
+}
+
+export function clearToken() {
+  if (typeof window === 'undefined') {
     return;
   }
 
-  const existingKey =
-    typeof headers === 'object' && headers !== null
-      ? Object.keys(headers).find((headerKey) => headerKey.toLowerCase() === key.toLowerCase())
-      : undefined;
-
-  if (override || typeof existingKey === 'undefined') {
-    const targetKey = typeof existingKey === 'string' ? existingKey : key;
-    headers[targetKey] = value;
+  try {
+    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+  } catch (error) {
+    console.warn('Unable to clear auth token.', error);
   }
 }
 
 export const api = axios.create({
   baseURL,
-  withCredentials: true,
+  withCredentials: false,
 });
 
 api.interceptors.request.use((config) => {
   const nextConfig = config;
   nextConfig.headers = nextConfig.headers ?? {};
 
-  setHeader(nextConfig.headers, 'Content-Type', 'application/json', { override: false });
-
-  const token = readToken();
-  if (token) {
-    setHeader(nextConfig.headers, 'Authorization', `Bearer ${token}`);
-  }
-
   if (typeof nextConfig.url === 'string' && nextConfig.url.length > 0) {
     const isAbsolute = /^https?:\/\//i.test(nextConfig.url);
     if (!isAbsolute) {
       nextConfig.url = nextConfig.url.startsWith('/') ? nextConfig.url : `/${nextConfig.url}`;
+    }
+  }
+
+  const token = getToken();
+  if (token) {
+    if (typeof nextConfig.headers.set === 'function') {
+      nextConfig.headers.set('Authorization', `Bearer ${token}`);
+    } else {
+      nextConfig.headers.Authorization = `Bearer ${token}`;
     }
   }
 
@@ -75,19 +82,19 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    const { status, data } = error.response;
-    const errorPayload = data?.error ?? {};
+    const { status } = error.response;
 
-    const normalizedError = new Error(
-      errorPayload.message || data?.message || error.message || `HTTP ${status}`,
-    );
+    if (status === 401 || status === 403) {
+      clearToken();
+      if (typeof window !== 'undefined') {
+        try {
+          window.location.assign('/login');
+        } catch (navigationError) {
+          console.warn('Failed to redirect to login after authentication error.', navigationError);
+        }
+      }
+    }
 
-    normalizedError.status = status;
-    normalizedError.code = errorPayload.code ?? `HTTP_${status}`;
-    normalizedError.fields = errorPayload.fields ?? data?.fields ?? null;
-    normalizedError.data = data;
-
-    return Promise.reject(normalizedError);
+    return Promise.reject(error);
   },
 );
-
