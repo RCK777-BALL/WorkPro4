@@ -1,77 +1,106 @@
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import { prisma } from '../db';
-import { authenticateToken } from '../middleware/auth';
-import { asyncHandler, ok } from '../utils/response';
+import { authenticateToken, type AuthRequest } from '../middleware/auth';
+import { asyncHandler, fail, ok } from '../utils/response';
 
 const router = Router();
 
 router.use(authenticateToken);
 
+type TenantScopedWhere = {
+  tenantId: string;
+  siteId?: string | null;
+};
+
+type TenantScopeFilter = {
+  tenantId: string;
+  siteId?: string;
+};
+
+function buildTenantScope({ tenantId, siteId }: TenantScopedWhere): TenantScopeFilter {
+  return siteId ? { tenantId, siteId } : { tenantId };
+}
+
+export async function getDashboardMetrics(req: AuthRequest, res: Response) {
+  if (!req.user) {
+    return fail(res, 401, 'Authentication required');
+  }
+
+  const scope = buildTenantScope({ tenantId: req.user.tenantId, siteId: req.user.siteId ?? null });
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const [openWorkOrders, overdueWorkOrders, completedThisMonth, totalAssets, downAssets] = await Promise.all([
+    prisma.workOrder.count({
+      where: {
+        ...scope,
+        status: {
+          in: ['requested', 'assigned', 'in_progress'],
+        },
+      },
+    }),
+    prisma.workOrder.count({
+      where: {
+        ...scope,
+        status: {
+          in: ['requested', 'assigned', 'in_progress'],
+        },
+        dueDate: {
+          lt: now,
+        },
+      },
+    }),
+    prisma.workOrder.count({
+      where: {
+        ...scope,
+        status: 'completed',
+        updatedAt: {
+          gte: startOfMonth,
+        },
+      },
+    }),
+    prisma.asset.count({
+      where: {
+        ...scope,
+      },
+    }),
+    prisma.asset.count({
+      where: {
+        ...scope,
+        status: {
+          not: 'operational',
+        },
+      },
+    }),
+  ]);
+
+  const operationalAssets = totalAssets - downAssets;
+  const uptime = totalAssets > 0 ? Number(((operationalAssets / totalAssets) * 100).toFixed(1)) : 100;
+
+  return ok(res, {
+    workOrders: {
+      open: openWorkOrders,
+      overdue: overdueWorkOrders,
+      completedThisMonth,
+      completedTrend: 18,
+    },
+    assets: {
+      uptime,
+      total: totalAssets,
+      down: downAssets,
+      operational: operationalAssets,
+    },
+    inventory: {
+      totalParts: 1284,
+      lowStock: 7,
+      stockHealth: 92.5,
+    },
+  });
+}
+
 router.get(
   '/metrics',
-  asyncHandler(async (_req, res) => {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-    const [openWorkOrders, overdueWorkOrders, completedThisMonth, totalAssets, downAssets] = await Promise.all([
-      prisma.workOrder.count({
-        where: {
-          status: {
-            in: ['requested', 'assigned', 'in_progress'],
-          },
-        },
-      }),
-      prisma.workOrder.count({
-        where: {
-          status: {
-            in: ['requested', 'assigned', 'in_progress'],
-          },
-          dueDate: {
-            lt: now,
-          },
-        },
-      }),
-      prisma.workOrder.count({
-        where: {
-          status: 'completed',
-          updatedAt: {
-            gte: startOfMonth,
-          },
-        },
-      }),
-      prisma.asset.count(),
-      prisma.asset.count({
-        where: {
-          status: {
-            not: 'operational',
-          },
-        },
-      }),
-    ]);
-
-    const operationalAssets = totalAssets - downAssets;
-    const uptime = totalAssets > 0 ? Number(((operationalAssets / totalAssets) * 100).toFixed(1)) : 100;
-
-    return ok(res, {
-      workOrders: {
-        open: openWorkOrders,
-        overdue: overdueWorkOrders,
-        completedThisMonth,
-        completedTrend: 18,
-      },
-      assets: {
-        uptime,
-        total: totalAssets,
-        down: downAssets,
-        operational: operationalAssets,
-      },
-      inventory: {
-        totalParts: 1284,
-        lowStock: 7,
-        stockHealth: 92.5,
-      },
-    });
-  }),
+  asyncHandler(getDashboardMetrics),
 );
 
 router.get(
