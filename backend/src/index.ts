@@ -32,7 +32,9 @@ app.use(helmet());
 app.use(
   cors({
     origin: isProduction ? configuredFrontendOrigin || 'http://localhost:5173' : 'http://localhost:5173',
-    credentials: true,
+    credentials: false,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   }),
 );
 
