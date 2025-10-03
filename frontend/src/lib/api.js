@@ -3,18 +3,62 @@ import axios from 'axios';
 const DEFAULT_BASE_URL = 'http://localhost:5010/api';
 const rawBaseUrl = import.meta?.env?.VITE_API_URL || DEFAULT_BASE_URL;
 const baseURL = typeof rawBaseUrl === 'string' ? rawBaseUrl.replace(/\/+$/, '') : DEFAULT_BASE_URL;
+const TOKEN_STORAGE_KEY = 'token';
+
+let inMemoryToken = null;
 
 function readToken() {
+  if (inMemoryToken) {
+    return inMemoryToken;
+  }
+
   if (typeof window === 'undefined') {
     return null;
   }
 
   try {
-    return window.localStorage.getItem('token');
+    inMemoryToken = window.localStorage.getItem(TOKEN_STORAGE_KEY);
+    return inMemoryToken;
   } catch (error) {
     console.warn('Unable to access localStorage for auth token.', error);
     return null;
   }
+}
+
+function persistToken(token) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    if (token) {
+      window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    } else {
+      window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+    }
+  } catch (error) {
+    console.warn('Unable to persist auth token.', error);
+  }
+}
+
+function applyTokenToClient(token) {
+  if (token) {
+    api.defaults.headers.common.Authorization = `Bearer ${token}`;
+  } else {
+    delete api.defaults.headers.common.Authorization;
+  }
+}
+
+export function setToken(token) {
+  inMemoryToken = token || '';
+  persistToken(inMemoryToken);
+  applyTokenToClient(inMemoryToken);
+}
+
+export function clearToken() {
+  inMemoryToken = '';
+  persistToken('');
+  applyTokenToClient('');
 }
 
 function setHeader(headers, key, value, options = {}) {
@@ -46,6 +90,11 @@ export const api = axios.create({
   baseURL,
   withCredentials: true,
 });
+
+const existingToken = readToken();
+if (existingToken) {
+  applyTokenToClient(existingToken);
+}
 
 api.interceptors.request.use((config) => {
   const nextConfig = config;

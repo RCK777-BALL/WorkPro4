@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
-import { api } from '@/lib/api';
+import { api, setToken as setApiToken, clearToken as clearApiToken } from '@/lib/api';
 
 const TOKEN_KEY = 'token';
 const USER_KEY = 'user';
@@ -25,7 +25,7 @@ function readStoredUser() {
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || '');
+  const [token, setTokenState] = useState(() => localStorage.getItem(TOKEN_KEY) || '');
   const [user, setUser] = useState(() => readStoredUser());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -45,9 +45,9 @@ export function AuthProvider({ children }) {
 
       const normalizedUser = normalizeUser(nextUser);
 
-      localStorage.setItem(TOKEN_KEY, nextToken);
+      setApiToken(nextToken);
       localStorage.setItem(USER_KEY, JSON.stringify(normalizedUser));
-      setToken(nextToken);
+      setTokenState(nextToken);
       setUser(normalizedUser);
 
       return { ok: true, user: normalizedUser };
@@ -57,9 +57,9 @@ export function AuthProvider({ children }) {
       } else {
         setError(err?.message || 'Login failed.');
       }
-      localStorage.removeItem(TOKEN_KEY);
+      clearApiToken();
       localStorage.removeItem(USER_KEY);
-      setToken('');
+      setTokenState('');
       setUser(null);
       return { ok: false };
     } finally {
@@ -68,9 +68,9 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
+    clearApiToken();
     localStorage.removeItem(USER_KEY);
-    setToken('');
+    setTokenState('');
     setUser(null);
     setError('');
   }, []);
