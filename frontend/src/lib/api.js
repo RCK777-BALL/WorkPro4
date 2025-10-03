@@ -5,14 +5,24 @@ const TOKEN_STORAGE_KEY = 'wp_token';
 
 const rawBaseUrl = import.meta?.env?.VITE_API_URL || DEFAULT_BASE_URL;
 const baseURL = typeof rawBaseUrl === 'string' ? rawBaseUrl.replace(/\/+$/, '') : DEFAULT_BASE_URL;
+const TOKEN_STORAGE_KEY = 'token';
 
-export function getToken() {
+let inMemoryToken = null;
+
+function readToken() {
+  if (inMemoryToken) {
+    return inMemoryToken;
+  }
+
+
   if (typeof window === 'undefined') {
     return null;
   }
 
   try {
-    return window.localStorage.getItem(TOKEN_STORAGE_KEY);
+    inMemoryToken = window.localStorage.getItem(TOKEN_STORAGE_KEY);
+    return inMemoryToken;
+
   } catch (error) {
     console.warn('Unable to access localStorage for auth token.', error);
     return null;
@@ -51,6 +61,11 @@ export const api = axios.create({
   baseURL,
   withCredentials: false,
 });
+
+const existingToken = readToken();
+if (existingToken) {
+  applyTokenToClient(existingToken);
+}
 
 api.interceptors.request.use((config) => {
   const nextConfig = config;
