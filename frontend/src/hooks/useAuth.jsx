@@ -1,8 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
-import { api, setToken as setApiToken, clearToken as clearApiToken } from '@/lib/api';
-
-const TOKEN_KEY = 'token';
+import { api, getToken, setToken, clearToken, TOKEN_STORAGE_KEY } from '@/lib/api';
 const USER_KEY = 'user';
 
 function normalizeUser(user) {
@@ -25,7 +23,22 @@ function readStoredUser() {
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [token, setTokenState] = useState(() => localStorage.getItem(TOKEN_KEY) || '');
+  const [token, setTokenState] = useState(() => {
+    const storedToken = getToken();
+    if (storedToken) {
+      return storedToken;
+    }
+
+    if (typeof window === 'undefined') {
+      return '';
+    }
+
+    try {
+      return window.localStorage.getItem(TOKEN_STORAGE_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
   const [user, setUser] = useState(() => readStoredUser());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -45,7 +58,7 @@ export function AuthProvider({ children }) {
 
       const normalizedUser = normalizeUser(nextUser);
 
-      setApiToken(nextToken);
+      setToken(nextToken);
       localStorage.setItem(USER_KEY, JSON.stringify(normalizedUser));
       setTokenState(nextToken);
       setUser(normalizedUser);
@@ -57,7 +70,7 @@ export function AuthProvider({ children }) {
       } else {
         setError(err?.message || 'Login failed.');
       }
-      clearApiToken();
+      clearToken();
       localStorage.removeItem(USER_KEY);
       setTokenState('');
       setUser(null);
@@ -68,7 +81,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(() => {
-    clearApiToken();
+    clearToken();
     localStorage.removeItem(USER_KEY);
     setTokenState('');
     setUser(null);
