@@ -64,37 +64,28 @@ export function WorkOrderForm({ workOrderId, onClose, onSuccess }: WorkOrderForm
   const { data: assets = [] } = useQuery({
     queryKey: ['assets'],
     queryFn: async (): Promise<Asset[]> => {
-      try {
-        const result = await api.get<{ sites?: any[] }>('/assets/tree');
-        const sites = Array.isArray(result?.sites) ? result.sites : [];
-        // Flatten the asset tree structure
-        const allAssets: Asset[] = [];
-        sites.forEach((site) => {
-          const areas = Array.isArray(site?.areas) ? site.areas : [];
-          areas.forEach((area: any) => {
-            const lines = Array.isArray(area?.lines) ? area.lines : [];
-            lines.forEach((line: any) => {
-              const stations = Array.isArray(line?.stations) ? line.stations : [];
-              stations.forEach((station: any) => {
-                const stationAssets = Array.isArray(station?.assets) ? station.assets : [];
-                stationAssets.forEach((asset: Asset) => {
-                  if (asset?.id && asset?.name) {
-                    allAssets.push(asset);
-                  }
-                });
+      const result = await api.get<{ sites?: any[] }>('/assets/tree');
+      const sites = Array.isArray(result?.sites) ? result.sites : [];
+      // Flatten the asset tree structure
+      const allAssets: Asset[] = [];
+      sites.forEach((site) => {
+        const areas = Array.isArray(site?.areas) ? site.areas : [];
+        areas.forEach((area: any) => {
+          const lines = Array.isArray(area?.lines) ? area.lines : [];
+          lines.forEach((line: any) => {
+            const stations = Array.isArray(line?.stations) ? line.stations : [];
+            stations.forEach((station: any) => {
+              const stationAssets = Array.isArray(station?.assets) ? station.assets : [];
+              stationAssets.forEach((asset: Asset) => {
+                if (asset?.id && asset?.name) {
+                  allAssets.push(asset);
+                }
               });
             });
           });
         });
-        return allAssets;
-      } catch {
-        // Mock data fallback
-        return [
-          { id: '1', code: 'PUMP-001', name: 'Main Water Pump' },
-          { id: '2', code: 'CONV-001', name: 'Conveyor Belt #1' },
-          { id: '3', code: 'MOTOR-001', name: 'Drive Motor #1' }
-        ];
-      }
+      });
+      return allAssets;
     }
   });
 
@@ -129,17 +120,8 @@ export function WorkOrderForm({ workOrderId, onClose, onSuccess }: WorkOrderForm
   const { data: users = [] } = useQuery({
     queryKey: ['users'],
     queryFn: async (): Promise<User[]> => {
-      try {
-        const result = await api.get<User[]>('/users');
-        return Array.isArray(result) ? result : [];
-      } catch {
-        // Mock data fallback
-        return [
-          { id: '1', name: 'John Smith', email: 'john@example.com' },
-          { id: '2', name: 'Jane Doe', email: 'jane@example.com' },
-          { id: '3', name: 'Mike Johnson', email: 'mike@example.com' }
-        ];
-      }
+      const result = await api.get<User[]>('/users');
+      return Array.isArray(result) ? result : [];
     }
   });
 
@@ -148,11 +130,7 @@ export function WorkOrderForm({ workOrderId, onClose, onSuccess }: WorkOrderForm
     queryKey: ['work-order', workOrderId],
     queryFn: async (): Promise<ExistingWorkOrder | null> => {
       if (!workOrderId) return null;
-      try {
-        return await api.get<ExistingWorkOrder>(`/work-orders/${workOrderId}`);
-      } catch {
-        return null;
-      }
+      return api.get<ExistingWorkOrder>(`/work-orders/${workOrderId}`);
     },
     enabled: !!workOrderId
   });

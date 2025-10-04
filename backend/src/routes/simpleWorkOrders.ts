@@ -3,11 +3,15 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { createWorkOrderValidator } from '../validators/workOrderValidators';
 import { asyncHandler, fail, ok } from '../utils/response';
-import { auditLog } from '../middleware/audit';
+import { authenticateToken, type AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
+router.use(authenticateToken);
+
 const workOrderCreateSchema = createWorkOrderValidator;
+
+router.use(authenticateToken);
 
 type WorkOrderWithRelations = Prisma.WorkOrderGetPayload<{
   include: {
@@ -41,32 +45,38 @@ function mapWorkOrder(workOrder: WorkOrderWithRelations) {
   };
 }
 
-async function resolveDefaultUser() {
-  const user = await prisma.user.findFirst({
-    orderBy: { createdAt: 'asc' },
-  });
+const VIEW_WORK_ORDER_ROLES = ['admin', 'manager', 'technician', 'viewer', 'user'] as const;
+const CREATE_WORK_ORDER_ROLES = ['admin', 'manager', 'technician', 'user'] as const;
 
-  if (!user) {
-    return null;
-  }
+function normalizeRole(role: string | undefined | null) {
+  return typeof role === 'string' && role.trim().length > 0 ? role.trim().toLowerCase() : 'user';
+}
 
-  return user;
+function hasRequiredRole(user: NonNullable<AuthRequest['user']>, roles: readonly string[]) {
+  const normalizedRole = normalizeRole(user.role);
+  return roles.includes(normalizedRole);
 }
 
 router.get(
   '/',
-  asyncHandler(async (req, res) => {
-    const defaultUser = await resolveDefaultUser();
+  asyncHandler(async (req: AuthRequest, res) => {
+    if (!req.user) {
+      return fail(res, 401, 'Authentication required');
+    }
 
-    if (!defaultUser) {
-      return fail(res, 500, 'No default user found');
+    if (!hasRequiredRole(req.user, VIEW_WORK_ORDER_ROLES)) {
+      return fail(
+        res,
+        403,
+        `Requires one of the following roles: ${VIEW_WORK_ORDER_ROLES.join(', ')}`,
+      );
     }
 
     const { status, priority, assignee, from, to, q, category } = req.query;
 
     const where: Prisma.WorkOrderWhereInput = {};
 
-    where.tenantId = defaultUser.tenantId;
+    where.tenantId = req.user.tenantId;
 
     if (typeof status === 'string' && status) {
       const allowedStatuses = ['requested', 'assigned', 'in_progress', 'completed', 'cancelled'] as const;
@@ -137,8 +147,19 @@ router.get(
 
 router.post(
   '/',
-  auditLog('create', 'work_order'),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: AuthRequest, res) => {
+    if (!req.user) {
+      return fail(res, 401, 'Authentication required');
+    }
+
+    if (!hasRequiredRole(req.user, CREATE_WORK_ORDER_ROLES)) {
+      return fail(
+        res,
+        403,
+        `Requires one of the following roles: ${CREATE_WORK_ORDER_ROLES.join(', ')}`,
+      );
+    }
+
     const parseResult = workOrderCreateSchema.safeParse(req.body);
 
     if (!parseResult.success) {
@@ -153,19 +174,14 @@ router.post(
 
     const payload = parseResult.data;
 
-    const defaultUser = await resolveDefaultUser();
-    if (!defaultUser) {
-      return fail(res, 500, 'No default user found to assign work orders');
-    }
-
     const workOrder = await prisma.workOrder.create({
       data: {
         title: payload.title,
         description: payload.description,
         priority: payload.priority ?? 'medium',
         status: payload.status ?? 'requested',
-        tenantId: defaultUser.tenantId,
-        createdBy: defaultUser.id,
+        tenantId: req.user.tenantId,
+        createdBy: req.user.id,
         assetId: payload.assetId ?? undefined,
         assigneeId: payload.assigneeId ?? null,
         category: payload.category ?? undefined,
@@ -179,12 +195,13 @@ router.post(
       },
     });
 
-    res.locals.auditMetadata = {
-      workOrderId: workOrder.id,
-      status: workOrder.status,
-    };
+    const normalized = mapWorkOrder(workOrder);
 
-    return ok(res, mapWorkOrder(workOrder));
+    void emitTenantWebhookEvent(defaultUser.tenantId, 'work-order.created', {
+      workOrder: normalized,
+    });
+
+    return ok(res, normalized);
   }),
 );
 

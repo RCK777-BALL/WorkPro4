@@ -3,6 +3,9 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
+import swaggerUi from 'swagger-ui-express';
+import swaggerJsdoc from 'swagger-jsdoc';
 import bcrypt from './lib/bcrypt';
 import { requestLogger } from './middleware/requestLogger';
 import { errorHandler } from './middleware/errorHandler';
@@ -14,19 +17,142 @@ import { normalizeObjectId } from './lib/normalizeObjectId';
 // Routes
 import authRoutes from './routes/auth';
 import summaryRoutes from './routes/summary';
-import workOrderRoutes from './routes/simpleWorkOrders';
+import workOrderRoutes from './routes/workOrders';
 import dashboardRoutes from './routes/dashboard';
 import assetRoutes from './routes/assets';
 import partRoutes from './routes/parts';
 import vendorRoutes from './routes/vendors';
+import purchaseOrderRoutes from './routes/purchaseOrders';
 import searchRoutes from './routes/search';
-import auditRoutes from './routes/audit';
+import pmRoutes from './routes/pm';
+import { initializePmScheduler } from './queue/pmScheduler';
 
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5010;
 const isProduction = process.env.NODE_ENV === 'production';
 const configuredFrontendOrigin = process.env.FRONTEND_ORIGIN?.trim() ?? process.env.FRONTEND_URL?.trim();
+
+const swaggerDefinition = {
+  openapi: '3.0.0',
+  info: {
+    title: 'WorkPro API',
+    version: '1.0.0',
+    description: 'API documentation for WorkPro integrations and core resources.',
+  },
+  components: {
+    schemas: {
+      IntegrationApiKeySummary: {
+        type: 'object',
+        required: ['id', 'name', 'prefix', 'lastFour', 'createdAt', 'updatedAt'],
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string' },
+          description: { type: 'string', nullable: true },
+          prefix: { type: 'string' },
+          lastFour: { type: 'string' },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+          lastUsedAt: { type: 'string', format: 'date-time', nullable: true },
+          revokedAt: { type: 'string', format: 'date-time', nullable: true },
+        },
+      },
+      IntegrationApiKeyWithSecret: {
+        allOf: [
+          { $ref: '#/components/schemas/IntegrationApiKeySummary' },
+          {
+            type: 'object',
+            properties: {
+              token: { type: 'string' },
+            },
+          },
+        ],
+      },
+      CreateIntegrationApiKeyPayload: {
+        type: 'object',
+        required: ['name'],
+        properties: {
+          name: { type: 'string' },
+          description: { type: 'string' },
+        },
+      },
+      UpdateIntegrationApiKeyPayload: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          description: { type: 'string' },
+        },
+      },
+      TenantWebhookConfig: {
+        type: 'object',
+        required: ['id', 'name', 'url', 'events', 'active', 'headers', 'retryCount', 'createdAt', 'updatedAt'],
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string' },
+          url: { type: 'string', format: 'uri' },
+          events: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+          active: { type: 'boolean' },
+          secretSet: { type: 'boolean' },
+          headers: {
+            type: 'object',
+            additionalProperties: { type: 'string' },
+          },
+          retryCount: { type: 'integer' },
+          lastAttemptAt: { type: 'string', format: 'date-time', nullable: true },
+          lastSuccessAt: { type: 'string', format: 'date-time', nullable: true },
+          lastErrorMessage: { type: 'string', nullable: true },
+          nextRetryAt: { type: 'string', format: 'date-time', nullable: true },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      CreateWebhookPayload: {
+        type: 'object',
+        required: ['name', 'url', 'events'],
+        properties: {
+          name: { type: 'string' },
+          url: { type: 'string', format: 'uri' },
+          events: {
+            type: 'array',
+            items: { type: 'string' },
+            minItems: 1,
+          },
+          secret: { type: 'string' },
+          headers: {
+            type: 'object',
+            additionalProperties: { type: 'string' },
+          },
+          active: { type: 'boolean' },
+        },
+      },
+      UpdateWebhookPayload: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          url: { type: 'string', format: 'uri' },
+          events: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+          secret: { type: 'string', nullable: true },
+          headers: {
+            type: 'object',
+            additionalProperties: { type: 'string' },
+          },
+          active: { type: 'boolean' },
+        },
+      },
+    },
+  },
+};
+
+const swaggerSpec = swaggerJsdoc({
+  definition: swaggerDefinition,
+  apis: [path.join(__dirname, 'routes/**/*.ts')],
+});
 
 // Security middleware
 app.use(helmet());
@@ -49,6 +175,8 @@ app.use(limiter);
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Request logging
 app.use(requestLogger);
@@ -73,12 +201,18 @@ app.get('/health', handleHealthCheck);
 app.get('/api/health', handleHealthCheck);
 app.get('/health/db', handleHealthCheck);
 
+// Role groups
+const MANAGEMENT_ROLES = ['admin', 'manager', 'planner'];
+const WORKFORCE_ROLES = [...MANAGEMENT_ROLES, 'technician'];
+const INVENTORY_ROLES = MANAGEMENT_ROLES;
+const TEAM_VIEW_ROLES = [...WORKFORCE_ROLES, 'viewer', 'user'];
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/work-orders', workOrderRoutes);
 app.use('/api/assets', assetRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/audit', auditRoutes);
+app.use('/api/pm', pmRoutes);
 
 // Error handling
 app.use(errorHandler);
@@ -128,6 +262,7 @@ async function start() {
   }
 
   await seedDefaultsNoTxn();
+  await initializePmScheduler();
 
   app.listen(PORT, () => {
     console.log(`API listening on http://localhost:${PORT}`);
