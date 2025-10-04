@@ -26,4 +26,15 @@ export default defineConfig({
       input: 'index.html',
     },
   },
+  test: {
+    include: [
+      'src/**/*.{test,spec}.{ts,tsx}',
+      'backend/src/**/*.{test,spec}.{ts,tsx}',
+    ],
+    environment: 'jsdom',
+    setupFiles: './src/tests/setup.ts',
+    globals: true,
+    css: true,
+    exclude: ['tests/e2e/**'],
+  },
 })

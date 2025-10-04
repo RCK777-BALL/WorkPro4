@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import type { Asset } from '@prisma/client';
+import type { Asset, Prisma } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { prisma } from '../db';
 import { asyncHandler, fail, ok } from '../utils/response';
@@ -12,65 +12,15 @@ router.use(authenticateToken);
 
 const assetStatusEnum = z.enum(['operational', 'maintenance', 'down', 'retired', 'decommissioned']);
 
-const normalizeOptionalString = (value: unknown) => {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (value === null) {
-    return null;
-  }
-
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-
-    if (!trimmed) {
-      return null;
-    }
-
-    return trimmed;
-  }
-
-  return value;
-};
-
-const normalizeOptionalNumber = (value: unknown) => {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (value === null || value === '') {
-    return null;
-  }
-
-  if (typeof value === 'string' && value.trim() === '') {
-    return null;
-  }
-
-  return Number(value);
-};
-
-const normalizeOptionalDate = (value: unknown) => {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (value === null || value === '') {
-    return null;
-  }
-
-  if (typeof value === 'string' && value.trim() === '') {
-    return null;
-  }
-
-  const date = new Date(value as any);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date;
-};
+const querySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  search: z.string().trim().optional(),
+  status: assetStatusEnum.optional(),
+  location: z.string().trim().optional(),
+  category: z.string().trim().optional(),
+  sort: z.enum(['createdAt:desc', 'createdAt:asc']).optional(),
+});
 
 const emptyToUndefined = (value: unknown) => {
   if (value === undefined) {
@@ -116,36 +66,6 @@ const updateAssetSchema = assetPayloadSchema.partial().strict();
 
 type AssetStatus = z.infer<typeof assetStatusEnum>;
 
-const immutableTransitionError = 'Asset status cannot transition from its current state to the requested status.';
-
-function assertValidStatusTransition(current: AssetStatus, next: AssetStatus | undefined): string | null {
-  if (!next || current === next) {
-    return null;
-  }
-
-  if (current === 'decommissioned') {
-    return immutableTransitionError;
-  }
-
-  if (current === 'retired' && next !== 'decommissioned') {
-    return immutableTransitionError;
-  }
-
-  if (next === 'operational' && (current === 'retired' || current === 'decommissioned')) {
-    return immutableTransitionError;
-  }
-
-  if (next === 'maintenance' && current === 'decommissioned') {
-    return immutableTransitionError;
-  }
-
-  if (next === 'down' && current === 'decommissioned') {
-    return immutableTransitionError;
-  }
-
-  return null;
-}
-
 type TenantScopedWhere = {
   tenantId: string;
   siteId?: string | null;
@@ -183,13 +103,61 @@ router.get(
     }
 
     const scope = buildTenantScope({ tenantId: req.user.tenantId, siteId: req.user.siteId ?? null });
+    const { page, pageSize, search, status, location, category, sort } = querySchema.parse(req.query);
 
-    const assets = await prisma.asset.findMany({
-      where: scope,
-      orderBy: { createdAt: 'desc' },
+    const where: Prisma.AssetWhereInput = {
+      ...scope,
+      ...(status ? { status } : {}),
+      ...(location
+        ? {
+            location: {
+              contains: location,
+              mode: 'insensitive',
+            },
+          }
+        : {}),
+      ...(category
+        ? {
+            category: {
+              contains: category,
+              mode: 'insensitive',
+            },
+          }
+        : {}),
+    };
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { code: { contains: search, mode: 'insensitive' } },
+        { location: { contains: search, mode: 'insensitive' } },
+        { category: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [total, assets] = await Promise.all([
+      prisma.asset.count({ where }),
+      prisma.asset.findMany({
+        where,
+        orderBy:
+          sort === 'createdAt:asc'
+            ? { createdAt: 'asc' }
+            : { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    return res.json({
+      ok: true,
+      assets: assets.map(serializeAsset),
+      meta: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      },
     });
-
-    return ok(res, assets.map(serializeAsset));
   }),
 );
 
@@ -228,88 +196,39 @@ router.post(
   }),
 );
 
-router.patch(
+router.put(
   '/:id',
   asyncHandler(async (req: AuthRequest, res) => {
     if (!req.user) {
       return fail(res, 401, 'Authentication required');
     }
 
-    const parseResult = updateAssetSchema.safeParse(req.body);
-
-    if (!parseResult.success) {
-      return fail(res, 400, 'Validation error', parseResult.error.format());
-    }
-
-    const payload = parseResult.data;
-
-    if (Object.keys(payload).length === 0) {
-      return fail(res, 400, 'No fields provided for update');
-    }
+    const payload = assetPayloadSchema.parse(req.body);
 
     const scope = buildTenantScope({ tenantId: req.user.tenantId, siteId: req.user.siteId ?? null });
 
-    const asset = await prisma.asset.findFirst({
+    const existing = await prisma.asset.findFirst({
       where: { id: req.params.id, ...scope },
     });
 
-    if (!asset) {
-      return fail(res, 404, 'Asset not found');
-    }
-
-    const transitionError = assertValidStatusTransition(asset.status as AssetStatus, payload.status);
-
-    if (transitionError) {
-      return fail(res, 409, transitionError);
-    }
-
-    const data: Record<string, unknown> = {};
-
-    if (payload.name !== undefined) {
-      data.name = payload.name;
-    }
-
-    if (payload.code !== undefined) {
-      data.code = payload.code;
-    }
-
-    if ('location' in payload) {
-      data.location = payload.location;
-    }
-
-    if ('category' in payload) {
-      data.category = payload.category;
-    }
-
-    if ('purchaseDate' in payload) {
-      data.purchaseDate = payload.purchaseDate ?? null;
-    }
-
-    if ('cost' in payload) {
-      data.cost = payload.cost ?? null;
-    }
-
-    if (payload.status !== undefined) {
-      data.status = payload.status;
-    }
-
-    if (Object.keys(data).length === 0) {
-      return fail(res, 400, 'No valid fields to update');
+    if (!existing) {
+      return res.status(404).json({ ok: false, error: 'Asset not found' });
     }
 
     const updated = await prisma.asset.update({
-      where: { id: asset.id },
-      data,
+      where: { id: existing.id },
+      data: {
+        code: payload.code,
+        name: payload.name,
+        location: payload.location,
+        category: payload.category,
+        purchaseDate: payload.purchaseDate,
+        cost: payload.cost,
+        status: payload.status ?? existing.status,
+      },
     });
 
-    await auditLog('asset.updated', {
-      assetId: updated.id,
-      tenantId: updated.tenantId,
-      userId: req.user.id,
-      changes: data,
-    });
-
-    return ok(res, serializeAsset(updated));
+    return res.json({ ok: true, asset: serializeAsset(updated) });
   }),
 );
 
@@ -322,25 +241,17 @@ router.delete(
 
     const scope = buildTenantScope({ tenantId: req.user.tenantId, siteId: req.user.siteId ?? null });
 
-    const asset = await prisma.asset.findFirst({
+    const existing = await prisma.asset.findFirst({
       where: { id: req.params.id, ...scope },
     });
 
-    if (!asset) {
-      return fail(res, 404, 'Asset not found');
+    if (!existing) {
+      return res.status(404).json({ ok: false, error: 'Asset not found' });
     }
 
-    await prisma.asset.delete({
-      where: { id: asset.id },
-    });
+    const deleted = await prisma.asset.delete({ where: { id: existing.id } });
 
-    await auditLog('asset.deleted', {
-      assetId: asset.id,
-      tenantId: asset.tenantId,
-      userId: req.user.id,
-    });
-
-    return ok(res, { id: asset.id });
+    return res.json({ ok: true, asset: serializeAsset(deleted) });
   }),
 );
 
