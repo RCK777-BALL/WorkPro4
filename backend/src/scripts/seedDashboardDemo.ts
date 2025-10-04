@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { addDays, subDays } from 'date-fns';
 import { prisma } from '../db';
+import { ensureDefaultWarehouse } from '../services/warehouse';
 
 function objectId(): string {
   return crypto.randomBytes(12).toString('hex');
@@ -169,20 +170,28 @@ function buildDowntimeLogs(
   return logs;
 }
 
-function buildParts(tenantId: string, siteIds: string[]) {
-  const parts: any[] = [];
+type SeedPart = {
+  name: string;
+  sku: string;
+  onHand: number;
+  minLevel: number;
+  maxLevel: number;
+  cost: number;
+};
+
+function buildParts(): SeedPart[] {
+  const parts: SeedPart[] = [];
 
   for (let i = 0; i < 180; i += 1) {
     const minLevel = randomInt(1, 20);
-    const onHand = randomInt(0, 40);
+    const maxLevel = minLevel + randomInt(5, 25);
 
     parts.push({
-      tenantId,
-      siteId: randomChoice(siteIds),
       name: `Part ${(i + 1).toString().padStart(3, '0')}`,
       sku: `SKU-${(i + 1).toString().padStart(5, '0')}`,
       minLevel,
-      onHand,
+      maxLevel,
+      onHand: randomInt(0, 40),
       cost: Number((Math.random() * 500).toFixed(2)),
     });
   }

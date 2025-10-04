@@ -138,7 +138,7 @@ function normalizeNumber(value: number | null | undefined, precision = 1) {
   return Number(value.toFixed(precision));
 }
 
-async function loadOpenWorkOrders(scope: TenantScopedFilters & { to: Date }) {
+async function loadOpenWorkOrders(scope: TenantScopeWithRange) {
   const where = buildWorkOrderWhere(scope, { status: { in: OPEN_STATUSES } });
   const openOrders = await prisma.workOrder.findMany({
     where,
@@ -173,7 +173,7 @@ async function loadOpenWorkOrders(scope: TenantScopedFilters & { to: Date }) {
   };
 }
 
-async function loadMttr(scope: TenantScopedFilters & { from: Date; to: Date }) {
+async function loadMttr(scope: TenantScopeWithRange) {
   const where = buildWorkOrderWhere(scope, {
     status: 'completed',
     completedAt: {
@@ -239,7 +239,7 @@ async function loadMttr(scope: TenantScopedFilters & { from: Date; to: Date }) {
   };
 }
 
-async function loadUptime(scope: TenantScopedFilters & { from: Date; to: Date }) {
+async function loadUptime(scope: TenantScopeWithRange) {
   const assetWhere = buildAssetWhere(scope);
   const assetCount = await prisma.asset.count({ where: assetWhere });
 
@@ -296,24 +296,23 @@ async function loadStockout(scope: TenantScopedFilters) {
   const parts = await prisma.part.findMany({
     where: {
       tenantId: scope.tenantId,
-      ...(scope.siteId ? { siteId: scope.siteId } : {}),
     },
-    select: {
-      id: true,
-      name: true,
-      onHand: true,
-      minLevel: true,
+    include: {
+      stockLevels: true,
     },
   });
 
   const items = parts
-    .filter((part) => (part.onHand ?? 0) <= (part.minLevel ?? 0))
-    .map((part) => ({
-      partId: part.id,
-      name: part.name,
-      onHand: part.onHand ?? 0,
-      min: part.minLevel ?? 0,
-    }));
+    .map((part) => {
+      const onHand = part.stockLevels.reduce((sum, level) => sum + level.onHand, 0);
+      return {
+        partId: part.id,
+        name: part.name,
+        onHand,
+        min: part.defaultMinLevel,
+      };
+    })
+    .filter((part) => part.onHand <= part.min);
 
   return {
     count: items.length,
@@ -321,7 +320,7 @@ async function loadStockout(scope: TenantScopedFilters) {
   };
 }
 
-async function loadWorkOrdersByStatus(scope: TenantScopedFilters & { from: Date; to: Date }) {
+async function loadWorkOrdersByStatus(scope: TenantScopeWithRange) {
   const technicianScoped = scope.rolePreset === 'technician';
   const where = buildWorkOrderWhere(scope, {
     ...(technicianScoped ? { assigneeId: scope.userId } : {}),
@@ -358,7 +357,7 @@ async function loadWorkOrdersByStatus(scope: TenantScopedFilters & { from: Date;
   }));
 }
 
-async function loadTopDowntime(scope: TenantScopedFilters & { from: Date; to: Date }) {
+async function loadTopDowntime(scope: TenantScopeWithRange) {
   const logs = await prisma.downtimeLog.findMany({
     where: {
       tenantId: scope.tenantId,

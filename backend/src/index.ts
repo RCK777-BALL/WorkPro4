@@ -19,6 +19,7 @@ import dashboardRoutes from './routes/dashboard';
 import assetRoutes from './routes/assets';
 import partRoutes from './routes/parts';
 import vendorRoutes from './routes/vendors';
+import purchaseOrderRoutes from './routes/purchaseOrders';
 import searchRoutes from './routes/search';
 import pmRoutes from './routes/pm';
 import { initializePmScheduler } from './queue/pmScheduler';
