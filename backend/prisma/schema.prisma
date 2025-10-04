@@ -14,6 +14,10 @@ model Tenant {
 
   users      User[]
   assets     Asset[]
+  sites      Site[]
+  areas      Area[]
+  lines      Line[]
+  stations   Station[]
   workOrders WorkOrder[]
   pmPrograms PmProgram[]
   downtimeLogs DowntimeLog[]
@@ -82,7 +86,9 @@ model Asset {
   id       String @id @map("_id") @default(auto()) @db.ObjectId
   tenantId String @map("tenant_id") @db.ObjectId
   siteId   String? @map("site_id") @db.ObjectId
+  areaId   String? @map("area_id") @db.ObjectId
   lineId   String? @map("line_id") @db.ObjectId
+  stationId String? @map("station_id") @db.ObjectId
   code     String
   name     String
   location String?
@@ -90,11 +96,24 @@ model Asset {
   purchaseDate DateTime? @map("purchase_date")
   cost     Float?   @map("cost")
   status   AssetStatus @default(operational)
+  criticality Int @default(2)
+  manufacturer String?
+  modelNumber String? @map("model_number")
+  serialNumber String? @map("serial_number")
+  commissionedAt DateTime? @map("commissioned_at")
+  warrantyProvider String? @map("warranty_provider")
+  warrantyContact String? @map("warranty_contact")
+  warrantyExpiresAt DateTime? @map("warranty_expires_at")
+  warrantyNotes String? @map("warranty_notes")
 
   tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site      Site?      @relation(fields: [siteId], references: [id])
+  area      Area?      @relation(fields: [areaId], references: [id])
+  line      Line?      @relation(fields: [lineId], references: [id])
+  station   Station?   @relation(fields: [stationId], references: [id])
   workOrders WorkOrder[]
   downtimeLogs DowntimeLog[]
-  pmPrograms  PmProgram[]
+  bomItems AssetBomItem[]
 
 
   createdAt DateTime @default(now())
@@ -105,6 +124,116 @@ model Asset {
   @@index([tenantId, status])
   @@index([tenantId, siteId])
   @@index([tenantId, lineId])
+  @@index([tenantId, stationId])
+  @@index([tenantId, areaId])
+  @@unique([tenantId, code], map: "assets_tenant_code_key")
+}
+
+model Site {
+  id       String @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId String @map("tenant_id") @db.ObjectId
+  code     String? @map("code")
+  name     String
+  description String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  areas  Area[]
+  assets Asset[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("sites")
+  @@index([tenantId])
+  @@unique([tenantId, code], map: "sites_tenant_code_key")
+}
+
+model Area {
+  id       String @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId String @map("tenant_id") @db.ObjectId
+  siteId   String @map("site_id") @db.ObjectId
+  code     String? @map("code")
+  name     String
+  description String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  lines  Line[]
+  assets Asset[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("areas")
+  @@index([tenantId])
+  @@index([siteId])
+  @@unique([tenantId, siteId, code], map: "areas_site_code_key")
+}
+
+model Line {
+  id       String @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId String @map("tenant_id") @db.ObjectId
+  areaId   String @map("area_id") @db.ObjectId
+  code     String? @map("code")
+  name     String
+  description String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  area   Area   @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  stations Station[]
+  assets Asset[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("lines")
+  @@index([tenantId])
+  @@index([areaId])
+  @@unique([tenantId, areaId, code], map: "lines_area_code_key")
+}
+
+model Station {
+  id       String @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId String @map("tenant_id") @db.ObjectId
+  lineId   String @map("line_id") @db.ObjectId
+  code     String? @map("code")
+  name     String
+  description String?
+  position Int? @map("position")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  line   Line   @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  assets Asset[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("stations")
+  @@index([tenantId])
+  @@index([lineId])
+  @@unique([tenantId, lineId, code], map: "stations_line_code_key")
+}
+
+model AssetBomItem {
+  id       String @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId String @map("tenant_id") @db.ObjectId
+  assetId  String @map("asset_id") @db.ObjectId
+  position Int    @default(0)
+  reference String @map("reference")
+  description String
+  quantity Float? @map("quantity")
+  unit     String? @map("unit")
+  notes    String? @map("notes")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  asset  Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("asset_bom_items")
+  @@index([assetId])
+  @@index([tenantId, assetId], map: "asset_bom_tenant_asset_idx")
 }
 
 model WorkOrder {

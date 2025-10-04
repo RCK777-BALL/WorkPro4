@@ -32,7 +32,7 @@ const assetStatuses = ['operational', 'maintenance', 'down', 'retired', 'decommi
 
 type AssetStatus = (typeof assetStatuses)[number];
 
-interface AssetRecord {
+interface AssetFormState {
   id: string;
   code: string;
   name: string;
@@ -125,7 +125,12 @@ const baseFilters: FilterDefinition[] = [
   { key: 'category', label: 'Category', type: 'text', placeholder: 'Category', testId: 'asset-filter-category' },
 ];
 
-const tree = [
+const columns: ProTableColumn<AssetTableRow>[] = [
+  { key: 'code', header: 'Tag' },
+  { key: 'name', header: 'Asset' },
+  { key: 'site', header: 'Site' },
+  { key: 'area', header: 'Area' },
+  { key: 'line', header: 'Line' },
   {
     label: 'Plant 1',
     count: 124,
@@ -624,6 +629,9 @@ export default function Assets() {
             className="w-full rounded-2xl border border-border bg-white px-10 py-3 text-sm text-fg shadow-inner outline-none transition focus:ring-2 focus:ring-brand"
             data-testid="asset-search-input"
           />
+          {assetsFetching && (
+            <Loader2 className="absolute right-4 top-3 h-4 w-4 animate-spin text-mutedfg" />
+          )}
         </div>
         <button
           className="w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm font-semibold text-fg shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
@@ -633,22 +641,79 @@ export default function Assets() {
           <SlidersHorizontal className="mr-2 inline h-4 w-4" /> Saved views
         </button>
         <div className="space-y-4">
-          {tree.map((node) => (
-            <div key={node.label}>
-              <div className="flex items-center justify-between text-sm font-semibold text-fg">
-                <span>{node.label}</span>
-                <span className="rounded-full bg-muted px-3 py-1 text-xs text-mutedfg">{node.count}</span>
-              </div>
-              <ul className="mt-3 space-y-2 pl-3 text-sm text-mutedfg">
-                {node.children.map((child) => (
-                  <li key={child.label} className="flex items-center justify-between">
-                    <span>{child.label}</span>
-                    <span>{child.count}</span>
-                  </li>
-                ))}
-              </ul>
+          {hierarchyLoading && (
+            <div className="flex items-center gap-2 text-sm text-mutedfg">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading hierarchy…
             </div>
-          ))}
+          )}
+          {!hierarchyLoading && hierarchy.length === 0 && (
+            <p className="text-sm text-mutedfg">No hierarchy data available yet.</p>
+          )}
+          {hierarchy.map((site) => {
+            const siteAssetCount = countAssetsInSite(site);
+            return (
+              <div key={site.id} className="space-y-3">
+                <div className="flex items-center justify-between text-sm font-semibold text-fg">
+                  <span>{site.name}</span>
+                  <span className="rounded-full bg-muted px-3 py-1 text-xs text-mutedfg">{siteAssetCount}</span>
+                </div>
+                <div className="space-y-2 pl-3 text-sm text-mutedfg">
+                  {site.areas.map((area) => {
+                    const areaCount = countAssetsInArea(area);
+                    return (
+                      <div key={area.id} className="space-y-2">
+                        <div className="flex items-center justify-between font-medium text-fg">
+                          <span>{area.name}</span>
+                          <span>{areaCount}</span>
+                        </div>
+                        <div className="space-y-2 pl-3">
+                          {area.lines.map((line) => {
+                            const lineCount = countAssetsInLine(line);
+                            return (
+                              <div key={line.id} className="space-y-2">
+                                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-mutedfg">
+                                  <span>{line.name}</span>
+                                  <span>{lineCount}</span>
+                                </div>
+                                <ul className="space-y-1 pl-2">
+                                  {line.stations.map((station) => (
+                                    <li key={station.id} className="space-y-1">
+                                      <div className="text-xs font-medium text-mutedfg">
+                                        {station.name} ({station.assets.length})
+                                      </div>
+                                      <ul className="space-y-1 pl-3">
+                                        {station.assets.map((asset) => (
+                                          <li key={asset.id}>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleAssetSelect(asset.id)}
+                                              className={cn(
+                                                'w-full rounded-xl px-2 py-1 text-left text-xs transition',
+                                                selectedAssetId === asset.id
+                                                  ? 'bg-brand/10 text-brand'
+                                                  : 'text-mutedfg hover:bg-muted/70 hover:text-fg',
+                                              )}
+                                            >
+                                              {asset.code} · {asset.name}
+                                            </button>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </aside>
       <section className="space-y-6">
@@ -820,6 +885,13 @@ export default function Assets() {
                     <Trash2 className="mr-2 h-4 w-4" /> Delete
                   </Button>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => handleAssetSelect(asset.id)}
+                  className="mt-4 w-full rounded-2xl border border-border px-4 py-2 text-sm font-semibold text-brand transition hover:-translate-y-0.5 hover:shadow-lg"
+                >
+                  Inspect lifecycle
+                </button>
               </article>
             ))}
           </div>
