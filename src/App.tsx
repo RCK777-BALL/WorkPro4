@@ -18,6 +18,8 @@ const Vendors = lazy(() => import('./pages/Vendors'));
 const Documents = lazy(() => import('./pages/Documents'));
 const Analytics = lazy(() => import('./pages/Analytics'));
 const Settings = lazy(() => import('./pages/Settings'));
+const TaskExecutionList = lazy(() => import('./pages/mobile/TaskExecutionList'));
+const TaskExecutionDetail = lazy(() => import('./pages/mobile/TaskExecutionDetail'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 export default function App() {
@@ -47,6 +49,8 @@ export default function App() {
               <Route path="documents" element={<Documents />} />
               <Route path="analytics" element={<Analytics />} />
               <Route path="settings" element={<Settings />} />
+              <Route path="mobile/tasks" element={<TaskExecutionList />} />
+              <Route path="mobile/tasks/:id" element={<TaskExecutionDetail />} />
               <Route path="*" element={<NotFound />} />
             </Route>
             <Route path="*" element={<NotFound />} />

@@ -1,8 +1,32 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      registerType: 'autoUpdate',
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webp}'],
+      },
+      manifest: {
+        name: 'WorkPro CMMS',
+        short_name: 'WorkPro',
+        start_url: '/',
+        display: 'standalone',
+        theme_color: '#1e3a8a',
+        background_color: '#ffffff',
+        description: 'Operate maintenance workflows even when you are offline.',
+      },
+      devOptions: {
+        enabled: true,
+      },
+    }),
+  ],
   server: {
     host: true,
     port: 5173,
