@@ -201,37 +201,9 @@ export class ApiClient {
 
   private getMockData<T>(endpoint: string): T | null {
     // Mock data for development when backend is not available
-    if (endpoint.includes('/summary')) {
-      const mockSummary: DashboardSummaryResponse = {
-        workOrders: {
-          open: 12,
-          overdue: 3,
-          completedThisMonth: 45,
-          completedTrend: 8.5,
-        },
-        assets: {
-          uptime: 94.5,
-          total: 234,
-          down: 3,
-          operational: 231,
-        },
-        inventory: {
-          totalParts: 1250,
-          lowStock: 18,
-          stockHealth: 87.3,
-        },
-      };
-
-      return mockSummary as T;
-    }
-
     if (endpoint.startsWith('/work-orders/')) {
       const workOrderId = endpoint.split('/').pop() ?? '';
       return (getMockWorkOrderById(workOrderId) ?? null) as T | null;
-    }
-
-    if (endpoint === '/work-orders') {
-      return mockWorkOrders as T;
     }
 
     if (endpoint === '/assets/tree') {

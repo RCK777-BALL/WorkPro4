@@ -87,6 +87,10 @@ const columns: ProTableColumn<WorkOrderRecord>[] = [
     header: 'Status',
     accessor: (row) => <DataBadge status={row.statusLabel} />
   },
+  { key: 'critical', header: 'Critical', align: 'right' },
+  { key: 'high', header: 'High', align: 'right' },
+  { key: 'medium', header: 'Medium', align: 'right' },
+  { key: 'low', header: 'Low', align: 'right' },
   {
     key: 'priority',
     header: 'Priority',
@@ -104,31 +108,31 @@ const activity = [
   {
     title: 'WO-287 escalated to urgent',
     time: '8 minutes ago',
-    description: 'HVAC rooftop unit trending hot. Auto-escalated by rules engine.'
+    description: 'HVAC rooftop unit trending hot. Auto-escalated by rules engine.',
   },
   {
     title: '3 technicians completed certifications',
     time: 'Today, 09:24',
-    description: 'Compliance badges renewed for John T., Maya K., and Darius L.'
+    description: 'Compliance badges renewed for John T., Maya K., and Darius L.',
   },
   {
     title: 'Predictive alert resolved',
     time: 'Yesterday',
-    description: 'Vibration anomaly on Pump A acknowledged and cleared by Sarah M.'
-  }
+    description: 'Vibration anomaly on Pump A acknowledged and cleared by Sarah M.',
+  },
 ];
 
 const alerts = [
   {
     title: 'Critical asset requires attention',
     body: 'Boiler 5 has hit 110% runtime hours. Auto-generate a preventive order.',
-    severity: 'High'
+    severity: 'High',
   },
   {
     title: 'Vendor compliance expiring',
     body: 'Northside HVAC contract expires in 12 days. Review renewal terms.',
-    severity: 'Medium'
-  }
+    severity: 'Medium',
+  },
 ];
 
 export default function Dashboard() {
@@ -212,6 +216,15 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-10">
+      {isError && (
+        <div className="flex items-start gap-3 p-5 text-sm border rounded-3xl border-danger/40 bg-danger/5 text-danger">
+          <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" />
+          <div>
+            <p className="text-base font-semibold">Unable to load dashboard metrics</p>
+            <p className="mt-1 text-danger/80">{errorMessage}</p>
+          </div>
+        </div>
+      )}
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-semibold tracking-widest uppercase text-mutedfg">Today</p>
@@ -250,7 +263,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-fg">Open work orders</h2>
-              <p className="text-sm text-mutedfg">Prioritized by risk, SLA, and technician workload.</p>
+              <p className="text-sm text-mutedfg">Status and priority mix for the selected reporting window.</p>
             </div>
             <a href="/work-orders" className="inline-flex items-center gap-1 text-sm font-semibold text-brand">
               View board
@@ -282,7 +295,10 @@ export default function Dashboard() {
             <h3 className="text-lg font-semibold text-fg">Recent activity</h3>
             <ul className="mt-4 space-y-5">
               {activity.map((item) => (
-                <li key={item.title} className="rounded-2xl border border-border/60 bg-white/70 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg dark:bg-muted/70">
+                <li
+                  key={item.title}
+                  className="rounded-2xl border border-border/60 bg-white/70 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg dark:bg-muted/70"
+                >
                   <p className="text-sm font-semibold text-fg">{item.title}</p>
                   <p className="text-xs text-mutedfg">{item.time}</p>
                   <p className="mt-2 text-sm text-mutedfg">{item.description}</p>
