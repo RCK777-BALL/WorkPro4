@@ -107,6 +107,10 @@ export interface ApiResult<T> {
 export class ApiClient {
   private static memoryToken: string | null = null;
 
+  static getActiveToken(): string | null {
+    return ApiClient.memoryToken;
+  }
+
   private static getStorage(): Storage | null {
     if (typeof window === 'undefined' || !('localStorage' in window)) {
       return null;
@@ -167,6 +171,10 @@ export class ApiClient {
     } catch {
       // Ignore storage removal errors in restricted environments
     }
+  }
+
+  getToken(): string | null {
+    return this.token;
   }
 
   private async request<T>(
