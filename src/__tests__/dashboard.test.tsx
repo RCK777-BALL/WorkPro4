@@ -1,33 +1,47 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import Dashboard from '../pages/Dashboard';
-import { renderWithProviders } from './testUtils';
 import { api } from '../lib/api';
+import { renderWithQueryClient } from '../test/utils';
 
-afterEach(() => {
-  cleanup();
-  vi.restoreAllMocks();
-});
+const noopPromise = () => new Promise<any>(() => {});
 
-describe('Dashboard page', () => {
-  it('renders KPI skeletons while metrics are loading', () => {
-    vi.spyOn(api, 'get').mockReturnValue(new Promise(() => {}));
-
-    const { container, queryClient } = renderWithProviders(<Dashboard />);
-
-    expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
-
-    queryClient.clear();
+describe('Dashboard page states', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it('shows an error banner when the metrics request fails', async () => {
-    vi.spyOn(api, 'get').mockRejectedValueOnce(new Error('metrics offline'));
+  it('renders KPI skeletons while metrics are loading', () => {
+    vi.spyOn(api, 'get').mockImplementation((endpoint: string) => {
+      if (endpoint === '/dashboard/metrics') {
+        return noopPromise();
+      }
+      if (endpoint === '/work-orders') {
+        return Promise.resolve([]);
+      }
+      throw new Error(`Unexpected endpoint ${endpoint}`);
+    });
 
-    const { queryClient } = renderWithProviders(<Dashboard />);
+    const { container } = renderWithQueryClient(<Dashboard />);
+    expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
+  });
 
-    await screen.findByText(/unable to load dashboard metrics/i);
-    expect(screen.getByText(/metrics offline/i)).toBeInTheDocument();
+  it('shows an error banner when metrics fail to load', async () => {
+    vi.spyOn(api, 'get').mockImplementation((endpoint: string) => {
+      if (endpoint === '/dashboard/metrics') {
+        return Promise.reject(new Error('metrics offline'));
+      }
+      if (endpoint === '/work-orders') {
+        return Promise.resolve([]);
+      }
+      throw new Error(`Unexpected endpoint ${endpoint}`);
+    });
 
-    queryClient.clear();
+    renderWithQueryClient(<Dashboard />);
+
+    expect(
+      await screen.findByText(/We couldn’t refresh the dashboard metrics/i),
+    ).toBeInTheDocument();
+    expect(await screen.findByText(/metrics offline/i)).toBeInTheDocument();
   });
 });

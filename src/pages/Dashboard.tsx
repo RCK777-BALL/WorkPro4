@@ -1,25 +1,20 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-  AlertTriangle,
-  ArrowRight,
-  BellRing,
-  Building2,
-  ClipboardList,
-  ShieldCheck,
-  Wrench,
-} from 'lucide-react';
+import { ArrowRight, BellRing, Building2, ClipboardList, ShieldCheck, Users, Wrench } from 'lucide-react';
 import { KPICard } from '../components/premium/KPICard';
 import { DataBadge } from '../components/premium/DataBadge';
 import { ProTable, type ProTableColumn } from '../components/premium/ProTable';
 import { EmptyState } from '../components/premium/EmptyState';
 import { api } from '../lib/api';
+import { normalizeWorkOrders, type WorkOrderRecord } from '../lib/workOrders';
+
+type PriorityBuckets = Record<'critical' | 'high' | 'medium' | 'low', number>;
 
 interface DashboardMetrics {
   kpis: {
     openWorkOrders: {
       total: number;
-      byPriority: Record<'critical' | 'high' | 'medium' | 'low', number>;
+      byPriority: PriorityBuckets;
       delta7d: number;
     };
     mttrHours: {
@@ -40,57 +35,73 @@ interface DashboardMetrics {
       }>;
     };
   };
-  charts: {
-    workOrdersByStatusPriority: Array<{
-      status: string;
-      critical: number;
-      high: number;
-      medium: number;
-      low: number;
-    }>;
-  };
 }
 
-interface StatusPriorityRow {
-  status: string;
-  critical: number;
-  high: number;
-  medium: number;
-  low: number;
-  total: number;
+function formatNumber(value: number | undefined, options?: Intl.NumberFormatOptions) {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return '—';
+  }
+
+  return value.toLocaleString(undefined, options);
 }
 
-const statusBadgeMap: Record<string, { status: string; label: string }> = {
-  requested: { status: 'open', label: 'Requested' },
-  approved: { status: 'assigned', label: 'Approved' },
-  assigned: { status: 'assigned', label: 'Assigned' },
-  in_progress: { status: 'in progress', label: 'In Progress' },
-  'in progress': { status: 'in progress', label: 'In Progress' },
-  completed: { status: 'completed', label: 'Completed' },
-  cancelled: { status: 'cancelled', label: 'Cancelled' },
-};
+function formatDelta(value: number | undefined, suffix: string) {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return undefined;
+  }
 
-const columns: ProTableColumn<StatusPriorityRow>[] = [
+  const rounded = Number(value.toFixed(1));
+  const prefix = rounded > 0 ? '+' : '';
+  return `${prefix}${rounded}${suffix}`;
+}
+
+function deltaType(value: number | undefined) {
+  if (typeof value !== 'number' || value === 0) {
+    return 'neutral' as const;
+  }
+
+  return (value > 0 ? 'positive' : 'negative') as const;
+}
+
+function mttrDeltaType(value: number | undefined) {
+  if (typeof value !== 'number' || value === 0) {
+    return 'neutral' as const;
+  }
+
+  return (value < 0 ? 'positive' : 'negative') as const;
+}
+
+function prioritySparkline(buckets: PriorityBuckets | undefined) {
+  if (!buckets) {
+    return [];
+  }
+
+  return Object.values(buckets);
+}
+
+const columns: ProTableColumn<WorkOrderRecord>[] = [
+  { key: 'id', header: 'ID' },
+  { key: 'title', header: 'Title' },
   {
     key: 'status',
     header: 'Status',
-    accessor: (row) => {
-      const badge = statusBadgeMap[row.status.toLowerCase()] ?? {
-        status: 'scheduled',
-        label: row.status,
-      };
-      return <DataBadge status={badge.status} label={badge.label} />;
-    },
+    accessor: (row) => <DataBadge status={row.statusLabel} />
   },
   { key: 'critical', header: 'Critical', align: 'right' },
   { key: 'high', header: 'High', align: 'right' },
   { key: 'medium', header: 'Medium', align: 'right' },
   { key: 'low', header: 'Low', align: 'right' },
   {
-    key: 'total',
-    header: 'Total',
-    align: 'right',
+    key: 'priority',
+    header: 'Priority',
+    accessor: (row) => <DataBadge status={row.priorityLabel} />
   },
+  {
+    key: 'assignee',
+    header: 'Owner',
+    accessor: (row) => row.assignee ?? 'Unassigned'
+  },
+  { key: 'dueDate', header: 'Due', accessor: (row) => (row.dueDate ? formatDate(row.dueDate) : '—') }
 ];
 
 const activity = [
@@ -126,98 +137,87 @@ const alerts = [
 
 export default function Dashboard() {
   const {
-    data,
-    isLoading,
-    isError,
-    error,
+    data: metrics,
+    isLoading: metricsLoading,
+    isError: metricsError,
+    error: metricsErrorDetails,
+    refetch: refetchMetrics,
   } = useQuery<DashboardMetrics>({
     queryKey: ['dashboard', 'metrics'],
     queryFn: () => api.get<DashboardMetrics>('/dashboard/metrics'),
-    retry: 0,
+    staleTime: 30_000,
+    retry: false,
   });
 
-  const priorityRows = useMemo<StatusPriorityRow[]>(() => {
-    if (!data?.charts.workOrdersByStatusPriority) {
-      return [];
-    }
+  const {
+    data: previewOrders,
+    isLoading: previewLoading,
+    isError: previewError,
+  } = useQuery<WorkOrderRecord[]>({
+    queryKey: ['dashboard', 'work-orders-preview'],
+    queryFn: async () => {
+      const response = await api.get<unknown>('/work-orders');
+      return normalizeWorkOrders(response).slice(0, 8);
+    },
+    staleTime: 60_000,
+    retry: false,
+  });
 
-    return data.charts.workOrdersByStatusPriority.map((entry) => ({
-      status: entry.status,
-      critical: entry.critical,
-      high: entry.high,
-      medium: entry.medium,
-      low: entry.low,
-      total: entry.critical + entry.high + entry.medium + entry.low,
-    }));
-  }, [data]);
+  const workOrders = previewOrders ?? [];
 
-  const kpiCards = useMemo(() => {
-    const open = data?.kpis.openWorkOrders;
-    const mttr = data?.kpis.mttrHours;
-    const uptime = data?.kpis.uptimePct;
-    const stockout = data?.kpis.stockoutRisk;
-
-    const formatDelta = (value: number | undefined, label: string) => {
-      if (value == null || Number.isNaN(value)) {
-        return `Δ 0${label}`;
-      }
-      const formatted = value >= 0 ? `+${value.toFixed(1)}` : value.toFixed(1);
-      return `Δ ${formatted}${label}`;
-    };
-
-    const getDeltaType = (value: number | undefined) =>
-      value && value !== 0 ? (value > 0 ? 'positive' : 'negative') : 'neutral';
-
-    return [
+  const kpiCards = useMemo(
+    () => [
       {
-        key: 'open-work-orders',
-        title: 'Open Work Orders',
-        value: open ? open.total.toLocaleString() : '—',
-        delta: formatDelta(open?.delta7d, '% vs prior 7d'),
-        deltaType: getDeltaType(open?.delta7d),
-        description: open
-          ? `Priority mix: ${open.byPriority.high} high / ${open.byPriority.critical} critical`
+        title: 'Active Work Orders',
+        value: metrics ? formatNumber(metrics.kpis.openWorkOrders.total) : '—',
+        delta: metrics ? formatDelta(metrics.kpis.openWorkOrders.delta7d, '% vs last 7d') : undefined,
+        deltaType: metrics ? deltaType(metrics.kpis.openWorkOrders.delta7d) : ('neutral' as const),
+        description: metrics
+          ? `${metrics.kpis.openWorkOrders.byPriority.critical} critical · ${metrics.kpis.openWorkOrders.byPriority.high} high`
           : undefined,
-        icon: <ClipboardList className="h-6 w-6" />,
+        sparkline: metrics ? prioritySparkline(metrics.kpis.openWorkOrders.byPriority) : [],
+        icon: <ClipboardList className="w-6 h-6" />,
       },
       {
-        key: 'mttr',
-        title: 'MTTR (hours)',
-        value: mttr ? mttr.value.toFixed(2) : '—',
-        delta: formatDelta(mttr?.delta30d, '% vs prior 30d'),
-        deltaType: getDeltaType(mttr?.delta30d),
-        description: 'Mean time to repair across completed work orders.',
-        icon: <Wrench className="h-6 w-6" />,
-      },
-      {
-        key: 'uptime',
         title: 'Asset Uptime',
-        value: uptime ? `${uptime.value.toFixed(1)}%` : '—',
-        delta: formatDelta(uptime?.delta30d, ' pts vs prior 30d'),
-        deltaType: getDeltaType(uptime?.delta30d),
-        description: 'Rolling uptime percentage across monitored assets.',
-        icon: <Building2 className="h-6 w-6" />,
+        value: metrics ? `${formatNumber(metrics.kpis.uptimePct.value, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%` : '—',
+        delta: metrics ? formatDelta(metrics.kpis.uptimePct.delta30d, '% vs prev 30d') : undefined,
+        deltaType: metrics ? deltaType(metrics.kpis.uptimePct.delta30d) : ('neutral' as const),
+        sparkline: metrics ? Array(7).fill(metrics.kpis.uptimePct.value) : [],
+        icon: <ShieldCheck className="w-6 h-6" />,
       },
       {
-        key: 'stockout',
-        title: 'Stockout Risk',
-        value: stockout ? stockout.count.toLocaleString() : '—',
-        delta: stockout
-          ? `${stockout.items.length} parts at or below minimum`
-          : 'Inventory checks pending',
-        deltaType: stockout && stockout.count > 0 ? 'negative' : 'positive',
-        description: 'Parts flagged below minimum stocking thresholds.',
-        icon: <ShieldCheck className="h-6 w-6" />,
+        title: 'Mean Time to Repair',
+        value: metrics
+          ? formatNumber(metrics.kpis.mttrHours.value, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+          : '—',
+        delta: metrics ? formatDelta(metrics.kpis.mttrHours.delta30d, ' hrs vs prev 30d') : undefined,
+        deltaType: metrics ? mttrDeltaType(metrics.kpis.mttrHours.delta30d) : ('neutral' as const),
+        sparkline: metrics ? Array(7).fill(metrics.kpis.mttrHours.value) : [],
+        icon: <Users className="w-6 h-6" />,
       },
-    ];
-  }, [data]);
+      {
+        title: 'Stockout Risk',
+        value: metrics ? formatNumber(metrics.kpis.stockoutRisk.count) : '—',
+        delta: undefined,
+        deltaType: 'neutral' as const,
+        description:
+          metrics && metrics.kpis.stockoutRisk.items.length > 0
+            ? `Watch ${metrics.kpis.stockoutRisk.items.slice(0, 2).map((item) => item.name).join(', ')}`
+            : undefined,
+        sparkline: metrics ? Array(7).fill(metrics.kpis.stockoutRisk.count) : [],
+        icon: <Building2 className="w-6 h-6" />,
+      },
+    ],
+    [metrics]
+  );
 
-  const errorMessage = error instanceof Error ? error.message : 'Backend unavailable';
+  const metricsErrorMessage = metricsErrorDetails instanceof Error ? metricsErrorDetails.message : 'Unable to load metrics';
 
   return (
     <div className="space-y-10">
       {isError && (
-        <div className="flex items-start gap-3 rounded-3xl border border-danger/40 bg-danger/5 p-5 text-sm text-danger">
+        <div className="flex items-start gap-3 p-5 text-sm border rounded-3xl border-danger/40 bg-danger/5 text-danger">
           <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" />
           <div>
             <p className="text-base font-semibold">Unable to load dashboard metrics</p>
@@ -227,24 +227,39 @@ export default function Dashboard() {
       )}
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-mutedfg">Today</p>
+          <p className="text-xs font-semibold tracking-widest uppercase text-mutedfg">Today</p>
           <h1 className="text-3xl font-semibold text-fg">Operational Command Center</h1>
-          <p className="mt-2 max-w-2xl text-sm text-mutedfg">
+          <p className="max-w-2xl mt-2 text-sm text-mutedfg">
             Monitor your asset health, respond to high-impact alerts, and keep work moving without disruption.
           </p>
         </div>
         <button className="inline-flex items-center gap-2 rounded-2xl border border-border bg-white/80 px-4 py-2 text-sm font-semibold text-fg shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
-          <Wrench className="h-4 w-4" />
+          <Wrench className="w-4 h-4" />
           Create Work Order
         </button>
       </header>
+      {metricsError && (
+        <div className="px-4 py-4 text-sm border rounded-3xl border-danger/30 bg-danger/10 text-danger">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="font-semibold">We couldn’t refresh the dashboard metrics.</p>
+            <button
+              type="button"
+              onClick={() => refetchMetrics()}
+              className="px-3 py-1 text-xs font-semibold transition border rounded-full border-danger/30 text-danger hover:bg-danger/10"
+            >
+              Retry
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-danger/80">{metricsErrorMessage}</p>
+        </div>
+      )}
       <section className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
-        {kpiCards.map(({ key, ...card }) => (
-          <KPICard key={key} {...card} loading={isLoading && !data} />
+        {kpiCards.map((kpi) => (
+          <KPICard key={kpi.title} {...kpi} loading={metricsLoading} />
         ))}
       </section>
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1.65fr_1fr]">
-        <div className="rounded-3xl border border-border bg-surface p-6 shadow-xl">
+        <div className="p-6 border shadow-xl rounded-3xl border-border bg-surface">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-fg">Open work orders</h2>
@@ -252,27 +267,31 @@ export default function Dashboard() {
             </div>
             <a href="/work-orders" className="inline-flex items-center gap-1 text-sm font-semibold text-brand">
               View board
-              <ArrowRight className="h-4 w-4" />
+              <ArrowRight className="w-4 h-4" />
             </a>
           </div>
           <div className="mt-6">
+            {previewError && (
+              <div className="px-4 py-3 mb-4 text-sm border rounded-2xl border-danger/20 bg-danger/10 text-danger">
+                Unable to load work order preview. Visit the work orders board for the latest details.
+              </div>
+            )}
             <ProTable
-              data={priorityRows}
+              data={workOrders}
               columns={columns}
-              loading={isLoading && !priorityRows.length}
-              getRowId={(row) => row.status}
-              emptyState={
-                <EmptyState
-                  title="No work order activity"
-                  description="Metrics will appear once data is available for this period."
-                  icon={<ClipboardList className="h-8 w-8" />}
-                />
-              }
+              loading={previewLoading}
+              getRowId={(row) => row.id}
+              rowActions={(row) => (
+                <a href={`/work-orders/${row.id}`} className="text-sm font-semibold text-brand">
+                  Inspect
+                </a>
+              )}
+              emptyState={<EmptyState title="No work orders" description="You’re all caught up for now." icon={<ClipboardList className="w-8 h-8" />} />}
             />
           </div>
         </div>
         <div className="space-y-6">
-          <div className="rounded-3xl border border-border bg-surface p-6 shadow-xl">
+          <div className="p-6 border shadow-xl rounded-3xl border-border bg-surface">
             <h3 className="text-lg font-semibold text-fg">Recent activity</h3>
             <ul className="mt-4 space-y-5">
               {activity.map((item) => (
@@ -287,17 +306,14 @@ export default function Dashboard() {
               ))}
             </ul>
           </div>
-          <div className="rounded-3xl border border-border bg-danger/5 p-6 shadow-xl">
+          <div className="p-6 border shadow-xl rounded-3xl border-border bg-danger/5">
             <div className="flex items-center gap-3 text-danger">
-              <BellRing className="h-5 w-5" />
+              <BellRing className="w-5 h-5" />
               <h3 className="text-lg font-semibold">Alerts feed</h3>
             </div>
             <ul className="mt-4 space-y-4">
               {alerts.map((alert) => (
-                <li
-                  key={alert.title}
-                  className="rounded-2xl border border-danger/20 bg-white/70 p-4 text-sm text-danger shadow-sm dark:bg-muted/70"
-                >
+                <li key={alert.title} className="p-4 text-sm border shadow-sm rounded-2xl border-danger/20 bg-white/70 text-danger dark:bg-muted/70">
                   <p className="font-semibold">{alert.title}</p>
                   <p className="mt-1 text-xs text-danger/80">Severity: {alert.severity}</p>
                   <p className="mt-2 text-danger/90">{alert.body}</p>
