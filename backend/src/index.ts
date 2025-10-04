@@ -20,6 +20,8 @@ import assetRoutes from './routes/assets';
 import partRoutes from './routes/parts';
 import vendorRoutes from './routes/vendors';
 import searchRoutes from './routes/search';
+import pmRoutes from './routes/pm';
+import { initializePmScheduler } from './queue/pmScheduler';
 
 
 const app = express();
@@ -77,6 +79,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/work-orders', workOrderRoutes);
 app.use('/api/assets', assetRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/pm', pmRoutes);
 
 // Error handling
 app.use(errorHandler);
@@ -126,6 +129,7 @@ async function start() {
   }
 
   await seedDefaultsNoTxn();
+  await initializePmScheduler();
 
   app.listen(PORT, () => {
     console.log(`API listening on http://localhost:${PORT}`);

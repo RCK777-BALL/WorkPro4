@@ -6,7 +6,7 @@ function objectId(): string {
   return crypto.randomBytes(12).toString('hex');
 }
 
-function randomChoice<T>(values: T[]): T {
+function randomChoice<T>(values: readonly T[]): T {
   return values[Math.floor(Math.random() * values.length)]!;
 }
 
@@ -211,7 +211,7 @@ async function main() {
 
   console.log('🌱 Seeding parts...');
   const parts = buildParts(tenantId, siteIds);
-  await prisma.part.createMany({ data: parts, skipDuplicates: true });
+  await prisma.part.createMany({ data: parts });
 
   console.log('✅ Dashboard demo data ready');
 }

@@ -406,6 +406,91 @@ export class ApiClient {
       return purchaseOrders as T;
     }
 
+    if (endpoint === '/pm/overview') {
+      const now = Date.now();
+      const mockOverview: PmOverviewResponse = {
+        stats: {
+          activePrograms: 3,
+          overdueTriggers: 1,
+          upcomingWeek: 4,
+          totalTasks: 18,
+        },
+        programs: [
+          {
+            id: 'program-1',
+            name: 'Weekly Generator Inspection',
+            description: 'Run load test and inspect transfer switch.',
+            assetId: 'asset-1',
+            timezone: 'UTC',
+            isActive: true,
+            lastGeneratedAt: new Date(now - 86400000).toISOString(),
+            owner: { id: 'user-1', name: 'Alex Rivera', email: 'alex@example.com' },
+            tasks: [
+              {
+                id: 'task-1',
+                title: 'Inspect coolant levels',
+                instructions: 'Confirm coolant reservoir is within range.',
+                position: 0,
+                estimatedMinutes: 15,
+                requiresSignOff: true,
+              },
+              {
+                id: 'task-2',
+                title: 'Record load test results',
+                instructions: null,
+                position: 1,
+                estimatedMinutes: 20,
+                requiresSignOff: false,
+              },
+            ],
+            triggers: [
+              {
+                id: 'trigger-1',
+                type: 'calendar',
+                cronExpression: '0 7 * * 1',
+                intervalDays: null,
+                meterThreshold: null,
+                settings: null,
+                startDate: null,
+                endDate: null,
+                lastRunAt: new Date(now - 7 * 86400000).toISOString(),
+                nextRunAt: new Date(now + 2 * 86400000).toISOString(),
+                isActive: true,
+              },
+            ],
+            createdAt: new Date(now - 30 * 86400000).toISOString(),
+            updatedAt: new Date(now - 86400000).toISOString(),
+          },
+        ],
+        upcomingEvents: [
+          {
+            id: 'event-1',
+            programId: 'program-1',
+            programName: 'Weekly Generator Inspection',
+            triggerId: 'trigger-1',
+            scheduledFor: new Date(now + 2 * 86400000).toISOString(),
+            overdue: false,
+          },
+        ],
+        runs: [
+          {
+            id: 'run-1',
+            triggerId: 'trigger-1',
+            programId: 'program-1',
+            programName: 'Weekly Generator Inspection',
+            status: 'success',
+            runAt: new Date(now - 7 * 86400000).toISOString(),
+            scheduledFor: new Date(now - 7 * 86400000).toISOString(),
+            workOrderId: 'wo-123',
+            error: null,
+            details: null,
+          },
+        ],
+      };
+
+      return mockOverview as T;
+    }
+
     return null;
   }
 
@@ -501,6 +586,10 @@ export class ApiClient {
       throw new Error(result.error.message);
     }
     return result.data!;
+  }
+
+  getPmOverview() {
+    return this.request<PmOverviewResponse>('/pm/overview');
   }
 }
 

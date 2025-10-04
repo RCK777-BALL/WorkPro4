@@ -15,6 +15,9 @@ model Tenant {
   users      User[]
   assets     Asset[]
   workOrders WorkOrder[]
+  pmPrograms PmProgram[]
+  downtimeLogs DowntimeLog[]
+  parts        Part[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -33,6 +36,7 @@ model User {
   tenant            Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   createdWorkOrders WorkOrder[] @relation("CreatedBy")
   assignedWorkOrders WorkOrder[] @relation("Assignee")
+  ownedPmPrograms   PmProgram[] @relation("PmProgramOwner")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -63,6 +67,17 @@ enum AssetStatus {
   decommissioned
 }
 
+enum PmTriggerType {
+  calendar
+  meter
+}
+
+enum PmTriggerRunStatus {
+  success
+  skipped
+  failed
+}
+
 model Asset {
   id       String @id @map("_id") @default(auto()) @db.ObjectId
   tenantId String @map("tenant_id") @db.ObjectId
@@ -79,6 +94,7 @@ model Asset {
   tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   workOrders WorkOrder[]
   downtimeLogs DowntimeLog[]
+  pmPrograms  PmProgram[]
 
 
   createdAt DateTime @default(now())
@@ -110,6 +126,8 @@ model WorkOrder {
   signatures    Json?
   timeSpentMin  Int?              @map("time_spent_min")
   failureCode   String?           @map("failure_code")
+  pmProgramId   String?           @map("pm_program_id") @db.ObjectId
+  pmTriggerId   String?           @map("pm_trigger_id") @db.ObjectId
   pmTaskId      String?           @map("pm_task_id") @db.ObjectId
   createdBy     String            @map("created_by") @db.ObjectId
   startedAt     DateTime?         @map("started_at")
@@ -121,6 +139,10 @@ model WorkOrder {
   createdByUser User     @relation("CreatedBy", fields: [createdBy], references: [id])
 
   asset         Asset?   @relation(fields: [assetId], references: [id])
+  pmProgram     PmProgram? @relation(fields: [pmProgramId], references: [id])
+  pmTrigger     PmTrigger? @relation(fields: [pmTriggerId], references: [id])
+  pmTask        PmTask?    @relation(fields: [pmTaskId], references: [id])
+  triggerRuns   PmTriggerRun[]
 
 
   createdAt DateTime @default(now())
@@ -132,6 +154,102 @@ model WorkOrder {
   @@index([tenantId, dueDate], map: "work_orders_tenant_duedate_idx")
   @@index([tenantId, status, priority], map: "work_orders_tenant_status_priority_idx")
   @@index([tenantId, completedAt], map: "work_orders_tenant_completed_idx")
+}
+
+model PmProgram {
+  id          String   @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId    String   @map("tenant_id") @db.ObjectId
+  ownerId     String   @map("owner_id") @db.ObjectId
+  name        String
+  description String?
+  assetId     String?  @map("asset_id") @db.ObjectId
+  timezone    String   @default("UTC")
+  isActive    Boolean  @map("is_active") @default(true)
+  lastGeneratedAt DateTime? @map("last_generated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  owner  User   @relation("PmProgramOwner", fields: [ownerId], references: [id])
+  asset  Asset? @relation(fields: [assetId], references: [id])
+
+  tasks     PmTask[]
+  triggers  PmTrigger[]
+  workOrders WorkOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("pm_programs")
+  @@index([tenantId])
+  @@index([tenantId, isActive])
+  @@index([ownerId])
+}
+
+model PmTask {
+  id             String  @id @map("_id") @default(auto()) @db.ObjectId
+  programId      String  @map("program_id") @db.ObjectId
+  title          String
+  instructions   String?
+  position       Int     @default(0)
+  estimatedMinutes Int?  @map("estimated_minutes")
+  requiresSignOff Boolean @map("requires_sign_off") @default(false)
+
+  program   PmProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  workOrders WorkOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("pm_tasks")
+  @@index([programId])
+  @@index([programId, position])
+}
+
+model PmTrigger {
+  id            String        @id @map("_id") @default(auto()) @db.ObjectId
+  programId     String        @map("program_id") @db.ObjectId
+  type          PmTriggerType
+  cronExpression String?      @map("cron_expression")
+  intervalDays  Int?          @map("interval_days")
+  meterThreshold Float?       @map("meter_threshold")
+  settings      Json?         @map("settings")
+  startDate     DateTime?     @map("start_date")
+  endDate       DateTime?     @map("end_date")
+  lastRunAt     DateTime?     @map("last_run_at")
+  nextRunAt     DateTime?     @map("next_run_at")
+  isActive      Boolean       @map("is_active") @default(true)
+
+  program PmProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  runs    PmTriggerRun[]
+  workOrders WorkOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("pm_triggers")
+  @@index([programId])
+  @@index([isActive, nextRunAt])
+  @@index([programId, isActive, nextRunAt])
+}
+
+model PmTriggerRun {
+  id          String            @id @map("_id") @default(auto()) @db.ObjectId
+  triggerId   String            @map("trigger_id") @db.ObjectId
+  status      PmTriggerRunStatus
+  runAt       DateTime          @map("run_at") @default(now())
+  scheduledFor DateTime?        @map("scheduled_for")
+  workOrderId String?           @map("work_order_id") @db.ObjectId
+  details     Json?
+  error       String?
+
+  trigger   PmTrigger @relation(fields: [triggerId], references: [id], onDelete: Cascade)
+  workOrder WorkOrder? @relation(fields: [workOrderId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("pm_trigger_runs")
+  @@index([triggerId])
+  @@index([status, runAt])
 }
 
 model DowntimeLog {

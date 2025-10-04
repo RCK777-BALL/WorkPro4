@@ -43,7 +43,12 @@ const querySchema = z
 
 type DashboardFilters = z.infer<typeof querySchema>;
 
-type TenantScopedFilters = DashboardFilters & { tenantId: string; userId: string };
+type TenantScopedFilters = Omit<DashboardFilters, 'from' | 'to'> & {
+  tenantId: string;
+  userId: string;
+  from?: Date;
+  to?: Date;
+};
 
 type PriorityBuckets = Record<'critical' | 'high' | 'medium' | 'low', number>;
 
@@ -118,7 +123,7 @@ function minutesBetween(start?: Date | null, end?: Date | null): number {
   return diff > 0 ? Math.round(diff / 60000) : 0;
 }
 
-function getDateRange(filters: DashboardFilters) {
+function getDateRange(filters: DashboardFilters): { from: Date; to: Date } {
   const to = filters.to ? new Date(filters.to) : new Date();
   const from = filters.from ? new Date(filters.from) : new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
 
@@ -485,8 +490,10 @@ export async function getDashboardMetrics(req: AuthRequest, res: Response) {
 
   const rolePreset = filters.rolePreset ?? (req.user.role?.toLowerCase?.() as DashboardFilters['rolePreset']);
 
+  const { from: _from, to: _to, ...restFilters } = filters;
+
   const scope: TenantScopedFilters & { from: Date; to: Date } = {
-    ...filters,
+    ...restFilters,
     rolePreset,
     tenantId: req.user.tenantId,
     userId: req.user.id,

@@ -1,0 +1,3 @@
+-- Prisma MongoDB connector does not emit SQL migrations.
+-- Execute `npm run db:push` (or `prisma db push`) against the target environment
+-- to sync the schema changes for PM programs, tasks, triggers, and run logs.
