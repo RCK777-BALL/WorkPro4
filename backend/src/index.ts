@@ -75,6 +75,12 @@ app.get('/health', handleHealthCheck);
 app.get('/api/health', handleHealthCheck);
 app.get('/health/db', handleHealthCheck);
 
+// Role groups
+const MANAGEMENT_ROLES = ['admin', 'manager', 'planner'];
+const WORKFORCE_ROLES = [...MANAGEMENT_ROLES, 'technician'];
+const INVENTORY_ROLES = MANAGEMENT_ROLES;
+const TEAM_VIEW_ROLES = [...WORKFORCE_ROLES, 'viewer', 'user'];
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/work-orders', workOrderRoutes);

@@ -11,6 +11,8 @@ router.use(authenticateToken);
 
 const workOrderCreateSchema = createWorkOrderValidator;
 
+router.use(authenticateToken);
+
 type WorkOrderWithRelations = Prisma.WorkOrderGetPayload<{
   include: {
     asset: { select: { id: true; code: true; name: true } };

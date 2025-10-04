@@ -22,7 +22,15 @@ const variants: Record<string, { background: string; text: string; label: string
   down: { background: 'bg-danger/10', text: 'text-danger', label: 'Down' },
   available: { background: 'bg-success/10', text: 'text-success', label: 'Available' },
   busy: { background: 'bg-warning/10', text: 'text-warning', label: 'Busy' },
-  'on leave': { background: 'bg-danger/10', text: 'text-danger', label: 'On Leave' }
+  'on leave': { background: 'bg-danger/10', text: 'text-danger', label: 'On Leave' },
+  'on-leave': { background: 'bg-danger/10', text: 'text-danger', label: 'On Leave' },
+  'on-shift': { background: 'bg-brand/10', text: 'text-brand', label: 'On Shift' },
+  standby: { background: 'bg-warning/10', text: 'text-warning', label: 'Standby' },
+  'off-duty': { background: 'bg-muted', text: 'text-mutedfg', label: 'Off Duty' },
+  pending: { background: 'bg-warning/10', text: 'text-warning', label: 'Pending' },
+  accepted: { background: 'bg-success/10', text: 'text-success', label: 'Accepted' },
+  revoked: { background: 'bg-danger/10', text: 'text-danger', label: 'Revoked' },
+  expired: { background: 'bg-muted', text: 'text-mutedfg', label: 'Expired' }
 };
 
 export interface DataBadgeProps extends ComponentPropsWithoutRef<'span'> {
