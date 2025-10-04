@@ -12,6 +12,7 @@ export interface FilterDefinition {
   type: 'search' | 'select' | 'date' | 'text';
   options?: FilterOption[];
   icon?: ReactNode;
+  testId?: string;
 }
 
 export interface QuickFilter {
@@ -45,6 +46,7 @@ export function FilterBar({ filters, values, onChange, onReset, quickFilters = [
                 className="min-w-[150px] rounded-xl border border-border bg-white/80 px-3 py-2 text-sm text-fg shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand dark:bg-muted"
                 value={values[filter.key] ?? ''}
                 onChange={(event) => onChange(filter.key, event.target.value)}
+                data-testid={filter.testId}
               >
                 <option value="">Any</option>
                 {(filter.options ?? []).map((option) => (
@@ -59,6 +61,7 @@ export function FilterBar({ filters, values, onChange, onReset, quickFilters = [
                 className="rounded-xl border border-border bg-white/80 px-3 py-2 text-sm text-fg shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand dark:bg-muted"
                 value={values[filter.key] ?? ''}
                 onChange={(event) => onChange(filter.key, event.target.value)}
+                data-testid={filter.testId}
               />
             ) : (
               <input
@@ -67,6 +70,7 @@ export function FilterBar({ filters, values, onChange, onReset, quickFilters = [
                 className="min-w-[220px] rounded-xl border border-border bg-white/80 px-3 py-2 text-sm text-fg shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand dark:bg-muted"
                 value={values[filter.key] ?? ''}
                 onChange={(event) => onChange(filter.key, event.target.value)}
+                data-testid={filter.testId}
               />
             )}
           </label>

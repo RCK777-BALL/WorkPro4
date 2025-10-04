@@ -1,43 +1,33 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Calendar,
-  Copy,
-  Download,
-  FileDown,
-  FileUp,
-  Filter,
-  ListChecks,
-  Plus,
-  Search,
-  Trash2,
-  User,
-} from 'lucide-react';
-import { z } from 'zod';
-import { read, utils, writeFile } from 'xlsx';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { Calendar, Download, Filter, ListChecks, Plus, Search, User } from 'lucide-react';
+import type { ApiError, ApiResponse } from '../../shared/types/http';
+import type { WorkOrderSummary } from '../../shared/types/workOrder';
 import { FilterBar, type FilterDefinition, type QuickFilter } from '../components/premium/FilterBar';
 import { ProTable, type ProTableColumn } from '../components/premium/ProTable';
 import { SlideOver } from '../components/premium/SlideOver';
 import { ConfirmDialog } from '../components/premium/ConfirmDialog';
 import { DataBadge } from '../components/premium/DataBadge';
 import { EmptyState } from '../components/premium/EmptyState';
-import { useAuth } from '../hooks/useAuth';
-import { workOrdersApi, type WorkOrderListItem, type WorkOrderPriority, type WorkOrderStatus } from '../lib/workOrdersApi';
+import { api, isApiErrorResponse } from '../lib/api';
+import { formatDate, formatWorkOrderPriority, formatWorkOrderStatus } from '../lib/utils';
+import { toWorkOrderRow, type WorkOrderRow } from '../lib/workOrders';
 
 interface ToastState {
   message: string;
   tone: 'success' | 'danger';
 }
 
-type BulkAction = 'complete' | 'archive' | 'delete';
+interface FilterValues {
+  search: string;
+  status?: WorkOrderRow['status'];
+  priority?: WorkOrderRow['priority'];
+  assignee?: string;
+  dueDate?: string;
+}
 
-const manageRoles = new Set(['planner', 'supervisor', 'admin']);
-const adminRoles = new Set(['supervisor', 'admin']);
-
-const statusOptions: FilterDefinition['options'] = [
+const statusOptions: { value: WorkOrderRow['status']; label: string }[] = [
   { value: 'requested', label: 'Requested' },
   { value: 'assigned', label: 'Assigned' },
   { value: 'in_progress', label: 'In Progress' },
@@ -45,7 +35,7 @@ const statusOptions: FilterDefinition['options'] = [
   { value: 'cancelled', label: 'Cancelled' },
 ];
 
-const priorityOptions: FilterDefinition['options'] = [
+const priorityOptions: { value: WorkOrderRow['priority']; label: string }[] = [
   { value: 'low', label: 'Low' },
   { value: 'medium', label: 'Medium' },
   { value: 'high', label: 'High' },
@@ -54,497 +44,120 @@ const priorityOptions: FilterDefinition['options'] = [
 
 const filters: FilterDefinition[] = [
   { key: 'search', label: 'Search', type: 'search', placeholder: 'WO ID, asset, or description' },
-  { key: 'status', label: 'Status', type: 'select', options: statusOptions },
-  { key: 'priority', label: 'Priority', type: 'select', options: priorityOptions },
+  { key: 'status', label: 'Status', type: 'select', options: statusOptions.map((option) => ({ value: option.value, label: option.label })) },
+  { key: 'priority', label: 'Priority', type: 'select', options: priorityOptions.map((option) => ({ value: option.value, label: option.label })) },
   { key: 'assignee', label: 'Assignee', type: 'text', placeholder: 'Technician name' },
   { key: 'dueBefore', label: 'Due before', type: 'date' },
 ];
 
 const quickFilters: QuickFilter[] = [
-  { key: 'status', value: 'completed', label: 'Completed' },
+  { key: 'status', value: 'in_progress', label: 'In Progress' },
   { key: 'priority', value: 'urgent', label: 'Urgent' },
-  { key: 'status', value: 'assigned', label: 'Assigned' },
+  { key: 'status', value: 'completed', label: 'Completed' }
 ];
 
-const workOrderFormSchema = z.object({
-  id: z.string().optional(),
-  title: z
-    .string()
-    .trim()
-    .min(3, 'Title must be at least 3 characters long')
-    .max(120, 'Title must be 120 characters or fewer'),
-  description: z
-    .string()
-    .max(4000, 'Description must be 4000 characters or fewer')
-    .optional()
-    .transform((value) => (value && value.length > 0 ? value : undefined)),
-  status: z.enum(['requested', 'assigned', 'in_progress', 'completed', 'cancelled']).default('requested'),
-  priority: z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
-  dueDate: z
-    .string()
-    .optional()
-    .transform((value) => (value && value.length > 0 ? value : undefined)),
-  category: z
-    .string()
-    .max(120, 'Category must be 120 characters or fewer')
-    .optional()
-    .transform((value) => (value && value.length > 0 ? value : undefined)),
+const columns: ProTableColumn<WorkOrderRow>[] = [
+  { key: 'id', header: 'WO #' },
+  { key: 'title', header: 'Summary' },
+  {
+    key: 'status',
+    header: 'Status',
+    accessor: (row) => <DataBadge status={row.statusLabel} />
+  },
+  {
+    key: 'priority',
+    header: 'Priority',
+    accessor: (row) => <DataBadge status={row.priorityLabel} />
+  },
+  {
+    key: 'assignee',
+    header: 'Owner',
+    accessor: (row) => row.assignee ?? 'Unassigned'
+  },
+  {
+    key: 'assetId',
+    header: 'Asset',
+    accessor: (row) => row.assetId ?? '—'
+  },
+  {
+    key: 'dueDate',
+    header: 'Due',
+    accessor: (row) => (row.dueDate ? formatDate(row.dueDate) : '—')
+  }
+];
+
+const createDraftWorkOrder = (): WorkOrderRow => ({
+  id: '',
+  title: '',
+  description: '',
+  status: 'requested',
+  statusLabel: formatWorkOrderStatus('requested'),
+  priority: 'medium',
+  priorityLabel: formatWorkOrderPriority('medium'),
+  assignee: null,
+  dueDate: null,
+  assetId: null
 });
-
-type WorkOrderFormValues = z.infer<typeof workOrderFormSchema>;
-
-interface QueryState {
-  search: string;
-  status: WorkOrderStatus | '';
-  priority: WorkOrderPriority | '';
-  assignee: string;
-  dueBefore: string;
-  page: number;
-  limit: number;
-  sortBy: 'createdAt' | 'dueDate' | 'priority' | 'status' | 'title';
-  sortDir: 'asc' | 'desc';
-}
-
-const defaultQueryState: QueryState = {
-  search: '',
-  status: '',
-  priority: '',
-  assignee: '',
-  dueBefore: '',
-  page: 1,
-  limit: 20,
-  sortBy: 'createdAt',
-  sortDir: 'desc',
-};
-
-function buildQueryState(searchParams: URLSearchParams): QueryState {
-  const base = { ...defaultQueryState };
-
-  const page = Number.parseInt(searchParams.get('page') ?? '', 10);
-  const limit = Number.parseInt(searchParams.get('limit') ?? '', 10);
-  const sortBy = searchParams.get('sortBy') as QueryState['sortBy'] | null;
-  const sortDir = searchParams.get('sortDir') as QueryState['sortDir'] | null;
-
-  return {
-    search: searchParams.get('search') ?? base.search,
-    status: (searchParams.get('status') as QueryState['status']) ?? base.status,
-    priority: (searchParams.get('priority') as QueryState['priority']) ?? base.priority,
-    assignee: searchParams.get('assignee') ?? base.assignee,
-    dueBefore: searchParams.get('dueBefore') ?? base.dueBefore,
-    page: Number.isFinite(page) && page > 0 ? page : base.page,
-    limit: Number.isFinite(limit) && limit > 0 ? limit : base.limit,
-    sortBy: sortBy ?? base.sortBy,
-    sortDir: sortDir ?? base.sortDir,
-  };
-}
-
-function toTitleCase(value: string) {
-  return value.replace(/_/g, ' ').replace(/\b\w/g, (match) => match.toUpperCase());
-}
-
-function mapWorkOrderColumns(): ProTableColumn<WorkOrderListItem>[] {
-  return [
-    { key: 'id', header: 'WO #' },
-    { key: 'title', header: 'Summary' },
-    {
-      key: 'status',
-      header: 'Status',
-      accessor: (row) => <DataBadge status={toTitleCase(row.status)} />,
-    },
-    {
-      key: 'priority',
-      header: 'Priority',
-      accessor: (row) => <DataBadge status={toTitleCase(row.priority)} />,
-    },
-    {
-      key: 'assignee',
-      header: 'Owner',
-      accessor: (row) => row.assignee?.name ?? 'Unassigned',
-    },
-    {
-      key: 'asset',
-      header: 'Asset',
-      accessor: (row) => row.asset?.name ?? '—',
-    },
-    {
-      key: 'dueDate',
-      header: 'Due',
-      accessor: (row) => (row.dueDate ? new Date(row.dueDate).toLocaleDateString() : '—'),
-    },
-  ];
-}
-
-const sortingOptions: Array<{ label: string; value: QueryState['sortBy'] }> = [
-  { label: 'Created date', value: 'createdAt' },
-  { label: 'Due date', value: 'dueDate' },
-  { label: 'Priority', value: 'priority' },
-  { label: 'Status', value: 'status' },
-  { label: 'Title', value: 'title' },
-];
-
-const statusValues: WorkOrderStatus[] = ['requested', 'assigned', 'in_progress', 'completed', 'cancelled'];
-const priorityValues: WorkOrderPriority[] = ['low', 'medium', 'high', 'urgent'];
-
-function normalizeStatus(value: unknown): WorkOrderStatus {
-  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  return statusValues.includes(normalized as WorkOrderStatus) ? (normalized as WorkOrderStatus) : 'requested';
-}
-
-function normalizePriority(value: unknown): WorkOrderPriority {
-  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  return priorityValues.includes(normalized as WorkOrderPriority) ? (normalized as WorkOrderPriority) : 'medium';
-}
 
 export default function WorkOrders() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const { user } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [values, setValues] = useState<FilterValues>({ search: '' });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [activeWorkOrderId, setActiveWorkOrderId] = useState<string | null>(null);
-  const [toast, setToast] = useState<ToastState | null>(null);
-  const [pendingAction, setPendingAction] = useState<BulkAction | null>(null);
-  const [exporting, setExporting] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
+  const [activeWorkOrder, setActiveWorkOrder] = useState<WorkOrderRow | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [notification, setNotification] = useState<NotificationState | null>(null);
 
   useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(null), 3200);
     return () => window.clearTimeout(timer);
-  }, [toast]);
+  }, [notification]);
 
-  const queryState = useMemo(() => buildQueryState(searchParams), [searchParams]);
-
-  const setQueryState = useCallback(
-    (patch: Partial<QueryState>) => {
-      setSearchParams((current) => {
-        const next = new URLSearchParams(current);
-
-        const merged: QueryState = { ...queryState, ...patch };
-
-        Object.entries(defaultQueryState).forEach(([key, defaultValue]) => {
-          const value = (merged as Record<string, unknown>)[key];
-          const stringValue = typeof value === 'number' ? String(value) : (value as string);
-          const defaultString = typeof defaultValue === 'number' ? String(defaultValue) : (defaultValue as string);
-
-          if (stringValue && stringValue !== defaultString) {
-            next.set(key, stringValue);
-          } else {
-            next.delete(key);
-          }
-        });
-
-        return next;
-      }, { replace: true });
-    },
-    [queryState, setSearchParams],
-  );
-
-  const queryKey = useMemo(() => ['work-orders', queryState] as const, [queryState]);
-
-  const { data, isLoading, isFetching } = useQuery({
-    queryKey,
-    queryFn: () =>
-      workOrdersApi.list({
-        page: queryState.page,
-        limit: queryState.limit,
-        search: queryState.search || undefined,
-        assignee: queryState.assignee || undefined,
-        status: queryState.status || undefined,
-        priority: queryState.priority || undefined,
-        assigneeId: undefined,
-        dueBefore: queryState.dueBefore || undefined,
-        sortBy: queryState.sortBy,
-        sortDir: queryState.sortDir,
-      }),
-    keepPreviousData: true,
-  });
-
-  const workOrders = data?.items ?? [];
-  const overdueCount = workOrders.filter((order) => order.status === 'in_progress' && order.dueDate && new Date(order.dueDate) < new Date()).length;
-
-  const columns = useMemo(() => mapWorkOrderColumns(), []);
-
-  const { data: editingWorkOrder } = useQuery({
-    queryKey: ['work-orders', activeWorkOrderId],
-    queryFn: () => (activeWorkOrderId && activeWorkOrderId !== 'new' ? workOrdersApi.get(activeWorkOrderId) : Promise.resolve(null)),
-    enabled: !!activeWorkOrderId && activeWorkOrderId !== 'new',
-  });
-
-  const form = useForm<WorkOrderFormValues>({
-    resolver: zodResolver(workOrderFormSchema),
-    defaultValues: {
-      title: '',
-      description: '',
-      status: 'requested',
-      priority: 'medium',
-      dueDate: '',
-      category: '',
-    },
-  });
-
-  useEffect(() => {
-    if (!activeWorkOrderId || activeWorkOrderId === 'new') {
-      form.reset({
-        title: '',
-        description: '',
-        status: 'requested',
-        priority: 'medium',
-        dueDate: '',
-        category: '',
-      });
-      return;
+  const {
+    data: workOrders = [],
+    isLoading,
+    isError,
+    error,
+  } = useQuery<WorkOrderRow[], ApiResponse<ApiError>>({
+    queryKey: ['work-orders'],
+    queryFn: async () => {
+      const result = await api.get<WorkOrderSummary[]>('/work-orders');
+      if (!Array.isArray(result)) {
+        return [];
+      }
+      return result.map(toWorkOrderRow);
     }
+  });
 
-    if (!editingWorkOrder) {
-      return;
-    }
+  const filtered = useMemo(() => {
+    const search = values.search?.trim().toLowerCase() ?? '';
 
-    form.reset({
-      id: editingWorkOrder.id,
-      title: editingWorkOrder.title,
-      description: editingWorkOrder.description ?? '',
-      status: editingWorkOrder.status,
-      priority: editingWorkOrder.priority,
-      dueDate: editingWorkOrder.dueDate ? editingWorkOrder.dueDate.split('T')[0] : '',
-      category: editingWorkOrder.category ?? '',
+    return workOrders.filter((order) => {
+      const matchesSearch = search
+        ? [order.id, order.title, order.description ?? '', order.assignee ?? '', order.assetId ?? '']
+            .filter((field): field is string => typeof field === 'string')
+            .some((field) => field.toLowerCase().includes(search))
+        : true;
+      const matchesStatus = values.status ? order.status === values.status : true;
+      const matchesPriority = values.priority ? order.priority === values.priority : true;
+      const matchesAssignee = values.assignee
+        ? (order.assignee ?? '').toLowerCase().includes(values.assignee.toLowerCase())
+        : true;
+      const matchesDueDate = values.dueDate ? (order.dueDate ?? '') <= values.dueDate : true;
+
+      return matchesSearch && matchesStatus && matchesPriority && matchesAssignee && matchesDueDate;
     });
-  }, [activeWorkOrderId, editingWorkOrder, form]);
+  }, [values, workOrders]);
 
-  const showToast = useCallback((message: string, tone: ToastState['tone']) => {
-    setToast({ message, tone });
-  }, []);
+  const inProgressCount = filtered.filter((order) => order.status === 'in_progress').length;
+  const errorMessage = isError
+    ? isApiErrorResponse(error)
+      ? error.error.message
+      : 'Unable to load work orders'
+    : null;
 
-  const canManage = manageRoles.has(user?.role ?? 'user');
-  const canDelete = adminRoles.has(user?.role ?? 'user');
-
-  const createMutation = useMutation({
-    mutationFn: (payload: WorkOrderFormValues) =>
-      workOrdersApi.create({
-        title: payload.title,
-        description: payload.description,
-        status: payload.status,
-        priority: payload.priority,
-        dueDate: payload.dueDate ?? undefined,
-        category: payload.category ?? undefined,
-      }),
-    onSuccess: (created) => {
-      queryClient.invalidateQueries({ queryKey });
-      showToast('Work order created', 'success');
-      setActiveWorkOrderId(null);
-      setSelectedIds([]);
-      setQueryState({ page: 1 });
-      queryClient.setQueryData(queryKey, (current: typeof data) => {
-        if (!current) return current;
-        return {
-          ...current,
-          items: [created, ...current.items].slice(0, current.limit),
-          total: current.total + 1,
-        };
-      });
-    },
-    onError: (error: Error) => {
-      showToast(error.message || 'Failed to create work order', 'danger');
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: (payload: WorkOrderFormValues) =>
-      workOrdersApi.update(payload.id!, {
-        title: payload.title,
-        description: payload.description,
-        status: payload.status,
-        priority: payload.priority,
-        dueDate: payload.dueDate ?? undefined,
-        category: payload.category ?? undefined,
-      }),
-    onSuccess: (updated) => {
-      queryClient.setQueryData(queryKey, (current: typeof data) => {
-        if (!current) return current;
-        return {
-          ...current,
-          items: current.items.map((item) => (item.id === updated.id ? updated : item)),
-        };
-      });
-      showToast('Work order updated', 'success');
-      setActiveWorkOrderId(null);
-    },
-    onError: (error: Error) => {
-      showToast(error.message || 'Failed to update work order', 'danger');
-    },
-  });
-
-  const bulkCompleteMutation = useMutation({
-    mutationFn: (ids: string[]) => workOrdersApi.bulkComplete(ids),
-    onMutate: async (ids) => {
-      await queryClient.cancelQueries({ queryKey });
-      const previous = queryClient.getQueryData<typeof data>(queryKey);
-
-      if (previous) {
-        queryClient.setQueryData(queryKey, {
-          ...previous,
-          items: previous.items.map((item) =>
-            ids.includes(item.id)
-              ? { ...item, status: 'completed', completedAt: new Date().toISOString() }
-              : item,
-          ),
-        });
-      }
-
-      return { previous };
-    },
-    onError: (error: Error, _variables, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(queryKey, context.previous);
-      }
-      showToast(error.message || 'Failed to complete work orders', 'danger');
-    },
-    onSuccess: (updated) => {
-      queryClient.setQueryData(queryKey, (current: typeof data) => {
-        if (!current) return current;
-        return {
-          ...current,
-          items: current.items.map((item) => updated.find((row) => row.id === item.id) ?? item),
-        };
-      });
-      showToast('Work orders marked complete', 'success');
-      setSelectedIds([]);
-    },
-  });
-
-  const bulkArchiveMutation = useMutation({
-    mutationFn: (ids: string[]) => workOrdersApi.bulkArchive(ids),
-    onMutate: async (ids) => {
-      await queryClient.cancelQueries({ queryKey });
-      const previous = queryClient.getQueryData<typeof data>(queryKey);
-
-      if (previous) {
-        queryClient.setQueryData(queryKey, {
-          ...previous,
-          items: previous.items.map((item) =>
-            ids.includes(item.id)
-              ? { ...item, status: 'cancelled', updatedAt: new Date().toISOString() }
-              : item,
-          ),
-        });
-      }
-
-      return { previous };
-    },
-    onError: (error: Error, _variables, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(queryKey, context.previous);
-      }
-      showToast(error.message || 'Failed to archive work orders', 'danger');
-    },
-    onSuccess: () => {
-      showToast('Work orders archived', 'success');
-      setSelectedIds([]);
-    },
-  });
-
-  const bulkDeleteMutation = useMutation({
-    mutationFn: (ids: string[]) => workOrdersApi.bulkDelete(ids),
-    onMutate: async (ids) => {
-      await queryClient.cancelQueries({ queryKey });
-      const previous = queryClient.getQueryData<typeof data>(queryKey);
-
-      if (previous) {
-        queryClient.setQueryData(queryKey, {
-          ...previous,
-          items: previous.items.filter((item) => !ids.includes(item.id)),
-          total: Math.max(0, previous.total - ids.length),
-        });
-      }
-
-      return { previous };
-    },
-    onError: (error: Error, _variables, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(queryKey, context.previous);
-      }
-      showToast(error.message || 'Failed to delete work orders', 'danger');
-    },
-    onSuccess: () => {
-      showToast('Work orders deleted', 'success');
-      setSelectedIds([]);
-      queryClient.invalidateQueries({ queryKey });
-    },
-  });
-
-  const duplicateMutation = useMutation({
-    mutationFn: (ids: string[]) => workOrdersApi.bulkDuplicate(ids),
-    onSuccess: (created) => {
-      showToast(`${created.length} work orders duplicated`, 'success');
-      queryClient.setQueryData(queryKey, (current: typeof data) => {
-        if (!current) return current;
-        return {
-          ...current,
-          items: [...created, ...current.items].slice(0, current.limit),
-          total: current.total + created.length,
-        };
-      });
-      setSelectedIds([]);
-    },
-    onError: (error: Error) => {
-      showToast(error.message || 'Failed to duplicate work orders', 'danger');
-    },
-  });
-
-  const importMutation = useMutation({
-    mutationFn: (items: WorkOrderFormValues[]) => {
-      const sanitized = items.map((item) => ({
-        title: item.title,
-        description: item.description,
-        status: normalizeStatus(item.status),
-        priority: normalizePriority(item.priority),
-        dueDate: item.dueDate ?? undefined,
-        category: item.category ?? undefined,
-      }));
-      return workOrdersApi.import(sanitized);
-    },
-    onSuccess: (created) => {
-      showToast(`${created.length} work orders imported`, 'success');
-      queryClient.invalidateQueries({ queryKey });
-    },
-    onError: (error: Error) => {
-      showToast(error.message || 'Failed to import work orders', 'danger');
-    },
-    onSettled: () => {
-      setIsImporting(false);
-    },
-  });
-
-  const handleFormSubmit = form.handleSubmit((values) => {
-    if (!canManage) {
-      showToast('You are not authorized to modify work orders', 'danger');
-      return;
-    }
-
-    if (values.id) {
-      updateMutation.mutate(values);
-    } else {
-      createMutation.mutate(values);
-    }
-  });
-
-  const handleBulkAction = (action: BulkAction) => {
-    if (selectedIds.length === 0) {
-      return;
-    }
-
-    if (!canManage && action !== 'delete') {
-      showToast('You are not authorized to modify work orders', 'danger');
-      return;
-    }
-
-    if (!canDelete && action === 'delete') {
-      showToast('You are not authorized to delete work orders', 'danger');
-      return;
-    }
-
-    setPendingAction(action);
+  const handleChange = (key: string, value: string) => {
+    setValues((prev) => ({ ...prev, [key as keyof FilterValues]: value }));
   };
 
   const confirmBulkAction = () => {
@@ -566,7 +179,8 @@ export default function WorkOrders() {
         break;
     }
 
-    setPendingAction(null);
+  const handleRowClick = (row: WorkOrderRow) => {
+    setActiveWorkOrder(row);
   };
 
   const handleDuplicate = () => {
@@ -705,7 +319,7 @@ export default function WorkOrders() {
         <div>
           <h1 className="text-3xl font-semibold text-fg">Work order pipeline</h1>
           <p className="mt-2 text-sm text-mutedfg">
-            Track assignments, SLA risk, and technician load. {overdueCount} items need immediate follow-up.
+            Track assignments, SLA risk, and technician load. {inProgressCount} items currently in progress.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -724,54 +338,8 @@ export default function WorkOrders() {
             <Download className="mr-2 inline h-4 w-4" /> Export CSV
           </button>
           <button
-            type="button"
-            onClick={() => exportCurrentQuery('xlsx')}
-            className="rounded-2xl border border-border bg-white/80 px-4 py-2 text-sm font-semibold text-fg shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-60"
-            disabled={exporting}
-            data-testid="work-orders-export-xlsx"
-            title={!canManage ? 'Limited export still available' : 'Export current view as XLSX'}
-          >
-            <FileDown className="mr-2 inline h-4 w-4" /> Export XLSX
-          </button>
-          <label
-            className="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-border bg-white/80 px-4 py-2 text-sm font-semibold text-fg shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-60"
-            title={canManage ? 'Import CSV, XLSX, or JSON' : 'Requires planner, supervisor, or admin role'}
-            data-testid="work-orders-import"
-          >
-            <FileUp className="h-4 w-4" />
-            Import
-            <input
-              type="file"
-              accept=".csv,.xlsx,.xls,.json"
-              ref={fileInputRef}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) {
-                  if (!canManage) {
-                    showToast('You are not authorized to import work orders', 'danger');
-                    event.target.value = '';
-                    return;
-                  }
-                  void handleImportFile(file);
-                }
-              }}
-              className="hidden"
-              data-testid="work-orders-import-input"
-            />
-          </label>
-          <button
-            onClick={() => {
-              if (!canManage) {
-                showToast('You are not authorized to create work orders', 'danger');
-                return;
-              }
-              setActiveWorkOrderId('new');
-            }}
-            className="inline-flex items-center gap-2 rounded-2xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl disabled:opacity-60"
-            type="button"
-            data-testid="work-orders-new"
-            title={canManage ? 'Create work order' : 'Requires planner, supervisor, or admin role'}
-            disabled={!canManage}
+            onClick={() => setActiveWorkOrder(createDraftWorkOrder())}
+            className="inline-flex items-center gap-2 rounded-2xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl"
           >
             <Plus className="h-4 w-4" /> New work order
           </button>
@@ -853,28 +421,18 @@ export default function WorkOrders() {
             <Trash2 className="h-4 w-4" /> Delete
           </button>
         </div>
-
-        <FilterBar
-          filters={filters}
-          values={{
-            search: queryState.search,
-            status: queryState.status,
-            priority: queryState.priority,
-            assignee: queryState.assignee,
-            dueBefore: queryState.dueBefore,
-          }}
-          onChange={(key, value) => setQueryState({ [key]: value, page: 1 } as Partial<QueryState>)}
-          onReset={() => setQueryState(defaultQueryState)}
-          quickFilters={quickFilters}
-          sticky={false}
-        />
-
+        <FilterBar filters={filters} values={values} onChange={handleChange} onReset={handleReset} quickFilters={quickFilters} sticky={false} />
+        {errorMessage && (
+          <div className="mt-4 rounded-2xl border border-danger/30 bg-danger/5 p-4 text-sm text-danger">
+            {errorMessage}
+          </div>
+        )}
         <ProTable
           data={workOrders}
           columns={columns}
-          loading={isLoading || isFetching}
-          getRowId={(row) => row.id}
-          onRowClick={(row) => setActiveWorkOrderId(row.id)}
+          loading={isLoading}
+          getRowId={(row) => row.id || row.title}
+          onRowClick={handleRowClick}
           onSelectionChange={setSelectedIds}
           rowActions={(row) => (
             <div className="flex justify-end gap-2">
@@ -978,6 +536,50 @@ export default function WorkOrders() {
                 ))}
               </select>
             </label>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <label className="block text-sm font-semibold text-mutedfg">
+                Status
+                <select
+                  value={activeWorkOrder.status}
+                  onChange={(event) => {
+                    const value = event.target.value as WorkOrderRow['status'];
+                    setActiveWorkOrder({
+                      ...activeWorkOrder,
+                      status: value,
+                      statusLabel: formatWorkOrderStatus(value)
+                    });
+                  }}
+                  className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+                >
+                  {statusOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm font-semibold text-mutedfg">
+                Priority
+                <select
+                  value={activeWorkOrder.priority}
+                  onChange={(event) => {
+                    const value = event.target.value as WorkOrderRow['priority'];
+                    setActiveWorkOrder({
+                      ...activeWorkOrder,
+                      priority: value,
+                      priorityLabel: formatWorkOrderPriority(value)
+                    });
+                  }}
+                  className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+                >
+                  {priorityOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
             <label className="block text-sm font-semibold text-mutedfg">
               Priority
               <select
@@ -999,9 +601,10 @@ export default function WorkOrders() {
             <div className="mt-2 flex items-center gap-3 rounded-2xl border border-border bg-white px-4 py-2 text-sm shadow-inner">
               <User className="h-4 w-4 text-mutedfg" />
               <input
-                placeholder="Assignment handled elsewhere"
-                className="flex-1 bg-transparent text-mutedfg outline-none"
-                disabled
+                type="date"
+                value={activeWorkOrder.dueDate ? activeWorkOrder.dueDate.slice(0, 10) : ''}
+                onChange={(event) => setActiveWorkOrder({ ...activeWorkOrder, dueDate: event.target.value || null })}
+                className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
               />
             </div>
           </label>
