@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, RefreshCcw, Search } from 'lucide-react';
 
-import { api } from '@/lib/api';
+import { api, unwrapApiResult } from '@/lib/api';
 import { formatDate, getStatusColor } from '@/lib/utils';
 
 const MAX_NON_AUTH_RETRIES = 2;
@@ -48,8 +48,18 @@ export function Assets() {
     queryKey: ['assets', filters],
     queryFn: async () => {
       const queryString = buildQueryString(filters);
-      const { data } = await api.get(`/assets${queryString}`);
-      return data ?? [];
+      const response = await api.get(`/assets${queryString}`);
+      const payload = unwrapApiResult(response);
+
+      if (Array.isArray(payload)) {
+        return payload;
+      }
+
+      if (payload && typeof payload === 'object' && Array.isArray(payload.assets)) {
+        return payload.assets;
+      }
+
+      return [];
     },
     retry: (failureCount, fetchError) => {
       if (!fetchError) {

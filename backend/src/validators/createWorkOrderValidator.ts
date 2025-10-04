@@ -20,16 +20,22 @@ function optionalObjectId(field: string) {
 }
 
 const attachmentSchema = z.object({
-  id: optionalObjectId('attachment id'),
-  url: z.string({ invalid_type_error: 'Attachment URL must be a string' }).trim().url('Attachment URL must be valid'),
+  id: optionalObjectId('attachment id').optional(),
+  url: z
+    .string({ invalid_type_error: 'Attachment URL must be a string' })
+    .trim()
+    .url('Attachment URL must be valid')
+    .optional(),
   filename: z
     .string({ invalid_type_error: 'Attachment filename must be a string' })
     .trim()
-    .min(1, 'Attachment filename is required'),
+    .min(1, 'Attachment filename is required')
+    .optional(),
   contentType: z
     .string({ invalid_type_error: 'Attachment contentType must be a string' })
     .trim()
-    .min(1, 'Attachment contentType is required'),
+    .min(1, 'Attachment contentType is required')
+    .optional(),
   size: z
     .number({ invalid_type_error: 'Attachment size must be a number' })
     .int('Attachment size must be an integer')
@@ -94,7 +100,12 @@ export const createWorkOrderValidator = z
       .trim()
       .min(1, 'category is required')
       .optional(),
-    attachments: z.array(attachmentSchema).optional().default([]),
+    attachments: z
+      .array(attachmentSchema)
+      .optional()
+      .transform((value) =>
+        value?.map((attachment) => attachment.id).filter((id): id is string => typeof id === 'string') ?? [],
+      ),
   })
   .strict();
 

@@ -17,13 +17,15 @@ import { normalizeObjectId } from './lib/normalizeObjectId';
 // Routes
 import authRoutes from './routes/auth';
 import summaryRoutes from './routes/summary';
-import workOrderRoutes from './routes/simpleWorkOrders';
+import workOrderRoutes from './routes/workOrders';
 import dashboardRoutes from './routes/dashboard';
 import assetRoutes from './routes/assets';
 import partRoutes from './routes/parts';
 import vendorRoutes from './routes/vendors';
+import purchaseOrderRoutes from './routes/purchaseOrders';
 import searchRoutes from './routes/search';
-import integrationRoutes from './routes/integrations';
+import pmRoutes from './routes/pm';
+import { initializePmScheduler } from './queue/pmScheduler';
 
 
 const app = express();
@@ -199,12 +201,18 @@ app.get('/health', handleHealthCheck);
 app.get('/api/health', handleHealthCheck);
 app.get('/health/db', handleHealthCheck);
 
+// Role groups
+const MANAGEMENT_ROLES = ['admin', 'manager', 'planner'];
+const WORKFORCE_ROLES = [...MANAGEMENT_ROLES, 'technician'];
+const INVENTORY_ROLES = MANAGEMENT_ROLES;
+const TEAM_VIEW_ROLES = [...WORKFORCE_ROLES, 'viewer', 'user'];
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/work-orders', workOrderRoutes);
 app.use('/api/assets', assetRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/integrations', integrationRoutes);
+app.use('/api/pm', pmRoutes);
 
 // Error handling
 app.use(errorHandler);
@@ -254,6 +262,7 @@ async function start() {
   }
 
   await seedDefaultsNoTxn();
+  await initializePmScheduler();
 
   app.listen(PORT, () => {
     console.log(`API listening on http://localhost:${PORT}`);
