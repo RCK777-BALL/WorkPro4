@@ -9,7 +9,7 @@ import { ConfirmDialog } from '../components/premium/ConfirmDialog';
 import { DataBadge } from '../components/premium/DataBadge';
 import { EmptyState } from '../components/premium/EmptyState';
 import { api } from '../lib/api';
-import { mockWorkOrders, type MockWorkOrder } from '../lib/mockWorkOrders';
+import { normalizeWorkOrders, type WorkOrderRecord } from '../lib/workOrders';
 
 interface NotificationState {
   message: string;
@@ -30,7 +30,7 @@ const quickFilters: QuickFilter[] = [
   { key: 'status', value: 'Completed', label: 'Completed' }
 ];
 
-const columns: ProTableColumn<MockWorkOrder>[] = [
+const columns: ProTableColumn<WorkOrderRecord>[] = [
   { key: 'id', header: 'WO #' },
   { key: 'title', header: 'Summary' },
   {
@@ -52,9 +52,10 @@ export default function WorkOrders() {
   const navigate = useNavigate();
   const [values, setValues] = useState<Record<string, string>>({ search: '' });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [activeWorkOrder, setActiveWorkOrder] = useState<MockWorkOrder | null>(null);
+  const [activeWorkOrder, setActiveWorkOrder] = useState<WorkOrderRecord | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notification, setNotification] = useState<NotificationState | null>(null);
+  const [queryError, setQueryError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!notification) return;
@@ -62,21 +63,36 @@ export default function WorkOrders() {
     return () => window.clearTimeout(timer);
   }, [notification]);
 
-  const { data: workOrders = mockWorkOrders, isLoading } = useQuery({
+  const {
+    data: workOrders,
+    isLoading,
+    isError,
+    error,
+  } = useQuery<WorkOrderRecord[]>({
     queryKey: ['work-orders'],
     queryFn: async () => {
-      try {
-        const result = await api.get<MockWorkOrder[]>('/work-orders');
-        return Array.isArray(result) ? result : mockWorkOrders;
-      } catch {
-        return mockWorkOrders;
-      }
-    }
+      const result = await api.get<unknown>('/work-orders');
+      return normalizeWorkOrders(result);
+    },
+    retry: false,
   });
+
+  useEffect(() => {
+    if (isError) {
+      const message = error instanceof Error ? error.message : 'Unable to load work orders';
+      setQueryError(message);
+      setNotification({ message, tone: 'danger' });
+      return;
+    }
+
+    setQueryError(null);
+  }, [isError, error]);
+
+  const workOrderRows = workOrders ?? [];
 
   const filtered = useMemo(() => {
     const search = (values.search ?? '').trim().toLowerCase();
-    return workOrders.filter((order) => {
+    return workOrderRows.filter((order) => {
       const matchesSearch = search
         ? [order.id, order.title, order.asset, order.description].some((field) =>
             typeof field === 'string' && field.toLowerCase().includes(search)
@@ -88,7 +104,7 @@ export default function WorkOrders() {
       const matchesDueDate = values.dueDate ? (order.dueDate ?? '') <= values.dueDate : true;
       return matchesSearch && matchesStatus && matchesPriority && matchesAssignee && matchesDueDate;
     });
-  }, [values, workOrders]);
+  }, [values, workOrderRows]);
 
   const overdueCount = filtered.filter((order) => order.status === 'Overdue').length;
 
@@ -98,7 +114,7 @@ export default function WorkOrders() {
 
   const handleReset = () => setValues({ search: '' });
 
-  const handleRowClick = (row: MockWorkOrder) => {
+  const handleRowClick = (row: WorkOrderRecord) => {
     setActiveWorkOrder(row);
   };
 
@@ -169,6 +185,11 @@ export default function WorkOrders() {
           </button>
         </div>
         <FilterBar filters={filters} values={values} onChange={handleChange} onReset={handleReset} quickFilters={quickFilters} sticky={false} />
+        {queryError && (
+          <div className="mb-4 rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">
+            {queryError}
+          </div>
+        )}
         <ProTable
           data={filtered}
           columns={columns}

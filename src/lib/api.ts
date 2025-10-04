@@ -208,8 +208,21 @@ export class ApiClient {
 
       return result;
     } catch (error) {
-      // If backend is not available, return mock data for development
+      // If backend is not available, optionally surface mock data for development
       if (error instanceof TypeError && error.message.includes('fetch')) {
+        const shouldBypassMock =
+          endpoint.includes('/summary') || endpoint.startsWith('/work-orders');
+
+        if (shouldBypassMock) {
+          return {
+            data: null,
+            error: {
+              code: 503,
+              message: 'Backend unavailable',
+            },
+          } satisfies ApiResult<T>;
+        }
+
         console.warn('Backend not available, using mock data');
         const mockData = this.getMockData<T | null>(endpoint);
         if (mockData != null) {
