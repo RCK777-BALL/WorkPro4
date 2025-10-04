@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Calendar, Download, Filter, ListChecks, Plus, Search, User } from 'lucide-react';
+import { AlertTriangle, Calendar, Download, Filter, ListChecks, Plus, Search, User } from 'lucide-react';
 import { FilterBar, type FilterDefinition, type QuickFilter } from '../components/premium/FilterBar';
 import { ProTable, type ProTableColumn } from '../components/premium/ProTable';
 import { SlideOver } from '../components/premium/SlideOver';
@@ -9,7 +9,17 @@ import { ConfirmDialog } from '../components/premium/ConfirmDialog';
 import { DataBadge } from '../components/premium/DataBadge';
 import { EmptyState } from '../components/premium/EmptyState';
 import { api } from '../lib/api';
-import { mockWorkOrders, type MockWorkOrder } from '../lib/mockWorkOrders';
+
+interface WorkOrderRow {
+  id: string;
+  title: string;
+  description?: string | null;
+  status?: string | null;
+  priority?: string | null;
+  assignee?: string | null;
+  asset?: string | null;
+  dueDate?: string | null;
+}
 
 interface NotificationState {
   message: string;
@@ -30,29 +40,61 @@ const quickFilters: QuickFilter[] = [
   { key: 'status', value: 'Completed', label: 'Completed' }
 ];
 
-const columns: ProTableColumn<MockWorkOrder>[] = [
+const statusDisplay: Record<string, { status: string; label: string }> = {
+  requested: { status: 'open', label: 'Requested' },
+  approved: { status: 'assigned', label: 'Approved' },
+  assigned: { status: 'assigned', label: 'Assigned' },
+  in_progress: { status: 'in progress', label: 'In Progress' },
+  'in progress': { status: 'in progress', label: 'In Progress' },
+  completed: { status: 'completed', label: 'Completed' },
+  cancelled: { status: 'cancelled', label: 'Cancelled' },
+  overdue: { status: 'overdue', label: 'Overdue' },
+};
+
+const priorityDisplay: Record<string, { status: string; label: string }> = {
+  critical: { status: 'high', label: 'Critical' },
+  high: { status: 'high', label: 'High' },
+  medium: { status: 'medium', label: 'Medium' },
+  low: { status: 'low', label: 'Low' },
+  urgent: { status: 'high', label: 'Urgent' },
+};
+
+const columns: ProTableColumn<WorkOrderRow>[] = [
   { key: 'id', header: 'WO #' },
   { key: 'title', header: 'Summary' },
   {
     key: 'status',
     header: 'Status',
-    accessor: (row) => <DataBadge status={row.status ?? 'Open'} />
+    accessor: (row) => {
+      const normalized = (row.status ?? 'open').toLowerCase();
+      const badge = statusDisplay[normalized];
+      return <DataBadge status={badge?.status ?? 'scheduled'} label={badge?.label ?? (row.status ?? 'Open')} />;
+    },
   },
   {
     key: 'priority',
     header: 'Priority',
-    accessor: (row) => <DataBadge status={row.priority ?? 'Medium'} />
+    accessor: (row) => {
+      const normalized = (row.priority ?? 'medium').toLowerCase();
+      const badge = priorityDisplay[normalized];
+      const label = badge?.label ?? (row.priority ?? 'Medium');
+      return <DataBadge status={badge?.status ?? 'medium'} label={label} />;
+    },
   },
-  { key: 'assignee', header: 'Owner' },
-  { key: 'asset', header: 'Asset' },
-  { key: 'dueDate', header: 'Due', accessor: (row) => row.dueDate ?? '—' }
+  { key: 'assignee', header: 'Owner', accessor: (row) => row.assignee ?? 'Unassigned' },
+  { key: 'asset', header: 'Asset', accessor: (row) => row.asset ?? '—' },
+  {
+    key: 'dueDate',
+    header: 'Due',
+    accessor: (row) => (row.dueDate ? new Date(row.dueDate).toLocaleDateString() : '—'),
+  },
 ];
 
 export default function WorkOrders() {
   const navigate = useNavigate();
   const [values, setValues] = useState<Record<string, string>>({ search: '' });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [activeWorkOrder, setActiveWorkOrder] = useState<MockWorkOrder | null>(null);
+  const [activeWorkOrder, setActiveWorkOrder] = useState<WorkOrderRow | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notification, setNotification] = useState<NotificationState | null>(null);
 
@@ -62,17 +104,24 @@ export default function WorkOrders() {
     return () => window.clearTimeout(timer);
   }, [notification]);
 
-  const { data: workOrders = mockWorkOrders, isLoading } = useQuery({
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+  } = useQuery<WorkOrderRow[]>({
     queryKey: ['work-orders'],
-    queryFn: async () => {
-      try {
-        const result = await api.get<MockWorkOrder[]>('/work-orders');
-        return Array.isArray(result) ? result : mockWorkOrders;
-      } catch {
-        return mockWorkOrders;
-      }
-    }
+    queryFn: () => api.get<WorkOrderRow[]>('/work-orders'),
+    retry: 0,
+    onError: () => {
+      setNotification({
+        message: 'Unable to load work orders. Please try again later.',
+        tone: 'danger',
+      });
+    },
   });
+
+  const workOrders = data ?? [];
 
   const filtered = useMemo(() => {
     const search = (values.search ?? '').trim().toLowerCase();
@@ -98,7 +147,7 @@ export default function WorkOrders() {
 
   const handleReset = () => setValues({ search: '' });
 
-  const handleRowClick = (row: MockWorkOrder) => {
+  const handleRowClick = (row: WorkOrderRow) => {
     setActiveWorkOrder(row);
   };
 
@@ -127,22 +176,35 @@ export default function WorkOrders() {
             <Download className="mr-2 inline h-4 w-4" /> Export report
           </button>
           <button
-            onClick={() => setActiveWorkOrder({
-              id: `WO-${Date.now()}`,
-              title: '',
-              description: '',
-              status: 'Open',
-              priority: 'Medium',
-              assignee: 'Unassigned',
-              asset: '',
-              dueDate: ''
-            })}
+            onClick={() =>
+              setActiveWorkOrder({
+                id: `WO-${Date.now()}`,
+                title: '',
+                description: '',
+                status: 'open',
+                priority: 'medium',
+                assignee: 'Unassigned',
+                asset: '',
+                dueDate: '',
+              })
+            }
             className="inline-flex items-center gap-2 rounded-2xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl"
           >
             <Plus className="h-4 w-4" /> New work order
           </button>
         </div>
       </header>
+      {isError && (
+        <div className="flex items-start gap-3 rounded-3xl border border-danger/40 bg-danger/5 p-4 text-sm text-danger">
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <div>
+            <p className="font-semibold">Unable to load work orders</p>
+            <p className="mt-1 text-danger/80">
+              {error instanceof Error ? error.message : 'The backend did not respond.'}
+            </p>
+          </div>
+        </div>
+      )}
       <div className="rounded-3xl border border-border bg-surface p-4 shadow-xl">
         <div className="flex flex-wrap items-center gap-3 border-b border-border/60 pb-4">
           <div className="relative flex-1 min-w-[220px]">
@@ -188,7 +250,13 @@ export default function WorkOrders() {
               View
             </button>
           )}
-          emptyState={<EmptyState title="No work orders found" description="Try changing your filters or creating a new work order." icon={<Calendar className="h-8 w-8" />} />}
+          emptyState={
+            <EmptyState
+              title="No work orders found"
+              description="Try changing your filters or creating a new work order."
+              icon={<Calendar className="h-8 w-8" />}
+            />
+          }
         />
       </div>
       {notification && (

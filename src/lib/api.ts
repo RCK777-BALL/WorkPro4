@@ -1,5 +1,4 @@
-import type { DashboardSummaryResponse } from '../../shared/types/dashboard';
-import { getMockWorkOrderById, mockWorkOrders } from './mockWorkOrders';
+import { getMockWorkOrderById } from './mockWorkOrders';
 
 interface MockAssetTreeSite {
   id: string;
@@ -208,9 +207,25 @@ export class ApiClient {
 
       return result;
     } catch (error) {
-      // If backend is not available, return mock data for development
+      // If backend is not available, return mock data for development when supported
       if (error instanceof TypeError && error.message.includes('fetch')) {
-        console.warn('Backend not available, using mock data');
+        console.warn('Backend not available, evaluating mock fallback for', endpoint);
+        const [path] = endpoint.split('?');
+        const normalizedPath = (() => {
+          const trimmed = (path ?? endpoint).replace(/\/+$|^\/+/gu, '');
+          return `/${trimmed}`;
+        })();
+
+        if (normalizedPath === '/summary' || normalizedPath === '/work-orders') {
+          return {
+            data: null,
+            error: {
+              code: 503,
+              message: 'Backend unavailable',
+            },
+          } satisfies ApiResult<T>;
+        }
+
         const mockData = this.getMockData<T | null>(endpoint);
         if (mockData != null) {
           return {
@@ -239,37 +254,9 @@ export class ApiClient {
 
   private getMockData<T>(endpoint: string): T | null {
     // Mock data for development when backend is not available
-    if (endpoint.includes('/summary')) {
-      const mockSummary: DashboardSummaryResponse = {
-        workOrders: {
-          open: 12,
-          overdue: 3,
-          completedThisMonth: 45,
-          completedTrend: 8.5,
-        },
-        assets: {
-          uptime: 94.5,
-          total: 234,
-          down: 3,
-          operational: 231,
-        },
-        inventory: {
-          totalParts: 1250,
-          lowStock: 18,
-          stockHealth: 87.3,
-        },
-      };
-
-      return mockSummary as T;
-    }
-
     if (endpoint.startsWith('/work-orders/')) {
       const workOrderId = endpoint.split('/').pop() ?? '';
       return (getMockWorkOrderById(workOrderId) ?? null) as T | null;
-    }
-
-    if (endpoint === '/work-orders') {
-      return mockWorkOrders as T;
     }
 
     if (endpoint === '/assets/tree') {

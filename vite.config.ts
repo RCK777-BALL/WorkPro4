@@ -26,4 +26,13 @@ export default defineConfig({
       input: 'index.html',
     },
   },
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./vitest.setup.ts'],
+    exclude: ['frontend/**'],
+    include: [
+      'src/**/*.{test,spec}.{js,jsx,ts,tsx}',
+      'backend/src/**/*.{test,spec}.{js,jsx,ts,tsx}',
+    ],
+  },
 })
