@@ -3,7 +3,8 @@ import { z } from 'zod';
 import type { Asset, Prisma } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { prisma } from '../db';
-import { asyncHandler } from '../utils/response';
+import { asyncHandler, fail, ok } from '../utils/response';
+import { auditLog } from '../middleware/audit';
 
 const router = Router();
 
@@ -22,8 +23,12 @@ const querySchema = z.object({
 });
 
 const emptyToUndefined = (value: unknown) => {
-  if (value === undefined || value === null) {
+  if (value === undefined) {
     return undefined;
+  }
+
+  if (value === null) {
+    return null;
   }
 
   if (typeof value === 'string' && value.trim() === '') {
@@ -33,15 +38,33 @@ const emptyToUndefined = (value: unknown) => {
   return value;
 };
 
-const assetPayloadSchema = z.object({
-  name: z.string().trim().min(1, 'Asset name is required'),
-  code: z.string().trim().min(1, 'Asset code is required'),
-  location: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional()),
-  category: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional()),
-  purchaseDate: z.preprocess(emptyToUndefined, z.coerce.date().optional()),
-  cost: z.preprocess(emptyToUndefined, z.coerce.number().nonnegative().optional()),
-  status: z.preprocess(emptyToUndefined, assetStatusEnum.optional()),
-});
+const assetPayloadSchema = z
+  .object({
+    name: z.string().trim().min(1, 'Asset name is required'),
+    code: z.string().trim().min(1, 'Asset code is required'),
+    location: z.preprocess(
+      normalizeOptionalString,
+      z.union([z.string().trim().min(1), z.null()]).optional(),
+    ),
+    category: z.preprocess(
+      normalizeOptionalString,
+      z.union([z.string().trim().min(1), z.null()]).optional(),
+    ),
+    purchaseDate: z.preprocess(
+      normalizeOptionalDate,
+      z.union([z.coerce.date(), z.null()]).optional(),
+    ),
+    cost: z.preprocess(
+      normalizeOptionalNumber,
+      z.union([z.number().nonnegative(), z.null()]).optional(),
+    ),
+    status: z.preprocess(emptyToUndefined, assetStatusEnum.optional()),
+  })
+  .strict();
+
+const updateAssetSchema = assetPayloadSchema.partial().strict();
+
+type AssetStatus = z.infer<typeof assetStatusEnum>;
 
 type TenantScopedWhere = {
   tenantId: string;
@@ -76,7 +99,7 @@ router.get(
   '/',
   asyncHandler(async (req: AuthRequest, res) => {
     if (!req.user) {
-      return res.status(401).json({ ok: false, error: 'Authentication required' });
+      return fail(res, 401, 'Authentication required');
     }
 
     const scope = buildTenantScope({ tenantId: req.user.tenantId, siteId: req.user.siteId ?? null });
@@ -142,7 +165,7 @@ router.post(
   '/',
   asyncHandler(async (req: AuthRequest, res) => {
     if (!req.user) {
-      return res.status(401).json({ ok: false, error: 'Authentication required' });
+      return fail(res, 401, 'Authentication required');
     }
 
     const payload = assetPayloadSchema.parse(req.body);
@@ -154,15 +177,22 @@ router.post(
         siteId: scope.siteId ?? undefined,
         code: payload.code,
         name: payload.name,
-        location: payload.location,
-        category: payload.category,
-        purchaseDate: payload.purchaseDate,
-        cost: payload.cost,
+        location: payload.location ?? undefined,
+        category: payload.category ?? undefined,
+        purchaseDate: payload.purchaseDate ?? undefined,
+        cost: payload.cost ?? undefined,
         status: payload.status ?? 'operational',
       },
     });
 
-    return res.status(201).json({ ok: true, asset: serializeAsset(asset) });
+    await auditLog('asset.created', {
+      assetId: asset.id,
+      tenantId: asset.tenantId,
+      userId: req.user.id,
+    });
+
+    res.status(201);
+    return ok(res, serializeAsset(asset));
   }),
 );
 
@@ -170,7 +200,7 @@ router.put(
   '/:id',
   asyncHandler(async (req: AuthRequest, res) => {
     if (!req.user) {
-      return res.status(401).json({ ok: false, error: 'Authentication required' });
+      return fail(res, 401, 'Authentication required');
     }
 
     const payload = assetPayloadSchema.parse(req.body);
@@ -206,7 +236,7 @@ router.delete(
   '/:id',
   asyncHandler(async (req: AuthRequest, res) => {
     if (!req.user) {
-      return res.status(401).json({ ok: false, error: 'Authentication required' });
+      return fail(res, 401, 'Authentication required');
     }
 
     const scope = buildTenantScope({ tenantId: req.user.tenantId, siteId: req.user.siteId ?? null });
