@@ -195,7 +195,13 @@ router.post(
       },
     });
 
-    return ok(res, mapWorkOrder(workOrder));
+    const normalized = mapWorkOrder(workOrder);
+
+    void emitTenantWebhookEvent(defaultUser.tenantId, 'work-order.created', {
+      workOrder: normalized,
+    });
+
+    return ok(res, normalized);
   }),
 );
 

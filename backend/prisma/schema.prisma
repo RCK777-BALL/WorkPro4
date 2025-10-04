@@ -29,6 +29,50 @@ model Tenant {
   @@map("tenants")
 }
 
+model IntegrationApiKey {
+  id          String   @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId    String   @map("tenant_id") @db.ObjectId
+  name        String
+  description String?
+  hash        String
+  prefix      String
+  lastFour    String   @map("last_four")
+  lastUsedAt  DateTime? @map("last_used_at")
+  revokedAt   DateTime? @map("revoked_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("integration_api_keys")
+  @@index([tenantId])
+  @@index([tenantId, prefix])
+}
+
+model TenantWebhook {
+  id              String   @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId        String   @map("tenant_id") @db.ObjectId
+  name            String
+  url             String
+  events          String[]
+  active          Boolean  @default(true)
+  secretHash      String?  @map("secret_hash")
+  headers         Json?
+  retryCount      Int      @default(0) @map("retry_count")
+  lastAttemptAt   DateTime? @map("last_attempt_at")
+  lastSuccessAt   DateTime? @map("last_success_at")
+  lastErrorMessage String? @map("last_error_message")
+  nextRetryAt     DateTime? @map("next_retry_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_webhooks")
+  @@index([tenantId])
+  @@index([tenantId, active])
+}
+
 model User {
   id           String @id @map("_id") @default(auto()) @db.ObjectId
   tenantId     String @map("tenant_id") @db.ObjectId
