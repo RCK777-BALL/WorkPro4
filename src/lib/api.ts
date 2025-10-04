@@ -238,8 +238,10 @@ export class ApiClient {
   }
 
   private getMockData<T>(endpoint: string): T | null {
+    const [path] = endpoint.split('?');
+
     // Mock data for development when backend is not available
-    if (endpoint.includes('/summary')) {
+    if (path.includes('/summary')) {
       const mockSummary: DashboardSummaryResponse = {
         workOrders: {
           open: 12,
@@ -263,52 +265,179 @@ export class ApiClient {
       return mockSummary as T;
     }
 
-    if (endpoint.startsWith('/work-orders/')) {
-      const workOrderId = endpoint.split('/').pop() ?? '';
+    if (path.startsWith('/work-orders/')) {
+      const workOrderId = path.split('/').pop() ?? '';
       return (getMockWorkOrderById(workOrderId) ?? null) as T | null;
     }
 
-    if (endpoint === '/work-orders') {
+    if (path === '/work-orders') {
       return mockWorkOrders as T;
     }
 
-    if (endpoint === '/assets/tree') {
+    const mockAssetBase = {
+      site: { id: 'site-1', name: 'Main Plant', code: 'main-plant' },
+      area: { id: 'area-1', name: 'Production', code: 'production' },
+      line: { id: 'line-1', name: 'Assembly Line A', code: 'assembly-a' },
+      station: { id: 'station-1', name: 'Press Station', code: 'station-1' },
+    } as const;
+
+    if (path === '/assets' || path === '/assets/') {
+      const asset = {
+        id: 'asset-1',
+        tenantId: 'tenant-1',
+        code: 'PUMP-001',
+        name: 'Main Water Pump',
+        status: 'operational' as const,
+        criticality: 3,
+        manufacturer: 'Allied Pumps Inc.',
+        modelNumber: 'APX-500',
+        serialNumber: 'SN-APX500-001',
+        site: mockAssetBase.site,
+        area: mockAssetBase.area,
+        line: mockAssetBase.line,
+        station: mockAssetBase.station,
+        purchaseDate: '2023-01-15T00:00:00.000Z',
+        commissionedAt: '2023-03-01T00:00:00.000Z',
+        warrantyExpiresAt: '2026-03-01T00:00:00.000Z',
+        createdAt: '2023-01-01T00:00:00.000Z',
+        updatedAt: new Date().toISOString(),
+      } satisfies {
+        id: string;
+        tenantId: string;
+        code: string;
+        name: string;
+        status: 'operational';
+        criticality: number;
+        manufacturer: string;
+        modelNumber: string;
+        serialNumber: string;
+        site: typeof mockAssetBase.site;
+        area: typeof mockAssetBase.area;
+        line: typeof mockAssetBase.line;
+        station: typeof mockAssetBase.station;
+        purchaseDate: string;
+        commissionedAt: string;
+        warrantyExpiresAt: string;
+        createdAt: string;
+        updatedAt: string;
+      };
+
+      return { assets: [asset] } as T;
+    }
+
+    if (path === '/assets/hierarchy') {
       const mockAssets: { sites: MockAssetTreeSite[] } = {
         sites: [
           {
-            id: 'site-1',
-            name: 'Main Plant',
+            id: mockAssetBase.site.id,
+            name: mockAssetBase.site.name,
             areas: [
               {
-                id: 'area-1',
-                name: 'Production',
+                id: mockAssetBase.area.id,
+                name: mockAssetBase.area.name,
                 lines: [
                   {
-                    id: 'line-1',
-                    name: 'Assembly Line 1',
+                    id: mockAssetBase.line.id,
+                    name: mockAssetBase.line.name,
                     stations: [
                       {
-                        id: 'station-1',
-                        name: 'Station A',
+                        id: mockAssetBase.station.id,
+                        name: mockAssetBase.station.name,
                         assets: [
-                          { id: '1', code: 'PUMP-001', name: 'Main Water Pump' },
-                          { id: '2', code: 'CONV-001', name: 'Conveyor Belt #1' },
-                          { id: '3', code: 'MOTOR-001', name: 'Drive Motor #1' },
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        ]
+                          { id: 'asset-1', code: 'PUMP-001', name: 'Main Water Pump' },
+                          { id: 'asset-2', code: 'MOTOR-002', name: 'Spare Motor' },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
       };
 
       return mockAssets as T;
     }
 
-    if (endpoint === '/users') {
+    if (/^\/assets\/[^/]+(?:\/lifecycle)?$/.test(path)) {
+      const assetDetail = {
+        id: 'asset-1',
+        tenantId: 'tenant-1',
+        code: 'PUMP-001',
+        name: 'Main Water Pump',
+        status: 'operational',
+        criticality: 3,
+        manufacturer: 'Allied Pumps Inc.',
+        modelNumber: 'APX-500',
+        serialNumber: 'SN-APX500-001',
+        site: mockAssetBase.site,
+        area: mockAssetBase.area,
+        line: mockAssetBase.line,
+        station: mockAssetBase.station,
+        purchaseDate: '2023-01-15T00:00:00.000Z',
+        commissionedAt: '2023-03-01T00:00:00.000Z',
+        warrantyExpiresAt: '2026-03-01T00:00:00.000Z',
+        cost: 12500,
+        warrantyProvider: 'Allied Service Partners',
+        warrantyContact: 'support@alliedservice.com',
+        warrantyNotes: 'Annual inspection required.',
+        createdAt: '2023-01-01T00:00:00.000Z',
+        updatedAt: new Date().toISOString(),
+        bomLines: [
+          {
+            id: 'bom-1',
+            tenantId: 'tenant-1',
+            assetId: 'asset-1',
+            position: 0,
+            reference: 'KIT-HP-001',
+            description: 'Hydraulic pump seal kit',
+            quantity: 1,
+            unit: 'ea',
+            notes: 'Replace annually or on wear indication',
+            createdAt: '2023-01-01T00:00:00.000Z',
+            updatedAt: '2023-01-01T00:00:00.000Z',
+          },
+          {
+            id: 'bom-2',
+            tenantId: 'tenant-1',
+            assetId: 'asset-1',
+            position: 1,
+            reference: 'FLT-500',
+            description: 'Inlet filtration cartridge',
+            quantity: 2,
+            unit: 'ea',
+            notes: 'Change every 6 months',
+            createdAt: '2023-01-01T00:00:00.000Z',
+            updatedAt: '2023-01-01T00:00:00.000Z',
+          },
+        ],
+      };
+
+      return assetDetail as T;
+    }
+
+    if (/^\/assets\/[^/]+\/bom$/.test(path)) {
+      const lines = [
+        {
+          id: 'bom-1',
+          tenantId: 'tenant-1',
+          assetId: 'asset-1',
+          position: 0,
+          reference: 'KIT-HP-001',
+          description: 'Hydraulic pump seal kit',
+          quantity: 1,
+          unit: 'ea',
+          notes: 'Replace annually or on wear indication',
+          createdAt: '2023-01-01T00:00:00.000Z',
+          updatedAt: '2023-01-01T00:00:00.000Z',
+        },
+      ];
+
+      return { lines } as T;
+    }
+
+    if (path === '/users') {
       const users: MockUser[] = [
         { id: '1', name: 'John Smith', email: 'john@example.com' },
         { id: '2', name: 'Jane Doe', email: 'jane@example.com' },
@@ -318,7 +447,7 @@ export class ApiClient {
       return users as T;
     }
 
-    if (endpoint.startsWith('/auth/me')) {
+    if (path.startsWith('/auth/me')) {
       const now = new Date().toISOString();
       const user: MockAuthUser = {
         id: '1',
@@ -333,7 +462,7 @@ export class ApiClient {
       return user as T;
     }
 
-    if (endpoint.startsWith('/purchase-orders')) {
+    if (path.startsWith('/purchase-orders')) {
       const now = Date.now();
       const purchaseOrders: MockPurchaseOrder[] = [
         {
@@ -487,6 +616,17 @@ export class ApiClient {
   async put<T>(endpoint: string, data?: any): Promise<T> {
     const result = await this.request<T>(endpoint, {
       method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
+    return result.data!;
+  }
+
+  async patch<T>(endpoint: string, data?: any): Promise<T> {
+    const result = await this.request<T>(endpoint, {
+      method: 'PATCH',
       body: data ? JSON.stringify(data) : undefined,
     });
     if (result.error) {

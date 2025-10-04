@@ -20,6 +20,7 @@ import assetRoutes from './routes/assets';
 import partRoutes from './routes/parts';
 import vendorRoutes from './routes/vendors';
 import searchRoutes from './routes/search';
+import hierarchyRoutes from './routes/hierarchy';
 
 
 const app = express();
@@ -77,6 +78,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/work-orders', workOrderRoutes);
 app.use('/api/assets', assetRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/hierarchy', hierarchyRoutes);
 
 // Error handling
 app.use(errorHandler);
