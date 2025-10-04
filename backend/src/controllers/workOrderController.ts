@@ -1,5 +1,4 @@
 import type { Request, Response } from 'express';
-import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { ZodError } from 'zod';
 import { createWorkOrderValidator } from '../validators/createWorkOrderValidator';
@@ -44,13 +43,11 @@ function serializeWorkOrder(workOrder: {
   assigneeId: string | null;
   dueDate: Date | null;
   category: string | null;
-  attachments: Prisma.JsonValue | null;
+  attachments: string[] | null;
   createdAt: Date;
   updatedAt: Date;
 }) {
-  const attachments = Array.isArray(workOrder.attachments)
-    ? (workOrder.attachments as Prisma.JsonArray)
-    : [];
+  const attachments = Array.isArray(workOrder.attachments) ? workOrder.attachments : [];
 
   return {
     id: workOrder.id,
@@ -114,7 +111,7 @@ export async function createWorkOrder(req: TenantScopedRequest, res: Response) {
         assigneeId: data.assigneeId ?? null,
         dueDate: data.dueDate ? new Date(data.dueDate) : null,
         category: data.category ?? null,
-        attachments: (data.attachments ?? []) as Prisma.JsonValue,
+        attachments: data.attachments,
       },
     });
 

@@ -3,9 +3,11 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { createWorkOrderValidator } from '../validators/workOrderValidators';
 import { asyncHandler, fail, ok } from '../utils/response';
-import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { authenticateToken, type AuthRequest } from '../middleware/auth';
 
 const router = Router();
+
+router.use(authenticateToken);
 
 const workOrderCreateSchema = createWorkOrderValidator;
 
@@ -43,6 +45,18 @@ function mapWorkOrder(workOrder: WorkOrderWithRelations) {
   };
 }
 
+const VIEW_WORK_ORDER_ROLES = ['admin', 'manager', 'technician', 'viewer', 'user'] as const;
+const CREATE_WORK_ORDER_ROLES = ['admin', 'manager', 'technician', 'user'] as const;
+
+function normalizeRole(role: string | undefined | null) {
+  return typeof role === 'string' && role.trim().length > 0 ? role.trim().toLowerCase() : 'user';
+}
+
+function hasRequiredRole(user: NonNullable<AuthRequest['user']>, roles: readonly string[]) {
+  const normalizedRole = normalizeRole(user.role);
+  return roles.includes(normalizedRole);
+}
+
 router.get(
   '/',
   asyncHandler(async (req: AuthRequest, res) => {
@@ -50,11 +64,19 @@ router.get(
       return fail(res, 401, 'Authentication required');
     }
 
+    if (!hasRequiredRole(req.user, VIEW_WORK_ORDER_ROLES)) {
+      return fail(
+        res,
+        403,
+        `Requires one of the following roles: ${VIEW_WORK_ORDER_ROLES.join(', ')}`,
+      );
+    }
+
     const { status, priority, assignee, from, to, q, category } = req.query;
 
-    const where: Prisma.WorkOrderWhereInput = {
-      tenantId: req.user.tenantId,
-    };
+    const where: Prisma.WorkOrderWhereInput = {};
+
+    where.tenantId = req.user.tenantId;
 
     if (typeof status === 'string' && status) {
       const allowedStatuses = ['requested', 'assigned', 'in_progress', 'completed', 'cancelled'] as const;
@@ -130,6 +152,14 @@ router.post(
       return fail(res, 401, 'Authentication required');
     }
 
+    if (!hasRequiredRole(req.user, CREATE_WORK_ORDER_ROLES)) {
+      return fail(
+        res,
+        403,
+        `Requires one of the following roles: ${CREATE_WORK_ORDER_ROLES.join(', ')}`,
+      );
+    }
+
     const parseResult = workOrderCreateSchema.safeParse(req.body);
 
     if (!parseResult.success) {
@@ -143,28 +173,6 @@ router.post(
     }
 
     const payload = parseResult.data;
-
-    if (payload.assigneeId) {
-      const assignee = await prisma.user.findFirst({
-        where: { id: payload.assigneeId, tenantId: req.user.tenantId },
-        select: { id: true },
-      });
-
-      if (!assignee) {
-        return fail(res, 400, 'Assignee must belong to the same tenant');
-      }
-    }
-
-    if (payload.assetId) {
-      const asset = await prisma.asset.findFirst({
-        where: { id: payload.assetId, tenantId: req.user.tenantId },
-        select: { id: true },
-      });
-
-      if (!asset) {
-        return fail(res, 400, 'Asset must belong to the same tenant');
-      }
-    }
 
     const workOrder = await prisma.workOrder.create({
       data: {

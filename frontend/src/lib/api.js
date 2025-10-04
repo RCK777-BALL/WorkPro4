@@ -1,13 +1,13 @@
 import axios from 'axios';
 
 const DEFAULT_API_BASE = 'http://localhost:5010/api';
-const rawApiBase = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL
-  ? import.meta.env.VITE_API_URL
-  : DEFAULT_API_BASE;
+const rawApiBase =
+  typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL
+    ? import.meta.env.VITE_API_URL
+    : DEFAULT_API_BASE;
 
-export const API_BASE = typeof rawApiBase === 'string' && rawApiBase.length > 0
-  ? rawApiBase.replace(/\/+$/, '')
-  : DEFAULT_API_BASE;
+export const API_BASE =
+  typeof rawApiBase === 'string' && rawApiBase.length > 0 ? rawApiBase.replace(/\/+$/, '') : DEFAULT_API_BASE;
 
 export const TOKEN_STORAGE_KEY = 'wp_token';
 
@@ -50,6 +50,16 @@ export function clearToken() {
   } catch (error) {
     console.warn('Unable to clear auth token.', error);
   }
+}
+
+export function unwrapApiResult(response) {
+  const payload = response && typeof response === 'object' ? (response.data ?? response) : response;
+
+  if (payload && typeof payload === 'object' && 'data' in payload && payload.data !== undefined) {
+    return payload.data;
+  }
+
+  return payload;
 }
 
 export const api = axios.create({
