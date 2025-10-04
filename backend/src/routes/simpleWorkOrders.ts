@@ -3,10 +3,13 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { createWorkOrderValidator } from '../validators/workOrderValidators';
 import { asyncHandler, fail, ok } from '../utils/response';
+import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
 const workOrderCreateSchema = createWorkOrderValidator;
+
+router.use(authenticateToken);
 
 type WorkOrderWithRelations = Prisma.WorkOrderGetPayload<{
   include: {
@@ -40,32 +43,18 @@ function mapWorkOrder(workOrder: WorkOrderWithRelations) {
   };
 }
 
-async function resolveDefaultUser() {
-  const user = await prisma.user.findFirst({
-    orderBy: { createdAt: 'asc' },
-  });
-
-  if (!user) {
-    return null;
-  }
-
-  return user;
-}
-
 router.get(
   '/',
-  asyncHandler(async (req, res) => {
-    const defaultUser = await resolveDefaultUser();
-
-    if (!defaultUser) {
-      return fail(res, 500, 'No default user found');
+  asyncHandler(async (req: AuthRequest, res) => {
+    if (!req.user) {
+      return fail(res, 401, 'Authentication required');
     }
 
     const { status, priority, assignee, from, to, q, category } = req.query;
 
-    const where: Prisma.WorkOrderWhereInput = {};
-
-    where.tenantId = defaultUser.tenantId;
+    const where: Prisma.WorkOrderWhereInput = {
+      tenantId: req.user.tenantId,
+    };
 
     if (typeof status === 'string' && status) {
       const allowedStatuses = ['requested', 'assigned', 'in_progress', 'completed', 'cancelled'] as const;
@@ -136,7 +125,11 @@ router.get(
 
 router.post(
   '/',
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: AuthRequest, res) => {
+    if (!req.user) {
+      return fail(res, 401, 'Authentication required');
+    }
+
     const parseResult = workOrderCreateSchema.safeParse(req.body);
 
     if (!parseResult.success) {
@@ -151,9 +144,26 @@ router.post(
 
     const payload = parseResult.data;
 
-    const defaultUser = await resolveDefaultUser();
-    if (!defaultUser) {
-      return fail(res, 500, 'No default user found to assign work orders');
+    if (payload.assigneeId) {
+      const assignee = await prisma.user.findFirst({
+        where: { id: payload.assigneeId, tenantId: req.user.tenantId },
+        select: { id: true },
+      });
+
+      if (!assignee) {
+        return fail(res, 400, 'Assignee must belong to the same tenant');
+      }
+    }
+
+    if (payload.assetId) {
+      const asset = await prisma.asset.findFirst({
+        where: { id: payload.assetId, tenantId: req.user.tenantId },
+        select: { id: true },
+      });
+
+      if (!asset) {
+        return fail(res, 400, 'Asset must belong to the same tenant');
+      }
     }
 
     const workOrder = await prisma.workOrder.create({
@@ -162,8 +172,8 @@ router.post(
         description: payload.description,
         priority: payload.priority ?? 'medium',
         status: payload.status ?? 'requested',
-        tenantId: defaultUser.tenantId,
-        createdBy: defaultUser.id,
+        tenantId: req.user.tenantId,
+        createdBy: req.user.id,
         assetId: payload.assetId ?? undefined,
         assigneeId: payload.assigneeId ?? null,
         category: payload.category ?? undefined,

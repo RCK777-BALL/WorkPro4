@@ -20,6 +20,8 @@ import assetRoutes from './routes/assets';
 import partRoutes from './routes/parts';
 import vendorRoutes from './routes/vendors';
 import searchRoutes from './routes/search';
+import teamRoutes from './routes/teams';
+import { authenticateToken, requireRoles } from './middleware/auth';
 
 
 const app = express();
@@ -72,11 +74,22 @@ app.get('/health', handleHealthCheck);
 app.get('/api/health', handleHealthCheck);
 app.get('/health/db', handleHealthCheck);
 
+// Role groups
+const MANAGEMENT_ROLES = ['admin', 'manager', 'planner'];
+const WORKFORCE_ROLES = [...MANAGEMENT_ROLES, 'technician'];
+const INVENTORY_ROLES = MANAGEMENT_ROLES;
+const TEAM_VIEW_ROLES = [...WORKFORCE_ROLES, 'viewer', 'user'];
+
 // API routes
 app.use('/api/auth', authRoutes);
-app.use('/api/work-orders', workOrderRoutes);
-app.use('/api/assets', assetRoutes);
-app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/work-orders', authenticateToken, requireRoles(WORKFORCE_ROLES), workOrderRoutes);
+app.use('/api/assets', authenticateToken, requireRoles(MANAGEMENT_ROLES), assetRoutes);
+app.use('/api/dashboard', authenticateToken, requireRoles(MANAGEMENT_ROLES), dashboardRoutes);
+app.use('/api/parts', authenticateToken, requireRoles(INVENTORY_ROLES), partRoutes);
+app.use('/api/teams', authenticateToken, requireRoles(TEAM_VIEW_ROLES), teamRoutes);
+app.use('/api/summary', authenticateToken, requireRoles(MANAGEMENT_ROLES), summaryRoutes);
+app.use('/api/vendors', authenticateToken, requireRoles(MANAGEMENT_ROLES), vendorRoutes);
+app.use('/api/search', authenticateToken, requireRoles(WORKFORCE_ROLES), searchRoutes);
 
 // Error handling
 app.use(errorHandler);

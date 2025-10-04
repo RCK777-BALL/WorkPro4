@@ -1,4 +1,5 @@
 import type { DashboardSummaryResponse } from '../../shared/types/dashboard';
+import type { TeamsOverviewResponse, ShiftDto, LaborEntryDto, TeamInvitationDto } from '../../shared/types/teams';
 import { getMockWorkOrderById, mockWorkOrders } from './mockWorkOrders';
 
 interface MockAssetTreeSite {
@@ -404,6 +405,203 @@ export class ApiClient {
       ];
 
       return purchaseOrders as T;
+    }
+
+    if (endpoint === '/teams' || endpoint === '/teams/shifts' || endpoint === '/teams/labor') {
+      const now = new Date();
+      const toIso = (date: Date) => date.toISOString();
+      const buildShift = (
+        id: string,
+        userId: string,
+        startOffsetHours: number,
+        durationHours: number,
+        type: ShiftDto['type'],
+        status: ShiftDto['status'],
+        notes: string,
+      ): ShiftDto => {
+        const start = new Date(now.getTime() + startOffsetHours * 60 * 60 * 1000);
+        const end = new Date(start.getTime() + durationHours * 60 * 60 * 1000);
+        return {
+          id,
+          tenantId: 'tenant-1',
+          userId,
+          type,
+          status,
+          startsAt: toIso(start),
+          endsAt: toIso(end),
+          minutes: durationHours * 60,
+          notes,
+          createdAt: toIso(now),
+          updatedAt: toIso(now),
+        };
+      };
+
+      const jordanCurrent = buildShift('shift-1', 'user-1', -1, 4, 'regular', 'approved', 'Covering production line A');
+      const jordanUpcoming = buildShift('shift-2', 'user-1', 6, 4, 'regular', 'approved', 'Evening planning session');
+      const mayaUpcoming = buildShift('shift-3', 'user-2', 2, 6, 'regular', 'pending', 'Reliability audit support');
+      const mayaLeave = buildShift('shift-4', 'user-2', 24, 8, 'leave', 'approved', 'Personal PTO');
+      const andreUpcoming = buildShift('shift-5', 'user-3', 3, 5, 'regular', 'pending', 'Assist utilities maintenance');
+
+      const laborEntries: LaborEntryDto[] = [
+        {
+          id: 'labor-1',
+          tenantId: 'tenant-1',
+          userId: 'user-1',
+          workOrderId: 'wo-101',
+          workOrderTitle: 'Calibrate Fillers',
+          startedAt: toIso(new Date(now.getTime() - 3 * 60 * 60 * 1000)),
+          endedAt: toIso(new Date(now.getTime() - 2 * 60 * 60 * 1000)),
+          minutes: 60,
+          notes: 'Coordinated calibration with production',
+          createdAt: toIso(now),
+          updatedAt: toIso(now),
+        },
+        {
+          id: 'labor-2',
+          tenantId: 'tenant-1',
+          userId: 'user-2',
+          workOrderId: 'wo-205',
+          workOrderTitle: 'Bearing vibration analysis',
+          startedAt: toIso(new Date(now.getTime() - 6 * 60 * 60 * 1000)),
+          endedAt: toIso(new Date(now.getTime() - 4 * 60 * 60 * 1000)),
+          minutes: 120,
+          notes: 'Captured ultrasonic readings',
+          createdAt: toIso(now),
+          updatedAt: toIso(now),
+        },
+        {
+          id: 'labor-3',
+          tenantId: 'tenant-1',
+          userId: 'user-3',
+          workOrderId: 'wo-310',
+          workOrderTitle: 'HVAC damper repair',
+          startedAt: toIso(new Date(now.getTime() - 1.5 * 60 * 60 * 1000)),
+          endedAt: toIso(new Date(now.getTime() - 0.5 * 60 * 60 * 1000)),
+          minutes: 60,
+          notes: 'Replaced actuator and tested airflow',
+          createdAt: toIso(now),
+          updatedAt: toIso(now),
+        },
+      ];
+
+      const invites: TeamInvitationDto[] = [
+        {
+          id: 'invite-1',
+          tenantId: 'tenant-1',
+          email: 'alex.planner@example.com',
+          role: 'planner',
+          status: 'pending',
+          message: 'Join us to help with outage planning',
+          invitedById: 'user-admin',
+          invitedByName: 'Admin User',
+          expiresAt: toIso(new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000)),
+          createdAt: toIso(now),
+          updatedAt: toIso(now),
+        },
+        {
+          id: 'invite-2',
+          tenantId: 'tenant-1',
+          email: 'casey.viewer@example.com',
+          role: 'viewer',
+          status: 'accepted',
+          message: null,
+          invitedById: 'user-admin',
+          invitedByName: 'Admin User',
+          expiresAt: null,
+          createdAt: toIso(new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000)),
+          updatedAt: toIso(new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000)),
+        },
+        {
+          id: 'invite-3',
+          tenantId: 'tenant-1',
+          email: 'morgan.contractor@example.com',
+          role: 'technician',
+          status: 'expired',
+          message: 'Contractor coverage for shutdown',
+          invitedById: 'user-manager',
+          invitedByName: 'Jordan Daniels',
+          expiresAt: toIso(new Date(now.getTime() - 24 * 60 * 60 * 1000)),
+          createdAt: toIso(new Date(now.getTime() - 12 * 24 * 60 * 60 * 1000)),
+          updatedAt: toIso(new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000)),
+        },
+      ];
+
+      const members: TeamsOverviewResponse['members'] = [
+        {
+          id: 'user-1',
+          name: 'Jordan Daniels',
+          email: 'jordan@workpro.io',
+          role: 'planner',
+          joinedAt: toIso(new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000)),
+          phone: '+1 555-123-8899',
+          status: 'on-shift',
+          tags: ['Scheduling', 'Workflow'],
+          upcomingShift: jordanUpcoming,
+          currentShift: jordanCurrent,
+          hoursThisWeek: 32,
+          laborThisWeek: 32 * 60,
+          recentLabor: laborEntries.filter((entry) => entry.userId === 'user-1'),
+          upcomingShifts: [jordanUpcoming],
+        },
+        {
+          id: 'user-2',
+          name: 'Maya Rivera',
+          email: 'maya@workpro.io',
+          role: 'manager',
+          joinedAt: toIso(new Date(now.getTime() - 240 * 24 * 60 * 60 * 1000)),
+          phone: '+1 555-678-4433',
+          status: 'standby',
+          tags: ['Leadership', 'Planning'],
+          upcomingShift: mayaUpcoming,
+          currentShift: null,
+          hoursThisWeek: 18,
+          laborThisWeek: 18 * 60,
+          recentLabor: laborEntries.filter((entry) => entry.userId === 'user-2'),
+          upcomingShifts: [mayaUpcoming, mayaLeave],
+        },
+        {
+          id: 'user-3',
+          name: 'Andre Chen',
+          email: 'andre@workpro.io',
+          role: 'technician',
+          joinedAt: toIso(new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)),
+          phone: '+1 555-789-2233',
+          status: 'available',
+          tags: ['Field Ops', 'Maintenance'],
+          upcomingShift: andreUpcoming,
+          currentShift: null,
+          hoursThisWeek: 24,
+          laborThisWeek: 24 * 60,
+          recentLabor: laborEntries.filter((entry) => entry.userId === 'user-3'),
+          upcomingShifts: [andreUpcoming],
+        },
+      ];
+
+      const overview: TeamsOverviewResponse = {
+        members,
+        invites,
+        viewerRole: 'manager',
+        canManageInvites: true,
+        scheduleWindow: {
+          start: toIso(new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000)),
+          end: toIso(new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000)),
+        },
+      };
+
+      if (endpoint === '/teams') {
+        return overview as T;
+      }
+
+      if (endpoint === '/teams/shifts') {
+        const allShifts = members
+          .flatMap((member) => [member.currentShift, ...member.upcomingShifts])
+          .filter((shift): shift is ShiftDto => Boolean(shift));
+        return allShifts as T;
+      }
+
+      if (endpoint === '/teams/labor') {
+        return laborEntries as T;
+      }
     }
 
     return null;
