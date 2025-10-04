@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import type { Asset } from '@prisma/client';
+import type { Asset, Prisma } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { prisma } from '../db';
 import { asyncHandler } from '../utils/response';
@@ -10,6 +10,16 @@ const router = Router();
 router.use(authenticateToken);
 
 const assetStatusEnum = z.enum(['operational', 'maintenance', 'down', 'retired', 'decommissioned']);
+
+const querySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  search: z.string().trim().optional(),
+  status: assetStatusEnum.optional(),
+  location: z.string().trim().optional(),
+  category: z.string().trim().optional(),
+  sort: z.enum(['createdAt:desc', 'createdAt:asc']).optional(),
+});
 
 const emptyToUndefined = (value: unknown) => {
   if (value === undefined || value === null) {
@@ -32,8 +42,6 @@ const assetPayloadSchema = z.object({
   cost: z.preprocess(emptyToUndefined, z.coerce.number().nonnegative().optional()),
   status: z.preprocess(emptyToUndefined, assetStatusEnum.optional()),
 });
-
-const updateAssetSchema = assetPayloadSchema.partial();
 
 type TenantScopedWhere = {
   tenantId: string;
@@ -72,13 +80,61 @@ router.get(
     }
 
     const scope = buildTenantScope({ tenantId: req.user.tenantId, siteId: req.user.siteId ?? null });
+    const { page, pageSize, search, status, location, category, sort } = querySchema.parse(req.query);
 
-    const assets = await prisma.asset.findMany({
-      where: scope,
-      orderBy: { createdAt: 'desc' },
+    const where: Prisma.AssetWhereInput = {
+      ...scope,
+      ...(status ? { status } : {}),
+      ...(location
+        ? {
+            location: {
+              contains: location,
+              mode: 'insensitive',
+            },
+          }
+        : {}),
+      ...(category
+        ? {
+            category: {
+              contains: category,
+              mode: 'insensitive',
+            },
+          }
+        : {}),
+    };
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { code: { contains: search, mode: 'insensitive' } },
+        { location: { contains: search, mode: 'insensitive' } },
+        { category: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [total, assets] = await Promise.all([
+      prisma.asset.count({ where }),
+      prisma.asset.findMany({
+        where,
+        orderBy:
+          sort === 'createdAt:asc'
+            ? { createdAt: 'asc' }
+            : { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    return res.json({
+      ok: true,
+      assets: assets.map(serializeAsset),
+      meta: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      },
     });
-
-    return res.json({ ok: true, assets: assets.map(serializeAsset) });
   }),
 );
 
@@ -110,26 +166,39 @@ router.post(
   }),
 );
 
-router.patch(
+router.put(
   '/:id',
   asyncHandler(async (req: AuthRequest, res) => {
     if (!req.user) {
       return res.status(401).json({ ok: false, error: 'Authentication required' });
     }
 
-    updateAssetSchema.parse(req.body);
+    const payload = assetPayloadSchema.parse(req.body);
 
     const scope = buildTenantScope({ tenantId: req.user.tenantId, siteId: req.user.siteId ?? null });
 
-    const asset = await prisma.asset.findFirst({
+    const existing = await prisma.asset.findFirst({
       where: { id: req.params.id, ...scope },
     });
 
-    if (!asset) {
+    if (!existing) {
       return res.status(404).json({ ok: false, error: 'Asset not found' });
     }
 
-    return res.status(501).json({ ok: false, error: 'Asset update not implemented yet' });
+    const updated = await prisma.asset.update({
+      where: { id: existing.id },
+      data: {
+        code: payload.code,
+        name: payload.name,
+        location: payload.location,
+        category: payload.category,
+        purchaseDate: payload.purchaseDate,
+        cost: payload.cost,
+        status: payload.status ?? existing.status,
+      },
+    });
+
+    return res.json({ ok: true, asset: serializeAsset(updated) });
   }),
 );
 
@@ -142,15 +211,17 @@ router.delete(
 
     const scope = buildTenantScope({ tenantId: req.user.tenantId, siteId: req.user.siteId ?? null });
 
-    const asset = await prisma.asset.findFirst({
+    const existing = await prisma.asset.findFirst({
       where: { id: req.params.id, ...scope },
     });
 
-    if (!asset) {
+    if (!existing) {
       return res.status(404).json({ ok: false, error: 'Asset not found' });
     }
 
-    return res.status(501).json({ ok: false, error: 'Asset deletion not implemented yet' });
+    const deleted = await prisma.asset.delete({ where: { id: existing.id } });
+
+    return res.json({ ok: true, asset: serializeAsset(deleted) });
   }),
 );
 
