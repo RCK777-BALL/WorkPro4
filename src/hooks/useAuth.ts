@@ -1,27 +1,11 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { api } from '../lib/api';
+import { api, isApiErrorResponse } from '../lib/api';
+import type { LoginRequest as SharedLoginRequest, LoginResponse, User } from '../../shared/types/http';
 
-export interface User {
-  id: string;
-  tenantId: string;
-  email: string;
-  name: string;
-  role: string;
-  createdAt: string;
-  updatedAt: string;
-}
+export type { User };
 
-interface LoginRequest {
-  email: string;
-  username: string;
-  password: string;
-}
-
-interface LoginResponse {
-  token: string;
-  user: User;
-}
+type LoginRequest = SharedLoginRequest & { username?: string };
 
 function normalizeUser(user: User | null): User | null {
   if (!user) {
@@ -61,9 +45,13 @@ export const useAuth = create<AuthState>()(
           set({ user: normalizedUser, isAuthenticated: true, isLoading: false, error: null });
         } catch (error) {
           api.clearToken();
-          const message = error instanceof Error ? error.message : 'Login failed';
+          const message = isApiErrorResponse(error)
+            ? error.error.message
+            : error instanceof Error
+              ? error.message
+              : 'Login failed';
           set({ user: null, isAuthenticated: false, isLoading: false, error: message });
-          throw error instanceof Error ? error : new Error(message);
+          throw new Error(message);
         }
       },
 
@@ -88,7 +76,11 @@ export const useAuth = create<AuthState>()(
           set({ user: normalizedUser, isAuthenticated: true, isLoading: false, error: null });
         } catch (error) {
           api.clearToken();
-          const message = error instanceof Error ? error.message : 'Authentication failed';
+          const message = isApiErrorResponse(error)
+            ? error.error.message
+            : error instanceof Error
+              ? error.message
+              : 'Authentication failed';
           set({ user: null, isAuthenticated: false, isLoading: false, error: message });
         }
       }
