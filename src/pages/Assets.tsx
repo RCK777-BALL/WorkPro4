@@ -1,104 +1,129 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Building2,
+  Eye,
   Filter,
   LayoutGrid,
   List,
-  Loader2,
   MapPin,
+  Pencil,
   Plus,
   Search,
-  ShieldCheck,
   SlidersHorizontal,
   Trash2,
   Wrench,
 } from 'lucide-react';
-
 import { DataBadge } from '../components/premium/DataBadge';
 import { SlideOver } from '../components/premium/SlideOver';
 import { ProTable, type ProTableColumn } from '../components/premium/ProTable';
 import { FilterBar, type FilterDefinition } from '../components/premium/FilterBar';
+import { Button } from '../components/ui/button';
+import { useToast } from '../components/ui/toast';
+import { useCan } from '../lib/rbac';
 import { api } from '../lib/api';
-import { cn, formatCurrency, formatDate } from '../lib/utils';
-import type { AssetLifecycle, AssetStatus, AssetSummary, AssetTree } from '../../shared/types/asset';
+import { cn, formatCurrency } from '../lib/utils';
 
-interface BomLineDraft {
-  id?: string;
-  clientId: string;
-  reference: string;
-  description: string;
-  quantity: string;
-  unit: string;
-  notes: string;
-}
+const assetStatuses = ['operational', 'maintenance', 'down', 'retired', 'decommissioned'] as const;
+
+type AssetStatus = (typeof assetStatuses)[number];
 
 interface AssetFormState {
   id: string;
   code: string;
   name: string;
   status: AssetStatus;
-  manufacturer: string;
-  modelNumber: string;
-  serialNumber: string;
-  purchaseDate: string;
-  commissionedAt: string;
-  warrantyExpiresAt: string;
-  warrantyProvider: string;
-  warrantyContact: string;
-  warrantyNotes: string;
-  cost: string;
-  criticality: string;
-  bomLines: BomLineDraft[];
+  location: string | null;
+  category: string | null;
+  purchaseDate: string | null;
+  cost: number | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
-interface AssetTableRow {
-  id: string;
-  code: string;
-  name: string;
-  status: AssetStatus;
-  siteId: string;
-  site: string;
-  area: string;
-  line: string;
-  station: string;
-  manufacturer: string;
-  criticalityBadge: 'low' | 'medium' | 'high';
-  warrantyExpires: string;
+interface AssetsResponse {
+  ok: boolean;
+  assets: AssetRecord[];
+  meta: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
 }
 
-const statusOptions: { value: AssetStatus; label: string }[] = [
-  { value: 'operational', label: 'Operational' },
-  { value: 'maintenance', label: 'Maintenance' },
-  { value: 'down', label: 'Down' },
-  { value: 'retired', label: 'Retired' },
-  { value: 'decommissioned', label: 'Decommissioned' },
+const assetFormSchema = z.object({
+  name: z.string().min(1, 'Asset name is required'),
+  code: z.string().min(1, 'Asset tag is required'),
+  status: z.enum(assetStatuses, {
+    errorMap: () => ({ message: 'Select a valid status' }),
+  }),
+  location: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .pipe(z.string().max(120, 'Location is too long')),
+  category: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .pipe(z.string().max(120, 'Category is too long')),
+  purchaseDate: z
+    .string()
+    .optional()
+    .refine((value) => !value || !Number.isNaN(new Date(value).getTime()), 'Enter a valid date'),
+  cost: z
+    .string()
+    .optional()
+    .refine((value) => !value || !Number.isNaN(Number(value)), 'Cost must be a number'),
+});
+
+type AssetFormValues = z.infer<typeof assetFormSchema>;
+
+type DrawerState =
+  | { mode: 'create' }
+  | { mode: 'edit'; asset: AssetRecord }
+  | { mode: 'view'; asset: AssetRecord }
+  | null;
+
+const columns: ProTableColumn<AssetRecord>[] = [
+  { key: 'code', header: 'Tag' },
+  { key: 'name', header: 'Asset' },
+  { key: 'location', header: 'Location' },
+  { key: 'category', header: 'Category' },
+  {
+    key: 'cost',
+    header: 'Cost',
+    accessor: (row) => (row.cost != null ? formatCurrency(row.cost) : '—'),
+  },
+  {
+    key: 'status',
+    header: 'Status',
+    accessor: (row) => <DataBadge status={row.status} />, 
+  },
+  {
+    key: 'updatedAt',
+    header: 'Updated',
+    accessor: (row) => new Date(row.updatedAt).toLocaleDateString(),
+  },
 ];
 
-const criticalityOptions = [
-  { value: '1', label: 'Low' },
-  { value: '2', label: 'Medium' },
-  { value: '3', label: 'High' },
+const baseFilters: FilterDefinition[] = [
+  { key: 'search', label: 'Search', type: 'search', placeholder: 'Search assets', testId: 'asset-filter-search' },
+  {
+    key: 'status',
+    label: 'Status',
+    type: 'select',
+    options: assetStatuses.map((value) => ({ value, label: value.charAt(0).toUpperCase() + value.slice(1) })),
+    testId: 'asset-filter-status',
+  },
+  { key: 'location', label: 'Location', type: 'text', placeholder: 'Plant or area', testId: 'asset-filter-location' },
+  { key: 'category', label: 'Category', type: 'text', placeholder: 'Category', testId: 'asset-filter-category' },
 ];
-
-const emptyDraft: AssetFormState = {
-  id: '',
-  code: '',
-  name: '',
-  status: 'operational',
-  manufacturer: '',
-  modelNumber: '',
-  serialNumber: '',
-  purchaseDate: '',
-  commissionedAt: '',
-  warrantyExpiresAt: '',
-  warrantyProvider: '',
-  warrantyContact: '',
-  warrantyNotes: '',
-  cost: '',
-  criticality: '3',
-  bomLines: [],
-};
 
 const columns: ProTableColumn<AssetTableRow>[] = [
   { key: 'code', header: 'Tag' },
@@ -107,342 +132,483 @@ const columns: ProTableColumn<AssetTableRow>[] = [
   { key: 'area', header: 'Area' },
   { key: 'line', header: 'Line' },
   {
-    key: 'status',
-    header: 'Status',
-    accessor: (row) => <DataBadge status={row.status} />,
+    label: 'Plant 1',
+    count: 124,
+    children: [
+      { label: 'Production', count: 68 },
+      { label: 'Utilities', count: 32 },
+      { label: 'Packaging', count: 24 },
+    ],
   },
   {
-    key: 'criticalityBadge',
-    header: 'Criticality',
-    accessor: (row) => <DataBadge status={row.criticalityBadge} />,
+    label: 'Plant 2',
+    count: 72,
+    children: [
+      { label: 'Production', count: 40 },
+      { label: 'Utilities', count: 20 },
+      { label: 'Warehouse', count: 12 },
+    ],
   },
-  { key: 'warrantyExpires', header: 'Warranty', accessor: (row) => row.warrantyExpires || '—' },
+  {
+    label: 'Corporate HQ',
+    count: 38,
+    children: [
+      { label: 'Facilities', count: 18 },
+      { label: 'Security', count: 6 },
+      { label: 'IT Infrastructure', count: 14 },
+    ],
+  },
 ];
 
-function getCriticalityBadge(value: number | null | undefined): 'low' | 'medium' | 'high' {
-  if (value != null && value <= 1) return 'low';
-  if (value != null && value >= 3) return 'high';
-  return 'medium';
+function buildQueryString(params: Record<string, string | number | undefined | null>): string {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') {
+      return;
+    }
+    searchParams.set(key, String(value));
+  });
+  const qs = searchParams.toString();
+  return qs ? `?${qs}` : '';
 }
 
-function createClientId(): string {
-  return `bom-${Math.random().toString(36).slice(2, 10)}`;
-}
+function useAssetFilters(searchParams: URLSearchParams) {
+  const parsedPage = Number.parseInt(searchParams.get('page') ?? '1', 10);
+  const parsedPageSize = Number.parseInt(searchParams.get('pageSize') ?? '10', 10);
+  const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+  const rawPageSize = Number.isFinite(parsedPageSize) && parsedPageSize > 0 ? parsedPageSize : 10;
+  const pageSize = Math.min(Math.max(rawPageSize, 5), 100);
+  const search = searchParams.get('search') ?? '';
+  const status = searchParams.get('status') ?? '';
+  const location = searchParams.get('location') ?? '';
+  const category = searchParams.get('category') ?? '';
+  const sort = searchParams.get('sort') ?? 'createdAt:desc';
 
-function toDraft(lifecycle: AssetLifecycle): AssetFormState {
-  return {
-    id: lifecycle.id,
-    code: lifecycle.code,
-    name: lifecycle.name,
-    status: lifecycle.status,
-    manufacturer: lifecycle.manufacturer ?? '',
-    modelNumber: lifecycle.modelNumber ?? '',
-    serialNumber: lifecycle.serialNumber ?? '',
-    purchaseDate: lifecycle.purchaseDate ? lifecycle.purchaseDate.slice(0, 10) : '',
-    commissionedAt: lifecycle.commissionedAt ? lifecycle.commissionedAt.slice(0, 10) : '',
-    warrantyExpiresAt: lifecycle.warrantyExpiresAt ? lifecycle.warrantyExpiresAt.slice(0, 10) : '',
-    warrantyProvider: lifecycle.warrantyProvider ?? '',
-    warrantyContact: lifecycle.warrantyContact ?? '',
-    warrantyNotes: lifecycle.warrantyNotes ?? '',
-    cost: lifecycle.cost != null ? String(lifecycle.cost) : '',
-    criticality: String(lifecycle.criticality ?? 3),
-    bomLines: lifecycle.bomLines.map((line) => ({
-      id: line.id,
-      clientId: line.id ?? createClientId(),
-      reference: line.reference,
-      description: line.description,
-      quantity: line.quantity != null ? String(line.quantity) : '',
-      unit: line.unit ?? '',
-      notes: line.notes ?? '',
-    })),
-  };
-}
+  const filters = useMemo(
+    () => ({ page, pageSize, search, status, location, category, sort }),
+    [page, pageSize, search, status, location, category, sort],
+  );
 
-function buildTableRows(assets: AssetSummary[]): AssetTableRow[] {
-  return assets.map((asset) => ({
-    id: asset.id,
-    code: asset.code,
-    name: asset.name,
-    status: asset.status,
-    siteId: asset.site?.id ?? 'unassigned',
-    site: asset.site?.name ?? 'Unassigned',
-    area: asset.area?.name ?? '—',
-    line: asset.line?.name ?? '—',
-    station: asset.station?.name ?? '—',
-    manufacturer: asset.manufacturer ?? '—',
-    criticalityBadge: getCriticalityBadge(asset.criticality),
-    warrantyExpires: asset.warrantyExpiresAt ? formatDate(asset.warrantyExpiresAt) : '—',
-  }));
-}
-
-function countAssetsInStation(station: AssetTree['sites'][number]['areas'][number]['lines'][number]['stations'][number]): number {
-  return station.assets.length;
-}
-
-function countAssetsInLine(line: AssetTree['sites'][number]['areas'][number]['lines'][number]): number {
-  return line.stations.reduce((sum, station) => sum + countAssetsInStation(station), 0);
-}
-
-function countAssetsInArea(area: AssetTree['sites'][number]['areas'][number]): number {
-  return area.lines.reduce((sum, line) => sum + countAssetsInLine(line), 0);
-}
-
-function countAssetsInSite(site: AssetTree['sites'][number]): number {
-  return site.areas.reduce((sum, area) => sum + countAssetsInArea(area), 0);
+  return { filters, page, pageSize, search, status, location, category, sort };
 }
 
 export default function Assets() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { filters, page, pageSize, search, status, location, category, sort } = useAssetFilters(searchParams);
+  const [drawerState, setDrawerState] = useState<DrawerState>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const view = (searchParams.get('view') as 'table' | 'cards') ?? 'table';
+  const canManageAssets = useCan('manage', 'asset');
+  const { showToast } = useToast();
   const queryClient = useQueryClient();
-  const [values, setValues] = useState<Record<string, string>>({ search: '' });
-  const [view, setView] = useState<'table' | 'cards'>('table');
-  const [showDrawer, setShowDrawer] = useState(false);
-  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<AssetFormState>(emptyDraft);
-  const [formError, setFormError] = useState<string | null>(null);
 
-  const { data: hierarchyData, isLoading: hierarchyLoading } = useQuery<AssetTree>({
-    queryKey: ['assetHierarchy'],
-    queryFn: () => api.get<AssetTree>('/assets/hierarchy'),
-    staleTime: 60_000,
+  const form = useForm<AssetFormValues>({
+    resolver: zodResolver(assetFormSchema),
+    defaultValues: {
+      name: '',
+      code: '',
+      status: 'operational',
+      location: '',
+      category: '',
+      purchaseDate: '',
+      cost: '',
+    },
   });
 
-  const { data: assetsResponse, isFetching: assetsFetching } = useQuery<{ assets: AssetSummary[] }>({
-    queryKey: ['assets'],
-    queryFn: () => api.get<{ assets: AssetSummary[] }>('/assets'),
-    staleTime: 30_000,
+  const assetsQueryKey = useMemo(() => ['assets', filters] as const, [filters]);
+
+  const { data, isLoading, isFetching } = useQuery<AssetsResponse>({
+    queryKey: assetsQueryKey,
+    queryFn: async () => api.get<AssetsResponse>(`/assets${buildQueryString(filters)}`),
+    keepPreviousData: true,
   });
 
-  const tableRows = useMemo(() => buildTableRows(assetsResponse?.assets ?? []), [assetsResponse]);
+  const assets = data?.assets ?? [];
+  const meta = data?.meta ?? { page: 1, pageSize: 10, total: 0, totalPages: 1 };
 
-  const siteOptions = useMemo(() => {
-    const unique = new Map<string, string>();
-    tableRows.forEach((row) => {
-      if (!unique.has(row.siteId)) {
-        unique.set(row.siteId, row.site);
-      }
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [assets]);
+
+  useEffect(() => {
+    if (!drawerState) {
+      return;
+    }
+
+    if (drawerState.mode === 'create') {
+      form.reset({ name: '', code: '', status: 'operational', location: '', category: '', purchaseDate: '', cost: '' });
+      return;
+    }
+
+    const asset = drawerState.asset;
+    form.reset({
+      name: asset.name,
+      code: asset.code,
+      status: asset.status,
+      location: asset.location ?? '',
+      category: asset.category ?? '',
+      purchaseDate: asset.purchaseDate ? asset.purchaseDate.slice(0, 10) : '',
+      cost: asset.cost != null ? String(asset.cost) : '',
     });
-    return Array.from(unique.entries()).map(([value, label]) => ({ value, label }));
-  }, [tableRows]);
+  }, [drawerState, form]);
 
-  const filters: FilterDefinition[] = useMemo(
-    () => [
-      { key: 'site', label: 'Site', type: 'select', options: siteOptions },
-      { key: 'status', label: 'Status', type: 'select', options: statusOptions.map(({ value, label }) => ({ value, label })) },
-      { key: 'criticality', label: 'Criticality', type: 'select', options: criticalityOptions },
-    ],
-    [siteOptions],
+  const updateSearchParam = useCallback(
+    (key: string, value: string | number | null) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        if (value === null || value === '' || value === undefined) {
+          next.delete(key);
+        } else {
+          next.set(key, String(value));
+        }
+
+        if (!['page', 'pageSize', 'view', 'sort'].includes(key)) {
+          next.delete('page');
+        }
+
+        return next;
+      });
+    },
+    [setSearchParams],
   );
 
-  const filteredRows = useMemo(() => {
-    const search = (values.search ?? '').toLowerCase();
-    const siteFilter = values.site ?? '';
-    const statusFilter = values.status ?? '';
-    const criticalityFilter = values.criticality ?? '';
-
-    return tableRows.filter((row) => {
-      const matchesSearch = search
-        ? [row.name, row.code, row.manufacturer, row.site, row.line, row.station]
-            .filter(Boolean)
-            .some((field) => field.toLowerCase().includes(search))
-        : true;
-      const matchesSite = siteFilter ? row.siteId === siteFilter : true;
-      const matchesStatus = statusFilter ? row.status === statusFilter : true;
-      const matchesCriticality = criticalityFilter
-        ? row.criticalityBadge ===
-          (criticalityFilter === '1' ? 'low' : criticalityFilter === '2' ? 'medium' : 'high')
-        : true;
-
-      return matchesSearch && matchesSite && matchesStatus && matchesCriticality;
+  const handleResetFilters = () => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      ['search', 'status', 'location', 'category', 'page'].forEach((param) => next.delete(param));
+      return next;
     });
-  }, [tableRows, values]);
+  };
 
-  const { data: lifecycle, isLoading: lifecycleLoading, isError: lifecycleError } = useQuery<AssetLifecycle>({
-    queryKey: ['asset-lifecycle', selectedAssetId],
-    enabled: Boolean(selectedAssetId),
-    queryFn: async () => {
-      if (!selectedAssetId) {
-        throw new Error('Asset id required');
-      }
-      return api.get<AssetLifecycle>(`/assets/${selectedAssetId}/lifecycle`);
-    },
+  const buildPayload = (values: AssetFormValues) => ({
+    name: values.name.trim(),
+    code: values.code.trim(),
+    status: values.status,
+    location: values.location?.trim() || undefined,
+    category: values.category?.trim() || undefined,
+    purchaseDate: values.purchaseDate ? new Date(values.purchaseDate).toISOString() : undefined,
+    cost: values.cost ? Number(values.cost) : undefined,
   });
 
-  useEffect(() => {
-    if (!showDrawer) {
-      setSelectedAssetId(null);
-      setDraft(emptyDraft);
-      setFormError(null);
-    }
-  }, [showDrawer]);
+  const createAssetMutation = useMutation({
+    mutationFn: async (values: AssetFormValues) => {
+      const payload = buildPayload(values);
+      return api.post<{ ok: boolean; asset: AssetRecord }>('/assets', payload);
+    },
+    onMutate: async (values) => {
+      await queryClient.cancelQueries({ queryKey: assetsQueryKey });
+      const previous = queryClient.getQueryData<AssetsResponse>(assetsQueryKey);
+      const optimisticAsset: AssetRecord = {
+        id: `temp-${Date.now()}`,
+        code: values.code,
+        name: values.name,
+        status: values.status,
+        location: values.location || null,
+        category: values.category || null,
+        purchaseDate: values.purchaseDate ? new Date(values.purchaseDate).toISOString() : null,
+        cost: values.cost ? Number(values.cost) : null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
 
-  useEffect(() => {
-    if (!selectedAssetId) {
-      setDraft(emptyDraft);
-    } else {
-      setDraft({ ...emptyDraft, id: selectedAssetId });
-    }
-  }, [selectedAssetId]);
+      queryClient.setQueryData<AssetsResponse>(assetsQueryKey, (current) => {
+        if (!current) {
+          return {
+            ok: true,
+            assets: [optimisticAsset],
+            meta: { page: 1, pageSize: pageSize, total: 1, totalPages: 1 },
+          };
+        }
 
-  useEffect(() => {
-    if (lifecycle) {
-      setDraft(toDraft(lifecycle));
-      setFormError(null);
-    }
-  }, [lifecycle]);
+        const nextTotal = current.meta.total + 1;
+        return {
+          ...current,
+          assets: page === 1 ? [optimisticAsset, ...current.assets].slice(0, current.meta.pageSize) : current.assets,
+          meta: {
+            ...current.meta,
+            total: nextTotal,
+            totalPages: Math.max(1, Math.ceil(nextTotal / current.meta.pageSize)),
+          },
+        };
+      });
+
+      return { previous, optimisticId: optimisticAsset.id };
+    },
+    onError: (error, _values, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(assetsQueryKey, context.previous);
+      }
+      showToast({
+        title: 'Unable to create asset',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'error',
+      });
+    },
+    onSuccess: (result, _values, context) => {
+      const created = result.asset;
+      queryClient.setQueryData<AssetsResponse>(assetsQueryKey, (current) => {
+        if (!current) {
+          return {
+            ok: true,
+            assets: [created],
+            meta: {
+              page: 1,
+              pageSize: filters.pageSize,
+              total: 1,
+              totalPages: 1,
+            },
+          };
+        }
+        const assetsWithReplacement = current.assets.map((asset) =>
+          asset.id === context?.optimisticId ? created : asset,
+        );
+        const alreadyExists = assetsWithReplacement.some((asset) => asset.id === created.id);
+        return {
+          ...current,
+          assets: alreadyExists ? assetsWithReplacement : [created, ...assetsWithReplacement],
+        };
+      });
+      showToast({
+        title: 'Asset created',
+        description: `${created.name} is now tracked`,
+        variant: 'success',
+      });
+      setDrawerState(null);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
+    },
+  });
 
   const updateAssetMutation = useMutation({
-    mutationFn: async (payload: Record<string, unknown>) => {
-      if (!selectedAssetId) {
-        throw new Error('Select an asset to update its lifecycle.');
-      }
-      return api.patch<AssetLifecycle>(`/assets/${selectedAssetId}/lifecycle`, payload);
+    mutationFn: async ({ id, values }: { id: string; values: AssetFormValues }) => {
+      const payload = buildPayload(values);
+      return api.put<{ ok: boolean; asset: AssetRecord }>(`/assets/${id}`, payload);
     },
-    onSuccess: (updated) => {
-      setDraft(toDraft(updated));
-      setFormError(null);
-      void queryClient.invalidateQueries({ queryKey: ['assets'] });
-      void queryClient.invalidateQueries({ queryKey: ['assetHierarchy'] });
-      if (selectedAssetId) {
-        void queryClient.invalidateQueries({ queryKey: ['asset-lifecycle', selectedAssetId] });
-      }
+    onMutate: async ({ id, values }) => {
+      await queryClient.cancelQueries({ queryKey: assetsQueryKey });
+      const previous = queryClient.getQueryData<AssetsResponse>(assetsQueryKey);
+      queryClient.setQueryData<AssetsResponse>(assetsQueryKey, (current) => {
+        if (!current) {
+          return current;
+        }
+        const updatedAssets = current.assets.map((asset) =>
+          asset.id === id
+            ? {
+                ...asset,
+                name: values.name,
+                code: values.code,
+                status: values.status,
+                location: values.location || null,
+                category: values.category || null,
+                purchaseDate: values.purchaseDate ? new Date(values.purchaseDate).toISOString() : null,
+                cost: values.cost ? Number(values.cost) : null,
+                updatedAt: new Date().toISOString(),
+              }
+            : asset,
+        );
+        return { ...current, assets: updatedAssets };
+      });
+      return { previous };
     },
-    onError: (error: unknown) => {
-      const message = error instanceof Error ? error.message : 'Failed to update asset lifecycle.';
-      setFormError(message);
+    onError: (error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(assetsQueryKey, context.previous);
+      }
+      showToast({
+        title: 'Unable to update asset',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'error',
+      });
+    },
+    onSuccess: (result) => {
+      const updated = result.asset;
+      queryClient.setQueryData<AssetsResponse>(assetsQueryKey, (current) => {
+        if (!current) {
+          return current;
+        }
+        return {
+          ...current,
+          assets: current.assets.map((asset) => (asset.id === updated.id ? updated : asset)),
+        };
+      });
+      showToast({
+        title: 'Asset updated',
+        description: `${updated.name} saved successfully`,
+        variant: 'success',
+      });
+      setDrawerState(null);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
     },
   });
 
-  const handleDrawerClose = useCallback(() => {
-    setShowDrawer(false);
-  }, []);
-
-  const handleAssetSelect = useCallback((assetId: string) => {
-    setFormError(null);
-    setSelectedAssetId(assetId);
-    setShowDrawer(true);
-  }, []);
-
-  const handleDraftChange = useCallback(<K extends keyof AssetFormState>(key: K, value: AssetFormState[K]) => {
-    setDraft((prev) => ({ ...prev, [key]: value }));
-  }, []);
-
-  const handleBomChange = useCallback((index: number, key: keyof BomLineDraft, value: string) => {
-    setDraft((prev) => {
-      const next = [...prev.bomLines];
-      next[index] = { ...next[index], [key]: value };
-      return { ...prev, bomLines: next };
-    });
-  }, []);
-
-  const handleAddBomLine = useCallback(() => {
-    setDraft((prev) => ({
-      ...prev,
-      bomLines: [
-        ...prev.bomLines,
-        {
-          clientId: createClientId(),
-          reference: '',
-          description: '',
-          quantity: '',
-          unit: '',
-          notes: '',
-        },
-      ],
-    }));
-  }, []);
-
-  const handleRemoveBomLine = useCallback((clientId: string) => {
-    setDraft((prev) => ({
-      ...prev,
-      bomLines: prev.bomLines.filter((line) => line.clientId !== clientId),
-    }));
-  }, []);
-
-  const handleSave = useCallback(() => {
-    if (!selectedAssetId) {
-      setFormError('Select an asset from the table or hierarchy to update lifecycle details.');
-      return;
-    }
-
-    const normalizedBomLines: Array<{
-      id?: string;
-      reference: string;
-      description: string;
-      quantity: number | null;
-      unit: string | null;
-      notes: string | null;
-      position: number;
-    }> = [];
-
-    for (let index = 0; index < draft.bomLines.length; index += 1) {
-      const line = draft.bomLines[index];
-      const reference = line.reference.trim();
-      const description = line.description.trim();
-
-      if (!reference || !description) {
-        continue;
-      }
-
-      const quantity = line.quantity.trim();
-      const parsedQuantity = quantity ? Number(quantity) : null;
-
-      if (quantity && Number.isNaN(parsedQuantity)) {
-        setFormError(`Invalid quantity on BOM line ${index + 1}.`);
-        return;
-      }
-
-      normalizedBomLines.push({
-        id: line.id,
-        reference,
-        description,
-        quantity: parsedQuantity,
-        unit: line.unit.trim() || null,
-        notes: line.notes.trim() || null,
-        position: index,
+  const undoDelete = async (asset: AssetRecord) => {
+    try {
+      await api.post<{ ok: boolean; asset: AssetRecord }>('/assets', {
+        name: asset.name,
+        code: asset.code,
+        status: asset.status,
+        location: asset.location ?? undefined,
+        category: asset.category ?? undefined,
+        purchaseDate: asset.purchaseDate ?? undefined,
+        cost: asset.cost ?? undefined,
+      });
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
+      showToast({ title: 'Asset restored', description: `${asset.name} was restored`, variant: 'success' });
+    } catch (error) {
+      showToast({
+        title: 'Unable to restore asset',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'error',
       });
     }
+  };
 
-    const costValue = draft.cost.trim();
-    const parsedCost = costValue ? Number(costValue) : null;
+  const deleteAssetMutation = useMutation({
+    mutationFn: async (asset: AssetRecord) => {
+      await api.delete<{ ok: boolean; asset: AssetRecord }>(`/assets/${asset.id}`);
+      return asset;
+    },
+    onMutate: async (asset) => {
+      await queryClient.cancelQueries({ queryKey: assetsQueryKey });
+      const previous = queryClient.getQueryData<AssetsResponse>(assetsQueryKey);
+      queryClient.setQueryData<AssetsResponse>(assetsQueryKey, (current) => {
+        if (!current) {
+          return current;
+        }
+        const filteredAssets = current.assets.filter((item) => item.id !== asset.id);
+        const nextTotal = Math.max(0, current.meta.total - 1);
+        return {
+          ...current,
+          assets: filteredAssets,
+          meta: {
+            ...current.meta,
+            total: nextTotal,
+            totalPages: Math.max(1, Math.ceil(Math.max(nextTotal, 1) / current.meta.pageSize)),
+          },
+        };
+      });
+      setSelectedIds((current) => current.filter((id) => id !== asset.id));
+      return { previous };
+    },
+    onError: (error, _asset, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(assetsQueryKey, context.previous);
+      }
+      showToast({
+        title: 'Unable to delete asset',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'error',
+      });
+    },
+    onSuccess: (asset) => {
+      showToast({
+        title: 'Asset deleted',
+        description: `${asset.name} was deleted`,
+        variant: 'default',
+        action: {
+          label: 'Undo',
+          onClick: () => void undoDelete(asset),
+        },
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
+    },
+  });
 
-    if (costValue && Number.isNaN(parsedCost)) {
-      setFormError('Cost must be a number.');
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (assetsToDelete: AssetRecord[]) => {
+      await Promise.all(assetsToDelete.map((asset) => api.delete<{ ok: boolean; asset: AssetRecord }>(`/assets/${asset.id}`)));
+      return assetsToDelete;
+    },
+    onMutate: async (assetsToDelete) => {
+      await queryClient.cancelQueries({ queryKey: assetsQueryKey });
+      const previous = queryClient.getQueryData<AssetsResponse>(assetsQueryKey);
+      queryClient.setQueryData<AssetsResponse>(assetsQueryKey, (current) => {
+        if (!current) {
+          return current;
+        }
+        const ids = new Set(assetsToDelete.map((asset) => asset.id));
+        const filteredAssets = current.assets.filter((asset) => !ids.has(asset.id));
+        const nextTotal = Math.max(0, current.meta.total - assetsToDelete.length);
+        return {
+          ...current,
+          assets: filteredAssets,
+          meta: {
+            ...current.meta,
+            total: nextTotal,
+            totalPages: Math.max(1, Math.ceil(Math.max(nextTotal, 1) / current.meta.pageSize)),
+          },
+        };
+      });
+      setSelectedIds([]);
+      return { previous };
+    },
+    onError: (error, _assets, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(assetsQueryKey, context.previous);
+      }
+      showToast({
+        title: 'Bulk delete failed',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'error',
+      });
+    },
+    onSuccess: (deletedAssets) => {
+      showToast({
+        title: 'Assets deleted',
+        description: `${deletedAssets.length} assets removed`,
+        variant: 'default',
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            deletedAssets.forEach((asset) => {
+              void undoDelete(asset);
+            });
+          },
+        },
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
+    },
+  });
+
+  const onSubmit = (values: AssetFormValues) => {
+    if (drawerState?.mode === 'edit' && drawerState.asset) {
+      updateAssetMutation.mutate({ id: drawerState.asset.id, values });
       return;
     }
 
-    const payload = {
-      name: draft.name.trim(),
-      code: draft.code.trim(),
-      status: draft.status,
-      manufacturer: draft.manufacturer.trim() || null,
-      modelNumber: draft.modelNumber.trim() || null,
-      serialNumber: draft.serialNumber.trim() || null,
-      purchaseDate: draft.purchaseDate ? new Date(draft.purchaseDate).toISOString() : null,
-      commissionedAt: draft.commissionedAt ? new Date(draft.commissionedAt).toISOString() : null,
-      warrantyExpiresAt: draft.warrantyExpiresAt ? new Date(draft.warrantyExpiresAt).toISOString() : null,
-      warrantyProvider: draft.warrantyProvider.trim() || null,
-      warrantyContact: draft.warrantyContact.trim() || null,
-      warrantyNotes: draft.warrantyNotes.trim() || null,
-      cost: parsedCost,
-      criticality: Number(draft.criticality) || 3,
-      bomLines: normalizedBomLines,
-    };
+    createAssetMutation.mutate(values);
+  };
 
-    if (!payload.name) {
-      setFormError('Asset name is required.');
-      return;
-    }
+  const openCreateDrawer = () => {
+    setDrawerState({ mode: 'create' });
+  };
 
-    if (!payload.code) {
-      setFormError('Asset tag is required.');
-      return;
-    }
+  const openEditDrawer = (asset: AssetRecord) => {
+    setDrawerState({ mode: 'edit', asset });
+  };
 
-    setFormError(null);
-    updateAssetMutation.mutate(payload);
-  }, [draft, selectedAssetId, updateAssetMutation]);
+  const openViewDrawer = (asset: AssetRecord) => {
+    setDrawerState({ mode: 'view', asset });
+  };
 
-  const hierarchy = hierarchyData?.sites ?? [];
+  const closeDrawer = () => {
+    setDrawerState(null);
+  };
+
+  const selectedAssets = useMemo(
+    () => assets.filter((asset) => selectedIds.includes(asset.id)),
+    [assets, selectedIds],
+  );
+
+  const disableBulkDelete = selectedIds.length === 0 || !canManageAssets || bulkDeleteMutation.isLoading;
+  const disableCreateOrEdit = createAssetMutation.isLoading || updateAssetMutation.isLoading;
 
   return (
     <div className="grid gap-6 xl:grid-cols-[320px_1fr]">
@@ -457,16 +623,21 @@ export default function Assets() {
         <div className="relative">
           <Search className="pointer-events-none absolute left-4 top-3 h-4 w-4 text-mutedfg" />
           <input
-            value={values.search ?? ''}
-            onChange={(event) => setValues((prev) => ({ ...prev, search: event.target.value }))}
+            value={search}
+            onChange={(event) => updateSearchParam('search', event.target.value)}
             placeholder="Search assets"
             className="w-full rounded-2xl border border-border bg-white px-10 py-3 text-sm text-fg shadow-inner outline-none transition focus:ring-2 focus:ring-brand"
+            data-testid="asset-search-input"
           />
           {assetsFetching && (
             <Loader2 className="absolute right-4 top-3 h-4 w-4 animate-spin text-mutedfg" />
           )}
         </div>
-        <button className="w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm font-semibold text-fg shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+        <button
+          className="w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm font-semibold text-fg shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+          type="button"
+          data-testid="asset-toolbar-saved-views"
+        >
           <SlidersHorizontal className="mr-2 inline h-4 w-4" /> Saved views
         </button>
         <div className="space-y-4">
@@ -549,27 +720,23 @@ export default function Assets() {
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-3xl font-semibold text-fg">Assets</h1>
-            <p className="mt-2 text-sm text-mutedfg">Monitor lifecycle state, compliance, and criticality for every asset.</p>
+            <p className="mt-2 text-sm text-mutedfg">Monitor lifecycle state, compliance, and investments for every asset.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-full border border-border bg-white/70 p-1 text-xs font-semibold text-mutedfg shadow-inner">
               <button
                 type="button"
-                className={cn(
-                  'flex items-center gap-2 rounded-full px-4 py-1 transition',
-                  view === 'table' ? 'bg-brand text-white shadow' : '',
-                )}
-                onClick={() => setView('table')}
+                className={cn('flex items-center gap-2 rounded-full px-4 py-1', view === 'table' ? 'bg-brand text-white shadow' : '')}
+                onClick={() => updateSearchParam('view', 'table')}
+                data-testid="asset-view-table"
               >
                 <List className="h-4 w-4" /> Table
               </button>
               <button
                 type="button"
-                className={cn(
-                  'flex items-center gap-2 rounded-full px-4 py-1 transition',
-                  view === 'cards' ? 'bg-brand text-white shadow' : '',
-                )}
-                onClick={() => setView('cards')}
+                className={cn('flex items-center gap-2 rounded-full px-4 py-1', view === 'cards' ? 'bg-brand text-white shadow' : '')}
+                onClick={() => updateSearchParam('view', 'cards')}
+                data-testid="asset-view-cards"
               >
                 <LayoutGrid className="h-4 w-4" /> Cards
               </button>
@@ -577,56 +744,96 @@ export default function Assets() {
             <button
               className="inline-flex items-center gap-2 rounded-2xl border border-border px-4 py-2 text-sm font-semibold text-fg shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
               type="button"
+              data-testid="asset-toolbar-advanced-filters"
             >
               <Filter className="h-4 w-4" /> Advanced filters
             </button>
             <button
-              onClick={() => {
-                setSelectedAssetId(null);
-                setDraft(emptyDraft);
-                setFormError(null);
-                setShowDrawer(true);
-              }}
-              className="inline-flex items-center gap-2 rounded-2xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl"
+              onClick={openCreateDrawer}
+              className="inline-flex items-center gap-2 rounded-2xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl disabled:cursor-not-allowed"
               type="button"
+              disabled={!canManageAssets}
+              title={canManageAssets ? undefined : 'You need asset manager permissions'}
+              data-testid="asset-toolbar-create"
             >
-              <Plus className="h-4 w-4" /> Quick add asset
+              <Plus className="h-4 w-4" /> Add asset
             </button>
           </div>
         </header>
         <FilterBar
-          filters={filters}
-          values={values}
-          onChange={(key, value) => setValues((prev) => ({ ...prev, [key]: value }))}
+          filters={baseFilters}
+          values={{ search, status, location, category }}
+          onChange={(key, value) => updateSearchParam(key, value)}
+          onReset={handleResetFilters}
           sticky={false}
+          actions={
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={disableBulkDelete}
+              onClick={() => bulkDeleteMutation.mutate(selectedAssets)}
+              title={canManageAssets ? undefined : 'You need asset manager permissions'}
+              data-testid="asset-toolbar-bulk-delete"
+            >
+              <Trash2 className="mr-2 h-4 w-4" /> Delete selected
+            </Button>
+          }
         />
         {view === 'table' ? (
           <ProTable
-            data={filteredRows}
+            data={assets}
             columns={columns}
             getRowId={(row) => row.id}
-            onRowClick={(row) => handleAssetSelect(row.id)}
+            loading={isLoading || isFetching}
+            onRowClick={openViewDrawer}
+            onSelectionChange={(ids) => setSelectedIds(ids)}
             rowActions={(row) => (
-              <button
-                type="button"
-                className="rounded-full border border-border px-3 py-1 text-xs text-brand"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  handleAssetSelect(row.id);
-                }}
-              >
-                Inspect
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded-full border border-border px-3 py-1 text-xs text-mutedfg hover:text-brand"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openViewDrawer(row);
+                  }}
+                  data-testid={`asset-row-view-${row.id}`}
+                >
+                  <Eye className="mr-1 inline h-3 w-3" /> View
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full border border-border px-3 py-1 text-xs text-mutedfg hover:text-brand disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openEditDrawer(row);
+                  }}
+                  disabled={!canManageAssets}
+                  title={canManageAssets ? undefined : 'You need asset manager permissions'}
+                  data-testid={`asset-row-edit-${row.id}`}
+                >
+                  <Pencil className="mr-1 inline h-3 w-3" /> Edit
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full border border-border px-3 py-1 text-xs text-danger hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    deleteAssetMutation.mutate(row);
+                  }}
+                  disabled={!canManageAssets}
+                  title={canManageAssets ? undefined : 'You need asset manager permissions'}
+                  data-testid={`asset-row-delete-${row.id}`}
+                >
+                  <Trash2 className="mr-1 inline h-3 w-3" /> Delete
+                </button>
+              </div>
             )}
             emptyState={<div className="rounded-3xl border border-border bg-surface p-10 text-center text-sm text-mutedfg">No assets match your filters.</div>}
           />
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {filteredRows.map((asset) => (
-              <article
-                key={asset.id}
-                className="rounded-3xl border border-border bg-surface p-6 shadow-xl transition hover:-translate-y-1 hover:shadow-2xl"
-              >
+            {assets.map((asset) => (
+              <article key={asset.id} className="rounded-3xl border border-border bg-surface p-6 shadow-xl transition hover:-translate-y-1 hover:shadow-2xl">
                 <div className="flex items-start justify-between">
                   <div className="rounded-2xl bg-brand/10 p-3 text-brand">
                     <Wrench className="h-6 w-6" />
@@ -638,22 +845,45 @@ export default function Assets() {
                 <div className="mt-4 space-y-2 text-sm text-mutedfg">
                   <div className="flex items-center gap-2">
                     <MapPin className="h-4 w-4" />
-                    <span>
-                      {asset.site} · {asset.line}
-                    </span>
+                    <span>{asset.location ?? 'Unassigned'}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Building2 className="h-4 w-4" />
-                    <span>Manufacturer: {asset.manufacturer}</span>
+                    <span>{asset.category ?? 'Uncategorized'}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <List className="h-4 w-4" />
-                    <span>Criticality: <DataBadge status={asset.criticalityBadge} /></span>
+                    <span>{asset.cost != null ? formatCurrency(asset.cost) : 'No cost'}</span>
                   </div>
                 </div>
-                <div className="mt-4 flex items-center justify-between rounded-2xl bg-muted/70 px-4 py-3 text-sm text-mutedfg">
-                  <span>Warranty expires</span>
-                  <span className="font-semibold text-fg">{asset.warrantyExpires}</span>
+                <div className="mt-4 flex items-center justify-between text-xs uppercase tracking-wide text-mutedfg">
+                  <span>Updated</span>
+                  <span className="font-semibold text-fg">{new Date(asset.updatedAt).toLocaleDateString()}</span>
+                </div>
+                <div className="mt-5 flex items-center gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => openViewDrawer(asset)} data-testid={`asset-card-view-${asset.id}`}>
+                    <Eye className="mr-2 h-4 w-4" /> View
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openEditDrawer(asset)}
+                    disabled={!canManageAssets}
+                    title={canManageAssets ? undefined : 'You need asset manager permissions'}
+                    data-testid={`asset-card-edit-${asset.id}`}
+                  >
+                    <Pencil className="mr-2 h-4 w-4" /> Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => deleteAssetMutation.mutate(asset)}
+                    disabled={!canManageAssets}
+                    title={canManageAssets ? undefined : 'You need asset manager permissions'}
+                    data-testid={`asset-card-delete-${asset.id}`}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" /> Delete
+                  </Button>
                 </div>
                 <button
                   type="button"
@@ -666,279 +896,201 @@ export default function Assets() {
             ))}
           </div>
         )}
+        <div className="flex items-center justify-between rounded-3xl border border-border bg-surface px-5 py-4 text-sm text-mutedfg">
+          <div>
+            Showing {(page - 1) * meta.pageSize + Math.min(1, assets.length)}-
+            {(page - 1) * meta.pageSize + assets.length} of {meta.total} assets
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => updateSearchParam('page', Math.max(page - 1, 1))}
+              data-testid="asset-pagination-prev"
+            >
+              Previous
+            </Button>
+            <span className="text-xs font-semibold uppercase tracking-wide text-mutedfg">
+              Page {page} of {Math.max(meta.totalPages, 1)}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= meta.totalPages}
+              onClick={() => updateSearchParam('page', Math.min(page + 1, meta.totalPages))}
+              data-testid="asset-pagination-next"
+            >
+              Next
+            </Button>
+          </div>
+        </div>
       </section>
       <SlideOver
-        open={showDrawer}
-        onClose={handleDrawerClose}
-        title={draft.name ? `Edit ${draft.name}` : selectedAssetId ? 'Edit asset' : 'Register asset'}
-        description="Update the bill of materials and warranty metadata to keep your asset lifecycle accurate."
+        open={drawerState !== null}
+        onClose={closeDrawer}
+        title={drawerState?.mode === 'edit' ? `Edit ${drawerState.asset.name}` : drawerState?.mode === 'view' ? drawerState.asset.name : 'Register asset'}
+        description={drawerState?.mode === 'view' ? 'Asset profile details' : 'Capture essential metadata to keep your asset registry synchronized.'}
       >
-        {!selectedAssetId && lifecycleLoading && (
-          <div className="flex items-center gap-2 py-6 text-sm text-mutedfg">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading asset…
+        {drawerState?.mode === 'view' && drawerState.asset ? (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold text-mutedfg">Asset name</h3>
+              <p className="mt-1 text-base text-fg">{drawerState.asset.name}</p>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-mutedfg">Asset tag</h3>
+              <p className="mt-1 text-base text-fg">{drawerState.asset.code}</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <h3 className="text-sm font-semibold text-mutedfg">Location</h3>
+                <p className="mt-1 text-base text-fg">{drawerState.asset.location ?? 'Unassigned'}</p>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-mutedfg">Category</h3>
+                <p className="mt-1 text-base text-fg">{drawerState.asset.category ?? 'Uncategorized'}</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <h3 className="text-sm font-semibold text-mutedfg">Status</h3>
+                <DataBadge status={drawerState.asset.status} className="mt-2" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-mutedfg">Cost</h3>
+                <p className="mt-1 text-base text-fg">
+                  {drawerState.asset.cost != null ? formatCurrency(drawerState.asset.cost) : 'No cost recorded'}
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <h3 className="text-sm font-semibold text-mutedfg">Purchase date</h3>
+                <p className="mt-1 text-base text-fg">
+                  {drawerState.asset.purchaseDate ? new Date(drawerState.asset.purchaseDate).toLocaleDateString() : 'Not captured'}
+                </p>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-mutedfg">Updated</h3>
+                <p className="mt-1 text-base text-fg">{new Date(drawerState.asset.updatedAt).toLocaleString()}</p>
+              </div>
+            </div>
+            {canManageAssets && (
+              <div className="flex justify-end gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDrawerState({ mode: 'edit', asset: drawerState.asset })}
+                  data-testid="asset-view-edit"
+                >
+                  Edit asset
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => deleteAssetMutation.mutate(drawerState.asset)}
+                  data-testid="asset-view-delete"
+                >
+                  Delete asset
+                </Button>
+              </div>
+            )}
           </div>
-        )}
-        {selectedAssetId && lifecycleLoading && (
-          <div className="flex items-center gap-2 py-6 text-sm text-mutedfg">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading asset…
-          </div>
-        )}
-        {lifecycleError && (
-          <p className="rounded-2xl border border-danger/40 bg-danger/10 p-4 text-sm text-danger">
-            Unable to load asset lifecycle data. Please try again.
-          </p>
-        )}
-        {!selectedAssetId && !lifecycleLoading && !lifecycleError && (
-          <div className="rounded-2xl border border-border bg-muted/40 p-6 text-sm text-mutedfg">
-            Select an asset from the hierarchy or table to edit lifecycle metadata, or use another workflow to register a new asset.
-          </div>
-        )}
-        {selectedAssetId && !lifecycleLoading && !lifecycleError && (
-          <form className="space-y-5">
+        ) : (
+          <form className="space-y-5" onSubmit={form.handleSubmit(onSubmit)}>
+            <label className="block text-sm font-semibold text-mutedfg">
+              Asset name
+              <input
+                {...form.register('name')}
+                className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+                disabled={disableCreateOrEdit}
+                data-testid="asset-form-name"
+              />
+              {form.formState.errors.name && <span className="mt-1 block text-xs text-danger">{form.formState.errors.name.message}</span>}
+            </label>
+            <label className="block text-sm font-semibold text-mutedfg">
+              Asset tag
+              <input
+                {...form.register('code')}
+                className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+                disabled={disableCreateOrEdit}
+                data-testid="asset-form-code"
+              />
+              {form.formState.errors.code && <span className="mt-1 block text-xs text-danger">{form.formState.errors.code.message}</span>}
+            </label>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <label className="block text-sm font-semibold text-mutedfg">
-                Asset name
+                Location
                 <input
-                  value={draft.name}
-                  onChange={(event) => handleDraftChange('name', event.target.value)}
+                  {...form.register('location')}
                   className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+                  disabled={disableCreateOrEdit}
+                  data-testid="asset-form-location"
                 />
               </label>
               <label className="block text-sm font-semibold text-mutedfg">
-                Asset tag
+                Category
                 <input
-                  value={draft.code}
-                  onChange={(event) => handleDraftChange('code', event.target.value)}
+                  {...form.register('category')}
                   className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+                  disabled={disableCreateOrEdit}
+                  data-testid="asset-form-category"
                 />
               </label>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <label className="block text-sm font-semibold text-mutedfg">
-                Manufacturer
-                <input
-                  value={draft.manufacturer}
-                  onChange={(event) => handleDraftChange('manufacturer', event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
-                />
-              </label>
-              <label className="block text-sm font-semibold text-mutedfg">
-                Model number
-                <input
-                  value={draft.modelNumber}
-                  onChange={(event) => handleDraftChange('modelNumber', event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
-                />
-              </label>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <label className="block text-sm font-semibold text-mutedfg">
-                Serial number
-                <input
-                  value={draft.serialNumber}
-                  onChange={(event) => handleDraftChange('serialNumber', event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
-                />
-              </label>
               <label className="block text-sm font-semibold text-mutedfg">
                 Status
                 <select
-                  value={draft.status}
-                  onChange={(event) => handleDraftChange('status', event.target.value as AssetStatus)}
+                  {...form.register('status')}
                   className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+                  disabled={disableCreateOrEdit}
+                  data-testid="asset-form-status"
                 >
-                  {statusOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <label className="block text-sm font-semibold text-mutedfg">
-                Criticality
-                <select
-                  value={draft.criticality}
-                  onChange={(event) => handleDraftChange('criticality', event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
-                >
-                  {criticalityOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
+                  {assetStatuses.map((statusOption) => (
+                    <option key={statusOption} value={statusOption}>
+                      {statusOption.charAt(0).toUpperCase() + statusOption.slice(1)}
                     </option>
                   ))}
                 </select>
               </label>
               <label className="block text-sm font-semibold text-mutedfg">
-                Purchase cost
+                Cost
                 <input
-                  value={draft.cost}
-                  onChange={(event) => handleDraftChange('cost', event.target.value)}
-                  placeholder={draft.cost && Number.isFinite(Number(draft.cost)) ? formatCurrency(Number(draft.cost)) : '0.00'}
+                  {...form.register('cost')}
                   className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+                  disabled={disableCreateOrEdit}
+                  data-testid="asset-form-cost"
                 />
-              </label>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <label className="block text-sm font-semibold text-mutedfg">
-                Purchase date
-                <input
-                  type="date"
-                  value={draft.purchaseDate}
-                  onChange={(event) => handleDraftChange('purchaseDate', event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
-                />
-              </label>
-              <label className="block text-sm font-semibold text-mutedfg">
-                Commissioned
-                <input
-                  type="date"
-                  value={draft.commissionedAt}
-                  onChange={(event) => handleDraftChange('commissionedAt', event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
-                />
-              </label>
-              <label className="block text-sm font-semibold text-mutedfg">
-                Warranty expires
-                <input
-                  type="date"
-                  value={draft.warrantyExpiresAt}
-                  onChange={(event) => handleDraftChange('warrantyExpiresAt', event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
-                />
-              </label>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <label className="block text-sm font-semibold text-mutedfg">
-                Warranty provider
-                <input
-                  value={draft.warrantyProvider}
-                  onChange={(event) => handleDraftChange('warrantyProvider', event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
-                />
-              </label>
-              <label className="block text-sm font-semibold text-mutedfg">
-                Warranty contact
-                <input
-                  value={draft.warrantyContact}
-                  onChange={(event) => handleDraftChange('warrantyContact', event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
-                />
+                {form.formState.errors.cost && <span className="mt-1 block text-xs text-danger">{form.formState.errors.cost.message}</span>}
               </label>
             </div>
             <label className="block text-sm font-semibold text-mutedfg">
-              Warranty notes
-              <textarea
-                value={draft.warrantyNotes}
-                onChange={(event) => handleDraftChange('warrantyNotes', event.target.value)}
-                rows={3}
+              Purchase date
+              <input
+                type="date"
+                {...form.register('purchaseDate')}
                 className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+                disabled={disableCreateOrEdit}
+                data-testid="asset-form-purchaseDate"
               />
-            </label>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-mutedfg">Bill of materials</h3>
-                <button
-                  type="button"
-                  onClick={handleAddBomLine}
-                  className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold text-brand"
-                >
-                  <Plus className="h-3 w-3" /> Add component
-                </button>
-              </div>
-              {draft.bomLines.length === 0 && (
-                <p className="rounded-2xl border border-dashed border-border px-4 py-3 text-xs text-mutedfg">
-                  No BOM lines yet. Add your critical components to keep maintenance ready.
-                </p>
+              {form.formState.errors.purchaseDate && (
+                <span className="mt-1 block text-xs text-danger">{form.formState.errors.purchaseDate.message}</span>
               )}
-              <div className="space-y-4">
-                {draft.bomLines.map((line, index) => (
-                  <div key={line.clientId} className="rounded-2xl border border-border p-4 shadow-inner">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 space-y-3">
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                          <label className="block text-xs font-semibold uppercase tracking-wide text-mutedfg">
-                            Reference
-                            <input
-                              value={line.reference}
-                              onChange={(event) => handleBomChange(index, 'reference', event.target.value)}
-                              className="mt-2 w-full rounded-xl border border-border bg-white px-3 py-2 text-xs text-fg focus:outline-none focus:ring-2 focus:ring-brand"
-                            />
-                          </label>
-                          <label className="block text-xs font-semibold uppercase tracking-wide text-mutedfg">
-                            Quantity
-                            <input
-                              value={line.quantity}
-                              onChange={(event) => handleBomChange(index, 'quantity', event.target.value)}
-                              className="mt-2 w-full rounded-xl border border-border bg-white px-3 py-2 text-xs text-fg focus:outline-none focus:ring-2 focus:ring-brand"
-                            />
-                          </label>
-                        </div>
-                        <label className="block text-xs font-semibold uppercase tracking-wide text-mutedfg">
-                          Description
-                          <input
-                            value={line.description}
-                            onChange={(event) => handleBomChange(index, 'description', event.target.value)}
-                            className="mt-2 w-full rounded-xl border border-border bg-white px-3 py-2 text-xs text-fg focus:outline-none focus:ring-2 focus:ring-brand"
-                          />
-                        </label>
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                          <label className="block text-xs font-semibold uppercase tracking-wide text-mutedfg">
-                            Unit
-                            <input
-                              value={line.unit}
-                              onChange={(event) => handleBomChange(index, 'unit', event.target.value)}
-                              className="mt-2 w-full rounded-xl border border-border bg-white px-3 py-2 text-xs text-fg focus:outline-none focus:ring-2 focus:ring-brand"
-                            />
-                          </label>
-                          <label className="block text-xs font-semibold uppercase tracking-wide text-mutedfg">
-                            Notes
-                            <input
-                              value={line.notes}
-                              onChange={(event) => handleBomChange(index, 'notes', event.target.value)}
-                              className="mt-2 w-full rounded-xl border border-border bg-white px-3 py-2 text-xs text-fg focus:outline-none focus:ring-2 focus:ring-brand"
-                            />
-                          </label>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveBomLine(line.clientId)}
-                        className="rounded-full border border-border p-2 text-danger transition hover:bg-danger/10"
-                        aria-label="Remove BOM line"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {formError && (
-              <p className="rounded-2xl border border-danger/40 bg-danger/10 p-4 text-sm text-danger">{formError}</p>
-            )}
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-muted/30 px-4 py-3 text-xs text-mutedfg">
-              <span className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-brand" /> Keep BOM and warranty data current for audit readiness.
-              </span>
-              <span>{draft.bomLines.length} components tracked</span>
-            </div>
+            </label>
             <div className="flex justify-end gap-3 pt-2">
-              <button type="button" onClick={handleDrawerClose} className="rounded-2xl border border-border px-4 py-2 text-sm font-semibold text-fg">
+              <Button type="button" variant="outline" onClick={closeDrawer} data-testid="asset-form-cancel">
                 Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={!selectedAssetId || updateAssetMutation.isPending}
-                className={cn(
-                  'inline-flex items-center gap-2 rounded-2xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-lg transition',
-                  (!selectedAssetId || updateAssetMutation.isPending) && 'opacity-70',
-                )}
+              </Button>
+              <Button
+                type="submit"
+                className="shadow-lg"
+                disabled={disableCreateOrEdit}
+                data-testid="asset-form-submit"
               >
-                {updateAssetMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save asset'}
-              </button>
+                {drawerState?.mode === 'edit' ? 'Save changes' : 'Save asset'}
+              </Button>
             </div>
           </form>
         )}
