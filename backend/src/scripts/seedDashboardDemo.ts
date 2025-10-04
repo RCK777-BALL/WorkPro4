@@ -219,30 +219,8 @@ async function main() {
   }
 
   console.log('🌱 Seeding parts...');
-  const parts = buildParts();
-  const defaultWarehouse = await ensureDefaultWarehouse(tenantId);
-
-  for (const part of parts) {
-    await prisma.part.create({
-      data: {
-        tenantId,
-        name: part.name,
-        sku: part.sku,
-        cost: part.cost,
-        defaultMinLevel: part.minLevel,
-        defaultMaxLevel: part.maxLevel,
-        stockLevels: {
-          create: {
-            tenantId,
-            warehouseId: defaultWarehouse.id,
-            onHand: part.onHand,
-            minLevel: part.minLevel,
-            maxLevel: part.maxLevel,
-          },
-        },
-      },
-    });
-  }
+  const parts = buildParts(tenantId, siteIds);
+  await prisma.part.createMany({ data: parts });
 
   console.log('✅ Dashboard demo data ready');
 }

@@ -1,35 +1,38 @@
 import { useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Calendar, ClipboardList, User, MapPin, FileText } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../lib/api';
-import { type MockWorkOrder, getMockWorkOrderById } from '../lib/mockWorkOrders';
+import { ArrowLeft, Calendar, ClipboardList, User, MapPin, FileText } from 'lucide-react';
+import type { ApiError, ApiResponse } from '../../shared/types/http';
+import type { WorkOrderSummary } from '../../shared/types/workOrder';
+import { api, isApiErrorResponse } from '../lib/api';
+import { formatDate, formatWorkOrderStatus } from '../lib/utils';
 
 export default function WorkOrderDetails() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
 
-  const { data: workOrder, isLoading } = useQuery<MockWorkOrder | null>({
+  const {
+    data: workOrder,
+    isLoading,
+    isError,
+    error,
+  } = useQuery<WorkOrderSummary, ApiResponse<ApiError>>({
     queryKey: ['work-order', id],
     queryFn: async () => {
-      if (!id) return null;
-      try {
-        const result = await api.get<MockWorkOrder>(`/work-orders/${id}`);
-        if (!result) {
-          return getMockWorkOrderById(id) ?? null;
-        }
-        return result;
-      } catch {
-        return getMockWorkOrderById(id) ?? null;
+      if (!id) {
+        throw {
+          data: null,
+          error: { code: 400, message: 'Work order id is required' },
+        } satisfies ApiResponse<ApiError>;
       }
+
+      return api.get<WorkOrderSummary>(`/work-orders/${id}`);
     },
-    enabled: !!id,
-    initialData: () => (id ? getMockWorkOrderById(id) ?? null : null)
+    enabled: Boolean(id),
   });
 
   const priorityBadge = useMemo(() => {
-    if (!workOrder) return { label: 'Unknown', className: 'bg-muted text-mutedfg' };
-    const priority = workOrder.priority?.toLowerCase() ?? 'medium';
+    const priority = workOrder?.priority ?? 'medium';
     switch (priority) {
       case 'urgent':
         return { label: 'Urgent', className: 'bg-danger/10 text-danger' };
@@ -40,8 +43,14 @@ export default function WorkOrderDetails() {
       default:
         return { label: 'Medium', className: 'bg-brand/10 text-brand' };
     }
-  }, [workOrder]);
+  }, [workOrder?.priority]);
 
+  const statusLabel = workOrder ? formatWorkOrderStatus(workOrder.status) : null;
+  const errorMessage = isError
+    ? isApiErrorResponse(error)
+      ? error.error.message
+      : 'Unable to load work order details'
+    : null;
 
   if (isLoading) {
     return (
@@ -68,7 +77,7 @@ export default function WorkOrderDetails() {
           <ArrowLeft className="h-4 w-4" /> Back to work orders
         </button>
         <div className="rounded-3xl border border-border bg-surface p-8 text-center text-sm text-mutedfg shadow-xl">
-          Work order not found.
+          {errorMessage ?? 'Work order not found.'}
         </div>
       </div>
     );
@@ -79,6 +88,12 @@ export default function WorkOrderDetails() {
       <button className="inline-flex items-center gap-2 rounded-2xl border border-border px-4 py-2 text-sm text-fg" onClick={() => navigate('/work-orders')}>
         <ArrowLeft className="h-4 w-4" /> Back to work orders
       </button>
+
+      {errorMessage && (
+        <div className="rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+          {errorMessage}
+        </div>
+      )}
 
       <div className="rounded-3xl border border-border bg-surface p-6 shadow-xl">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -91,43 +106,42 @@ export default function WorkOrderDetails() {
               Priority: {priorityBadge.label}
             </span>
             <span className="rounded-full bg-brand/10 px-3 py-1 text-xs font-semibold uppercase text-brand">
-              Status: {workOrder.status}
+              Status: {statusLabel}
             </span>
           </div>
         </div>
 
         <p className="mt-4 text-sm leading-relaxed text-mutedfg">
-          {workOrder.description}
+          {workOrder.description ?? 'No description provided.'}
         </p>
 
         <div className="mt-6 grid grid-cols-1 gap-4 text-sm text-mutedfg md:grid-cols-2">
           <div className="flex items-center gap-2">
             <ClipboardList className="w-4 h-4" />
-            Asset: {workOrder.asset ?? 'N/A'}
+            Asset: {workOrder.assetId ?? 'N/A'}
           </div>
           <div className="flex items-center gap-2">
             <User className="w-4 h-4" />
-            Assigned To: {workOrder.assignee ?? 'Unassigned'}
+            Assigned To: {workOrder.assignee?.name ?? 'Unassigned'}
           </div>
           <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4" />
-            Due Date: {workOrder.dueDate ?? 'TBD'}
+            Due Date: {workOrder.dueDate ? formatDate(workOrder.dueDate) : 'TBD'}
           </div>
           <div className="flex items-center gap-2">
             <MapPin className="w-4 h-4" />
-            Location: {workOrder.location ?? 'Not specified'}
+            Location: {workOrder.category ?? 'Not specified'}
           </div>
         </div>
 
-        {workOrder.instructions && (
+        {workOrder.description && (
           <div className="mt-6 rounded-2xl border border-border bg-white/60 p-4 text-sm text-mutedfg shadow-inner dark:bg-muted/60">
             <div className="flex items-center gap-2 text-sm font-semibold text-fg">
               <FileText className="w-4 h-4" />
-              Special Instructions
+              Summary
             </div>
             <p className="mt-2 text-sm">
-              {workOrder.instructions}
-
+              {workOrder.description}
             </p>
           </div>
         )}
