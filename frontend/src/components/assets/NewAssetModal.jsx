@@ -5,7 +5,7 @@ import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { api } from '@/lib/api';
+import { api, unwrapApiResult } from '@/lib/api';
 
 const STATUS_OPTIONS = [
   { value: 'operational', label: 'Operational' },
@@ -89,6 +89,8 @@ export function NewAssetModal({ open, onClose, onSuccess }) {
         }
       }
 
+      const createdAsset = unwrapApiResult(result);
+
       toast({
         variant: 'default',
         title: 'Asset created',
@@ -96,7 +98,7 @@ export function NewAssetModal({ open, onClose, onSuccess }) {
       });
 
       reset(DEFAULT_VALUES);
-      onSuccess?.(result?.data ?? result);
+      onSuccess?.(createdAsset);
       onClose?.();
     } catch (error) {
       const description =
