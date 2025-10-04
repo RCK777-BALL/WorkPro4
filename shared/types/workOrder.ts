@@ -22,6 +22,30 @@ export interface WorkOrderSignature {
   ts: string;
 }
 
+export interface WorkOrderAssigneeSummary {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface WorkOrderSummary {
+  id: string;
+  tenantId: string;
+  title: string;
+  description: string | null;
+  priority: WorkOrderPriority;
+  status: WorkOrderStatus;
+  assetId: string | null;
+  assigneeId: string | null;
+  assignee: WorkOrderAssigneeSummary | null;
+  category: string | null;
+  dueDate: string | null;
+  attachments: string[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface WorkOrder {
   id: string;
   tenantId: string;

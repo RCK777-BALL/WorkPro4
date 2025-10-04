@@ -2,57 +2,108 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Calendar, Download, Filter, ListChecks, Plus, Search, User } from 'lucide-react';
+import type { ApiError, ApiResponse } from '../../shared/types/http';
+import type { WorkOrderSummary } from '../../shared/types/workOrder';
 import { FilterBar, type FilterDefinition, type QuickFilter } from '../components/premium/FilterBar';
 import { ProTable, type ProTableColumn } from '../components/premium/ProTable';
 import { SlideOver } from '../components/premium/SlideOver';
 import { ConfirmDialog } from '../components/premium/ConfirmDialog';
 import { DataBadge } from '../components/premium/DataBadge';
 import { EmptyState } from '../components/premium/EmptyState';
-import { api } from '../lib/api';
-import { mockWorkOrders, type MockWorkOrder } from '../lib/mockWorkOrders';
+import { api, isApiErrorResponse } from '../lib/api';
+import { formatDate, formatWorkOrderPriority, formatWorkOrderStatus } from '../lib/utils';
+import { toWorkOrderRow, type WorkOrderRow } from '../lib/workOrders';
 
 interface NotificationState {
   message: string;
   tone: 'success' | 'danger';
 }
 
+interface FilterValues {
+  search: string;
+  status?: WorkOrderRow['status'];
+  priority?: WorkOrderRow['priority'];
+  assignee?: string;
+  dueDate?: string;
+}
+
+const statusOptions: { value: WorkOrderRow['status']; label: string }[] = [
+  { value: 'requested', label: 'Requested' },
+  { value: 'assigned', label: 'Assigned' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
+
+const priorityOptions: { value: WorkOrderRow['priority']; label: string }[] = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'urgent', label: 'Urgent' },
+];
+
 const filters: FilterDefinition[] = [
   { key: 'search', label: 'Search', type: 'search', placeholder: 'WO ID, asset, or description' },
-  { key: 'status', label: 'Status', type: 'select', options: ['Open', 'Assigned', 'In Progress', 'Completed', 'Overdue', 'Cancelled'].map((value) => ({ value, label: value })) },
-  { key: 'priority', label: 'Priority', type: 'select', options: ['Low', 'Medium', 'High', 'Urgent'].map((value) => ({ value, label: value })) },
+  { key: 'status', label: 'Status', type: 'select', options: statusOptions.map((option) => ({ value: option.value, label: option.label })) },
+  { key: 'priority', label: 'Priority', type: 'select', options: priorityOptions.map((option) => ({ value: option.value, label: option.label })) },
   { key: 'assignee', label: 'Assignee', type: 'text', placeholder: 'Technician name' },
   { key: 'dueDate', label: 'Due before', type: 'date' }
 ];
 
 const quickFilters: QuickFilter[] = [
-  { key: 'status', value: 'Overdue', label: 'Overdue' },
-  { key: 'priority', value: 'Urgent', label: 'Urgent' },
-  { key: 'status', value: 'Completed', label: 'Completed' }
+  { key: 'status', value: 'in_progress', label: 'In Progress' },
+  { key: 'priority', value: 'urgent', label: 'Urgent' },
+  { key: 'status', value: 'completed', label: 'Completed' }
 ];
 
-const columns: ProTableColumn<MockWorkOrder>[] = [
+const columns: ProTableColumn<WorkOrderRow>[] = [
   { key: 'id', header: 'WO #' },
   { key: 'title', header: 'Summary' },
   {
     key: 'status',
     header: 'Status',
-    accessor: (row) => <DataBadge status={row.status ?? 'Open'} />
+    accessor: (row) => <DataBadge status={row.statusLabel} />
   },
   {
     key: 'priority',
     header: 'Priority',
-    accessor: (row) => <DataBadge status={row.priority ?? 'Medium'} />
+    accessor: (row) => <DataBadge status={row.priorityLabel} />
   },
-  { key: 'assignee', header: 'Owner' },
-  { key: 'asset', header: 'Asset' },
-  { key: 'dueDate', header: 'Due', accessor: (row) => row.dueDate ?? '—' }
+  {
+    key: 'assignee',
+    header: 'Owner',
+    accessor: (row) => row.assignee ?? 'Unassigned'
+  },
+  {
+    key: 'assetId',
+    header: 'Asset',
+    accessor: (row) => row.assetId ?? '—'
+  },
+  {
+    key: 'dueDate',
+    header: 'Due',
+    accessor: (row) => (row.dueDate ? formatDate(row.dueDate) : '—')
+  }
 ];
+
+const createDraftWorkOrder = (): WorkOrderRow => ({
+  id: '',
+  title: '',
+  description: '',
+  status: 'requested',
+  statusLabel: formatWorkOrderStatus('requested'),
+  priority: 'medium',
+  priorityLabel: formatWorkOrderPriority('medium'),
+  assignee: null,
+  dueDate: null,
+  assetId: null
+});
 
 export default function WorkOrders() {
   const navigate = useNavigate();
-  const [values, setValues] = useState<Record<string, string>>({ search: '' });
+  const [values, setValues] = useState<FilterValues>({ search: '' });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [activeWorkOrder, setActiveWorkOrder] = useState<MockWorkOrder | null>(null);
+  const [activeWorkOrder, setActiveWorkOrder] = useState<WorkOrderRow | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notification, setNotification] = useState<NotificationState | null>(null);
 
@@ -62,43 +113,56 @@ export default function WorkOrders() {
     return () => window.clearTimeout(timer);
   }, [notification]);
 
-  const { data: workOrders = mockWorkOrders, isLoading } = useQuery({
+  const {
+    data: workOrders = [],
+    isLoading,
+    isError,
+    error,
+  } = useQuery<WorkOrderRow[], ApiResponse<ApiError>>({
     queryKey: ['work-orders'],
     queryFn: async () => {
-      try {
-        const result = await api.get<MockWorkOrder[]>('/work-orders');
-        return Array.isArray(result) ? result : mockWorkOrders;
-      } catch {
-        return mockWorkOrders;
+      const result = await api.get<WorkOrderSummary[]>('/work-orders');
+      if (!Array.isArray(result)) {
+        return [];
       }
+      return result.map(toWorkOrderRow);
     }
   });
 
   const filtered = useMemo(() => {
-    const search = (values.search ?? '').trim().toLowerCase();
+    const search = values.search?.trim().toLowerCase() ?? '';
+
     return workOrders.filter((order) => {
       const matchesSearch = search
-        ? [order.id, order.title, order.asset, order.description].some((field) =>
-            typeof field === 'string' && field.toLowerCase().includes(search)
-          )
+        ? [order.id, order.title, order.description ?? '', order.assignee ?? '', order.assetId ?? '']
+            .filter((field): field is string => typeof field === 'string')
+            .some((field) => field.toLowerCase().includes(search))
         : true;
       const matchesStatus = values.status ? order.status === values.status : true;
       const matchesPriority = values.priority ? order.priority === values.priority : true;
-      const matchesAssignee = values.assignee ? (order.assignee ?? '').toLowerCase().includes(values.assignee.toLowerCase()) : true;
+      const matchesAssignee = values.assignee
+        ? (order.assignee ?? '').toLowerCase().includes(values.assignee.toLowerCase())
+        : true;
       const matchesDueDate = values.dueDate ? (order.dueDate ?? '') <= values.dueDate : true;
+
       return matchesSearch && matchesStatus && matchesPriority && matchesAssignee && matchesDueDate;
     });
   }, [values, workOrders]);
 
-  const overdueCount = filtered.filter((order) => order.status === 'Overdue').length;
+  const inProgressCount = filtered.filter((order) => order.status === 'in_progress').length;
+  const errorMessage = isError
+    ? isApiErrorResponse(error)
+      ? error.error.message
+      : 'Unable to load work orders'
+    : null;
 
   const handleChange = (key: string, value: string) => {
-    setValues((prev) => ({ ...prev, [key]: value }));
+    setValues((prev) => ({ ...prev, [key as keyof FilterValues]: value }));
   };
 
   const handleReset = () => setValues({ search: '' });
 
-  const handleRowClick = (row: MockWorkOrder) => {
+  const handleRowClick = (row: WorkOrderRow) => {
     setActiveWorkOrder(row);
   };
 
@@ -119,7 +183,7 @@ export default function WorkOrders() {
         <div>
           <h1 className="text-3xl font-semibold text-fg">Work order pipeline</h1>
           <p className="mt-2 text-sm text-mutedfg">
-            Track assignments, SLA risk, and technician load. {overdueCount} items need immediate follow-up.
+            Track assignments, SLA risk, and technician load. {inProgressCount} items currently in progress.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -127,16 +191,7 @@ export default function WorkOrders() {
             <Download className="mr-2 inline h-4 w-4" /> Export report
           </button>
           <button
-            onClick={() => setActiveWorkOrder({
-              id: `WO-${Date.now()}`,
-              title: '',
-              description: '',
-              status: 'Open',
-              priority: 'Medium',
-              assignee: 'Unassigned',
-              asset: '',
-              dueDate: ''
-            })}
+            onClick={() => setActiveWorkOrder(createDraftWorkOrder())}
             className="inline-flex items-center gap-2 rounded-2xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl"
           >
             <Plus className="h-4 w-4" /> New work order
@@ -169,11 +224,16 @@ export default function WorkOrders() {
           </button>
         </div>
         <FilterBar filters={filters} values={values} onChange={handleChange} onReset={handleReset} quickFilters={quickFilters} sticky={false} />
+        {errorMessage && (
+          <div className="mt-4 rounded-2xl border border-danger/30 bg-danger/5 p-4 text-sm text-danger">
+            {errorMessage}
+          </div>
+        )}
         <ProTable
           data={filtered}
           columns={columns}
           loading={isLoading}
-          getRowId={(row) => row.id}
+          getRowId={(row) => row.id || row.title}
           onRowClick={handleRowClick}
           onSelectionChange={setSelectedIds}
           rowActions={(row) => (
@@ -227,13 +287,20 @@ export default function WorkOrders() {
               <label className="block text-sm font-semibold text-mutedfg">
                 Status
                 <select
-                  value={activeWorkOrder.status ?? 'Open'}
-                  onChange={(event) => setActiveWorkOrder({ ...activeWorkOrder, status: event.target.value })}
+                  value={activeWorkOrder.status}
+                  onChange={(event) => {
+                    const value = event.target.value as WorkOrderRow['status'];
+                    setActiveWorkOrder({
+                      ...activeWorkOrder,
+                      status: value,
+                      statusLabel: formatWorkOrderStatus(value)
+                    });
+                  }}
                   className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
                 >
-                  {['Open', 'Assigned', 'In Progress', 'Completed', 'Cancelled', 'Overdue'].map((status) => (
-                    <option key={status} value={status}>
-                      {status}
+                  {statusOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
                     </option>
                   ))}
                 </select>
@@ -241,13 +308,20 @@ export default function WorkOrders() {
               <label className="block text-sm font-semibold text-mutedfg">
                 Priority
                 <select
-                  value={activeWorkOrder.priority ?? 'Medium'}
-                  onChange={(event) => setActiveWorkOrder({ ...activeWorkOrder, priority: event.target.value })}
+                  value={activeWorkOrder.priority}
+                  onChange={(event) => {
+                    const value = event.target.value as WorkOrderRow['priority'];
+                    setActiveWorkOrder({
+                      ...activeWorkOrder,
+                      priority: value,
+                      priorityLabel: formatWorkOrderPriority(value)
+                    });
+                  }}
                   className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
                 >
-                  {['Low', 'Medium', 'High', 'Urgent'].map((priority) => (
-                    <option key={priority} value={priority}>
-                      {priority}
+                  {priorityOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
                     </option>
                   ))}
                 </select>
@@ -269,8 +343,8 @@ export default function WorkOrders() {
               Due date
               <input
                 type="date"
-                value={activeWorkOrder.dueDate ?? ''}
-                onChange={(event) => setActiveWorkOrder({ ...activeWorkOrder, dueDate: event.target.value })}
+                value={activeWorkOrder.dueDate ? activeWorkOrder.dueDate.slice(0, 10) : ''}
+                onChange={(event) => setActiveWorkOrder({ ...activeWorkOrder, dueDate: event.target.value || null })}
                 className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
               />
             </label>
