@@ -5,6 +5,7 @@ import { queryClient } from './lib/queryClient';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import AppShell from './components/layout/AppShell';
+import { ToastProvider } from './components/ui/toast';
 
 const Login = lazy(() => import('./pages/Login'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -23,8 +24,9 @@ const NotFound = lazy(() => import('./pages/NotFound'));
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ErrorBoundary>
-        <Suspense fallback={<div className="grid min-h-screen place-items-center text-mutedfg">Loading...</div>}>
+      <ToastProvider>
+        <ErrorBoundary>
+          <Suspense fallback={<div className="grid min-h-screen place-items-center text-mutedfg">Loading...</div>}>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route
@@ -51,8 +53,9 @@ export default function App() {
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </Suspense>
-      </ErrorBoundary>
+          </Suspense>
+        </ErrorBoundary>
+      </ToastProvider>
     </QueryClientProvider>
   );
 }
