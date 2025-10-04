@@ -10,6 +10,7 @@ import {
   priorityEnum,
   statusEnum,
 } from '../validators/workOrderValidators';
+import { auditLog } from '../middleware/audit';
 
 const router = Router();
 
@@ -114,7 +115,7 @@ router.get('/:id', asyncHandler(async (req: AuthRequest, res) => {
 }));
 
 // POST /work-orders
-router.post('/', asyncHandler(async (req: AuthRequest, res) => {
+router.post('/', auditLog('create', 'work_order'), asyncHandler(async (req: AuthRequest, res) => {
   const data = createWorkOrderValidator.parse(req.body);
 
   if (!req.user) {
@@ -140,11 +141,16 @@ router.post('/', asyncHandler(async (req: AuthRequest, res) => {
     include: workOrderInclude,
   });
 
+  res.locals.auditMetadata = {
+    workOrderId: workOrder.id,
+    status: workOrder.status,
+  };
+
   return ok(res, serializeWorkOrder(workOrder));
 }));
 
 // PUT /work-orders/:id
-router.put('/:id', asyncHandler(async (req: AuthRequest, res) => {
+router.put('/:id', auditLog('update', 'work_order'), asyncHandler(async (req: AuthRequest, res) => {
   const { id } = req.params;
   const data = updateWorkOrderSchema.parse(req.body);
 
@@ -199,11 +205,17 @@ router.put('/:id', asyncHandler(async (req: AuthRequest, res) => {
     include: workOrderInclude,
   });
 
+  res.locals.auditMetadata = {
+    workOrderId: workOrder.id,
+    status: workOrder.status,
+    fields: Object.keys(updateData),
+  };
+
   return ok(res, serializeWorkOrder(workOrder));
 }));
 
 // DELETE /work-orders/:id
-router.delete('/:id', asyncHandler(async (req: AuthRequest, res) => {
+router.delete('/:id', auditLog('delete', 'work_order'), asyncHandler(async (req: AuthRequest, res) => {
   const { id } = req.params;
 
   const existing = await prisma.workOrder.findFirst({ where: { id, tenantId: req.user!.tenantId } });
@@ -211,6 +223,11 @@ router.delete('/:id', asyncHandler(async (req: AuthRequest, res) => {
   if (!existing) {
     return fail(res, 404, 'Work order not found');
   }
+
+  res.locals.auditMetadata = {
+    workOrderId: id,
+    previousStatus: existing.status,
+  };
 
   await prisma.workOrder.delete({ where: { id } });
 

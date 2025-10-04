@@ -4,6 +4,7 @@ import type { Asset } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { prisma } from '../db';
 import { asyncHandler } from '../utils/response';
+import { auditLog } from '../middleware/audit';
 
 const router = Router();
 
@@ -84,6 +85,7 @@ router.get(
 
 router.post(
   '/',
+  auditLog('create', 'asset'),
   asyncHandler(async (req: AuthRequest, res) => {
     if (!req.user) {
       return res.status(401).json({ ok: false, error: 'Authentication required' });
@@ -106,12 +108,18 @@ router.post(
       },
     });
 
+    res.locals.auditMetadata = {
+      assetId: asset.id,
+      status: asset.status,
+    };
+
     return res.status(201).json({ ok: true, asset: serializeAsset(asset) });
   }),
 );
 
 router.patch(
   '/:id',
+  auditLog('update', 'asset'),
   asyncHandler(async (req: AuthRequest, res) => {
     if (!req.user) {
       return res.status(401).json({ ok: false, error: 'Authentication required' });
@@ -135,6 +143,7 @@ router.patch(
 
 router.delete(
   '/:id',
+  auditLog('delete', 'asset'),
   asyncHandler(async (req: AuthRequest, res) => {
     if (!req.user) {
       return res.status(401).json({ ok: false, error: 'Authentication required' });

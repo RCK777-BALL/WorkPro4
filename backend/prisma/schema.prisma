@@ -12,9 +12,11 @@ model Tenant {
   name String
   slug String @unique
 
-  users      User[]
-  assets     Asset[]
-  workOrders WorkOrder[]
+  users        User[]
+  assets       Asset[]
+  workOrders   WorkOrder[]
+  downtimeLogs DowntimeLog[]
+  parts        Part[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -174,4 +176,20 @@ model Part {
   @@map("parts")
   @@index([tenantId])
   @@index([minLevel, onHand, tenantId], map: "parts_min_onhand_tenant_idx")
+}
+
+model AuditEvent {
+  id        String   @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId  String   @map("tenant_id") @db.ObjectId
+  userId    String?  @map("user_id") @db.ObjectId
+  userRole  String?  @map("user_role")
+  action    String
+  resource  String
+  context   Json?
+  occurredAt DateTime @default(now()) @map("occurred_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("audit_events")
+  @@index([tenantId, occurredAt], map: "audit_events_tenant_occurred_idx")
+  @@index([tenantId, action], map: "audit_events_tenant_action_idx")
 }

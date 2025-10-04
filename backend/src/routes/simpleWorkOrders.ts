@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { createWorkOrderValidator } from '../validators/workOrderValidators';
 import { asyncHandler, fail, ok } from '../utils/response';
+import { auditLog } from '../middleware/audit';
 
 const router = Router();
 
@@ -136,6 +137,7 @@ router.get(
 
 router.post(
   '/',
+  auditLog('create', 'work_order'),
   asyncHandler(async (req, res) => {
     const parseResult = workOrderCreateSchema.safeParse(req.body);
 
@@ -176,6 +178,11 @@ router.post(
         assignee: { select: { id: true, name: true } },
       },
     });
+
+    res.locals.auditMetadata = {
+      workOrderId: workOrder.id,
+      status: workOrder.status,
+    };
 
     return ok(res, mapWorkOrder(workOrder));
   }),
