@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { createWorkOrderValidator } from '../validators/workOrderValidators';
 import { asyncHandler, fail, ok } from '../utils/response';
+import { emitTenantWebhookEvent } from '../lib/webhookDispatcher';
 
 const router = Router();
 
@@ -177,7 +178,13 @@ router.post(
       },
     });
 
-    return ok(res, mapWorkOrder(workOrder));
+    const normalized = mapWorkOrder(workOrder);
+
+    void emitTenantWebhookEvent(defaultUser.tenantId, 'work-order.created', {
+      workOrder: normalized,
+    });
+
+    return ok(res, normalized);
   }),
 );
 
