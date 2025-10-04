@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 
 export type Density = 'comfortable' | 'compact';
 
@@ -8,6 +8,16 @@ export interface ProTableColumn<T> {
   accessor?: (row: T) => ReactNode;
   width?: string;
   align?: 'left' | 'right' | 'center';
+}
+
+interface PaginationConfig {
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  totalItems: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange?: (size: number) => void;
+  pageSizeOptions?: number[];
 }
 
 interface ProTableProps<T> {
@@ -20,9 +30,27 @@ interface ProTableProps<T> {
   onSelectionChange?: (ids: string[]) => void;
   rowActions?: (row: T) => ReactNode;
   stickyHeader?: boolean;
+  onExportCsv?: () => void;
+  onExportXlsx?: () => void;
+  exportDisabled?: boolean;
+  pagination?: PaginationConfig;
 }
 
-export function ProTable<T>({ data, columns, getRowId, loading, emptyState, onRowClick, onSelectionChange, rowActions, stickyHeader = true }: ProTableProps<T>) {
+export function ProTable<T>({
+  data,
+  columns,
+  getRowId,
+  loading,
+  emptyState,
+  onRowClick,
+  onSelectionChange,
+  rowActions,
+  stickyHeader = true,
+  onExportCsv,
+  onExportXlsx,
+  exportDisabled,
+  pagination,
+}: ProTableProps<T>) {
   const [selected, setSelected] = useState<string[]>([]);
   const [density, setDensity] = useState<Density>('comfortable');
   const [visibleColumns, setVisibleColumns] = useState(() => new Set(columns.map((column) => column.key)));
@@ -56,27 +84,10 @@ export function ProTable<T>({ data, columns, getRowId, loading, emptyState, onRo
 
   const columnList = useMemo(() => columns.filter((column) => visibleColumns.has(column.key)), [columns, visibleColumns]);
 
-  const handleExport = () => {
-    const header = ['"id"', ...columnList.map((column) => `"${String(column.header)}"`)].join(',');
-    const rows = data.map((row) => {
-      const values = columnList.map((column) => {
-        const value = column.accessor ? column.accessor(row) : (row as Record<string, unknown>)[column.key as string];
-        if (typeof value === 'string' || typeof value === 'number') {
-          return `"${String(value).replace(/"/g, '""')}"`;
-        }
-        return '""';
-      });
-      return [`"${getRowId(row)}"`, ...values].join(',');
-    });
-    const csv = [header, ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'workpro-export.csv';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+  useEffect(() => {
+    setSelected([]);
+    onSelectionChange?.([]);
+  }, [data, onSelectionChange]);
 
   if (loading) {
     return (
@@ -100,6 +111,7 @@ export function ProTable<T>({ data, columns, getRowId, loading, emptyState, onRo
             type="button"
             className={`rounded-full px-3 py-1 ${density === 'comfortable' ? 'bg-brand text-white shadow' : 'text-mutedfg'}`}
             onClick={() => setDensity('comfortable')}
+            data-testid="pro-table-density-comfortable"
           >
             Comfortable
           </button>
@@ -107,6 +119,7 @@ export function ProTable<T>({ data, columns, getRowId, loading, emptyState, onRo
             type="button"
             className={`rounded-full px-3 py-1 ${density === 'compact' ? 'bg-brand text-white shadow' : 'text-mutedfg'}`}
             onClick={() => setDensity('compact')}
+            data-testid="pro-table-density-compact"
           >
             Compact
           </button>
@@ -116,6 +129,7 @@ export function ProTable<T>({ data, columns, getRowId, loading, emptyState, onRo
             type="button"
             className="rounded-xl border border-border px-3 py-2 text-xs font-semibold text-fg hover:bg-muted"
             onClick={() => setShowColumnMenu((prev) => !prev)}
+            data-testid="pro-table-column-toggle"
           >
             Columns
           </button>
@@ -140,6 +154,7 @@ export function ProTable<T>({ data, columns, getRowId, loading, emptyState, onRo
                           return next;
                         });
                       }}
+                      data-testid={`pro-table-column-${String(column.key)}-toggle`}
                     />
                   </label>
                 );
@@ -147,14 +162,31 @@ export function ProTable<T>({ data, columns, getRowId, loading, emptyState, onRo
             </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={handleExport}
-          className="rounded-xl border border-border px-3 py-2 text-xs font-semibold text-fg hover:bg-muted"
-        >
-          Export CSV
-        </button>
-        {rowActions && <div className="ml-auto text-xs font-semibold text-mutedfg">{selected.length} selected</div>}
+        <div className="flex items-center gap-2 ml-auto">
+          {typeof onExportCsv === 'function' && (
+            <button
+              type="button"
+              onClick={onExportCsv}
+              disabled={exportDisabled}
+              className="rounded-xl border border-border px-3 py-2 text-xs font-semibold text-fg hover:bg-muted disabled:opacity-60"
+              data-testid="pro-table-export-csv"
+            >
+              Export CSV
+            </button>
+          )}
+          {typeof onExportXlsx === 'function' && (
+            <button
+              type="button"
+              onClick={onExportXlsx}
+              disabled={exportDisabled}
+              className="rounded-xl border border-border px-3 py-2 text-xs font-semibold text-fg hover:bg-muted disabled:opacity-60"
+              data-testid="pro-table-export-xlsx"
+            >
+              Export XLSX
+            </button>
+          )}
+          {rowActions && <div className="text-xs font-semibold text-mutedfg" data-testid="pro-table-selection-count">{selected.length} selected</div>}
+        </div>
       </div>
       <div className="max-h-[60vh] overflow-auto">
         <table className="min-w-full table-fixed border-separate border-spacing-0 text-left">
@@ -166,6 +198,7 @@ export function ProTable<T>({ data, columns, getRowId, loading, emptyState, onRo
                   aria-label="Select all"
                   checked={allSelected}
                   onChange={handleToggleAll}
+                  data-testid="pro-table-select-all"
                 />
               </th>
               {columnList.map((column) => (
@@ -199,6 +232,7 @@ export function ProTable<T>({ data, columns, getRowId, loading, emptyState, onRo
                         event.stopPropagation();
                         handleToggleRow(row);
                       }}
+                      data-testid={`pro-table-row-select-${id}`}
                     />
                   </td>
                   {columnList.map((column) => (
@@ -220,6 +254,49 @@ export function ProTable<T>({ data, columns, getRowId, loading, emptyState, onRo
           </tbody>
         </table>
       </div>
+      {pagination && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-bg px-5 py-4 text-xs">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => pagination.onPageChange(Math.max(1, pagination.page - 1))}
+              disabled={pagination.page <= 1}
+              className="rounded-xl border border-border px-3 py-2 font-semibold text-fg hover:bg-muted disabled:opacity-60"
+              data-testid="pro-table-page-prev"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              onClick={() => pagination.onPageChange(Math.min(pagination.totalPages, pagination.page + 1))}
+              disabled={pagination.page >= pagination.totalPages}
+              className="rounded-xl border border-border px-3 py-2 font-semibold text-fg hover:bg-muted disabled:opacity-60"
+              data-testid="pro-table-page-next"
+            >
+              Next
+            </button>
+          </div>
+          <div className="flex items-center gap-3">
+            <span data-testid="pro-table-page-info">
+              Page {pagination.page} of {Math.max(pagination.totalPages, 1)} • {pagination.totalItems} records
+            </span>
+            {pagination.onPageSizeChange && (
+              <select
+                value={pagination.pageSize}
+                onChange={(event) => pagination.onPageSizeChange?.(Number(event.target.value))}
+                className="rounded-xl border border-border px-2 py-1 text-xs"
+                data-testid="pro-table-page-size"
+              >
+                {(pagination.pageSizeOptions ?? [10, 20, 50]).map((option) => (
+                  <option key={option} value={option}>
+                    {option} / page
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
