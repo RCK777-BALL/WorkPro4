@@ -14,7 +14,7 @@ import { normalizeObjectId } from './lib/normalizeObjectId';
 // Routes
 import authRoutes from './routes/auth';
 import summaryRoutes from './routes/summary';
-import workOrderRoutes from './routes/simpleWorkOrders';
+import workOrderRoutes from './routes/workOrders';
 import dashboardRoutes from './routes/dashboard';
 import assetRoutes from './routes/assets';
 import partRoutes from './routes/parts';

@@ -86,6 +86,7 @@ export function FilterBar({ filters, values, onChange, onReset, quickFilters = [
                 }`}
                 onClick={() => onChange(filter.key, active ? '' : filter.value)}
                 type="button"
+                data-testid={`filterbar-${filter.key}-${filter.value}`}
               >
                 {filter.label}
               </button>
@@ -96,6 +97,7 @@ export function FilterBar({ filters, values, onChange, onReset, quickFilters = [
               type="button"
               onClick={() => onReset()}
               className="ml-2 text-xs font-semibold uppercase tracking-wide text-mutedfg underline"
+              data-testid="filterbar-reset"
             >
               Clear all
             </button>
