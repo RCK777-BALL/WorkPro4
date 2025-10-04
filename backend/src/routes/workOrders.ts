@@ -10,6 +10,7 @@ import {
   priorityEnum,
   statusEnum,
 } from '../validators/workOrderValidators';
+import { auditLog } from '../middleware/audit';
 
 const router = Router();
 

@@ -248,6 +248,7 @@ router.get(
 
 router.post(
   '/',
+  auditLog('create', 'asset'),
   asyncHandler(async (req: AuthRequest, res) => {
     if (!req.user) {
       return fail(res, 401, 'Authentication required');
@@ -300,6 +301,7 @@ router.post(
 
 router.put(
   '/:id',
+  auditLog('update', 'asset'),
   asyncHandler(async (req: AuthRequest, res) => {
     if (!req.user) {
       return fail(res, 401, 'Authentication required');
@@ -504,6 +506,7 @@ router.patch(
 
 router.delete(
   '/:id',
+  auditLog('delete', 'asset'),
   asyncHandler(async (req: AuthRequest, res) => {
     if (!req.user) {
       return fail(res, 401, 'Authentication required');
