@@ -1,11 +1,15 @@
-export interface ApiResult<T> {
-  data: T | null;
-  error: {
-    code: number;
-    message: string;
-    details?: unknown;
-  } | null;
+export interface ApiError {
+  code: number;
+  message: string;
+  details?: unknown;
 }
+
+export interface ApiResponse<T> {
+  data: T | null;
+  error: ApiError | null;
+}
+
+export type ApiResult<T> = ApiResponse<T>;
 
 export interface PaginatedResult<T> {
   items: T[];

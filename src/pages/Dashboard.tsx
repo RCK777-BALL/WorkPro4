@@ -1,9 +1,15 @@
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, BellRing, Building2, ClipboardList, ShieldCheck, Users, Wrench } from 'lucide-react';
 import { KPICard } from '../components/premium/KPICard';
 import { DataBadge } from '../components/premium/DataBadge';
 import { ProTable, type ProTableColumn } from '../components/premium/ProTable';
 import { EmptyState } from '../components/premium/EmptyState';
-import { mockWorkOrders } from '../lib/mockWorkOrders';
+import type { ApiError, ApiResponse } from '../../shared/types/http';
+import type { WorkOrderSummary } from '../../shared/types/workOrder';
+import { api, isApiErrorResponse } from '../lib/api';
+import { formatDate } from '../lib/utils';
+import { toWorkOrderRow, type WorkOrderRow } from '../lib/workOrders';
 
 const kpiConfig = [
   {
@@ -40,21 +46,25 @@ const kpiConfig = [
   }
 ];
 
-const columns: ProTableColumn<(typeof mockWorkOrders)[number]>[] = [
+const columns: ProTableColumn<WorkOrderRow>[] = [
   { key: 'id', header: 'ID' },
   { key: 'title', header: 'Title' },
   {
     key: 'status',
     header: 'Status',
-    accessor: (row) => <DataBadge status={row.status ?? 'Open'} />
+    accessor: (row) => <DataBadge status={row.statusLabel} />
   },
   {
     key: 'priority',
     header: 'Priority',
-    accessor: (row) => <DataBadge status={row.priority ?? 'Medium'} />
+    accessor: (row) => <DataBadge status={row.priorityLabel} />
   },
-  { key: 'assignee', header: 'Owner' },
-  { key: 'dueDate', header: 'Due', accessor: (row) => row.dueDate ?? '—' }
+  {
+    key: 'assignee',
+    header: 'Owner',
+    accessor: (row) => row.assignee ?? 'Unassigned'
+  },
+  { key: 'dueDate', header: 'Due', accessor: (row) => (row.dueDate ? formatDate(row.dueDate) : '—') }
 ];
 
 const activity = [
@@ -89,6 +99,30 @@ const alerts = [
 ];
 
 export default function Dashboard() {
+  const {
+    data: workOrders = [],
+    isLoading,
+    isError,
+    error,
+  } = useQuery<WorkOrderRow[], ApiResponse<ApiError>>({
+    queryKey: ['dashboard', 'work-orders'],
+    queryFn: async () => {
+      const result = await api.get<WorkOrderSummary[]>('/work-orders');
+      if (!Array.isArray(result)) {
+        return [];
+      }
+      return result.map(toWorkOrderRow);
+    },
+  });
+
+  const tableData = useMemo(() => workOrders.slice(0, 8), [workOrders]);
+
+  const errorMessage = isError
+    ? isApiErrorResponse(error)
+      ? error.error.message
+      : 'Unable to load work orders'
+    : null;
+
   return (
     <div className="space-y-10">
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -121,11 +155,17 @@ export default function Dashboard() {
               <ArrowRight className="h-4 w-4" />
             </a>
           </div>
-          <div className="mt-6">
+          <div className="mt-6 space-y-4">
+            {errorMessage && (
+              <div className="rounded-2xl border border-danger/30 bg-danger/5 p-4 text-sm text-danger">
+                {errorMessage}
+              </div>
+            )}
             <ProTable
-              data={mockWorkOrders.slice(0, 8)}
+              data={tableData}
               columns={columns}
-              getRowId={(row) => row.id}
+              getRowId={(row) => row.id || row.title}
+              loading={isLoading}
               rowActions={(row) => (
                 <a href={`/work-orders/${row.id}`} className="text-sm font-semibold text-brand">
                   Inspect
