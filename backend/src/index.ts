@@ -19,6 +19,7 @@ import dashboardRoutes from './routes/dashboard';
 import assetRoutes from './routes/assets';
 import partRoutes from './routes/parts';
 import vendorRoutes from './routes/vendors';
+import purchaseOrderRoutes from './routes/purchaseOrders';
 import searchRoutes from './routes/search';
 
 
@@ -77,6 +78,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/work-orders', workOrderRoutes);
 app.use('/api/assets', assetRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/parts', partRoutes);
+app.use('/api/purchase-orders', purchaseOrderRoutes);
 
 // Error handling
 app.use(errorHandler);

@@ -44,12 +44,20 @@ function serializeWorkOrder(workOrder: {
   assigneeId: string | null;
   dueDate: Date | null;
   category: string | null;
-  attachments: Prisma.JsonValue | null;
+  attachments: string[];
   createdAt: Date;
   updatedAt: Date;
 }) {
   const attachments = Array.isArray(workOrder.attachments)
-    ? (workOrder.attachments as Prisma.JsonArray)
+    ? workOrder.attachments
+        .map((raw) => {
+          try {
+            return JSON.parse(raw) as Prisma.JsonValue;
+          } catch {
+            return null;
+          }
+        })
+        .filter((value): value is Prisma.JsonValue => value !== null)
     : [];
 
   return {
@@ -114,7 +122,7 @@ export async function createWorkOrder(req: TenantScopedRequest, res: Response) {
         assigneeId: data.assigneeId ?? null,
         dueDate: data.dueDate ? new Date(data.dueDate) : null,
         category: data.category ?? null,
-        attachments: (data.attachments ?? []) as Prisma.JsonValue,
+        attachments: (data.attachments ?? []).map((attachment) => JSON.stringify(attachment)),
       },
     });
 

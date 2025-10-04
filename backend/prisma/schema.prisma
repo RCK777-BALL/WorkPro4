@@ -12,9 +12,15 @@ model Tenant {
   name String
   slug String @unique
 
-  users      User[]
-  assets     Asset[]
-  workOrders WorkOrder[]
+  users         User[]
+  assets        Asset[]
+  workOrders    WorkOrder[]
+  parts         Part[]
+  warehouses    Warehouse[]
+  stockLevels   StockLevel[]
+  vendors       Vendor[]
+  purchaseOrders PurchaseOrder[]
+  downtimeLogs  DowntimeLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -155,23 +161,140 @@ model DowntimeLog {
   @@index([tenantId, assetId], map: "downtime_tenant_asset_idx")
 }
 
-model Part {
-  id        String @id @map("_id") @default(auto()) @db.ObjectId
-  tenantId  String @map("tenant_id") @db.ObjectId
-  siteId    String? @map("site_id") @db.ObjectId
-  name      String
-  sku       String? @unique
-  onHand    Int     @map("on_hand") @default(0)
-  minLevel  Int     @map("min_level") @default(0)
-  cost      Float?  @map("cost")
-  vendor    String?
+enum PurchaseOrderStatus {
+  draft
+  issued
+  received
+  closed
+}
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+model Vendor {
+  id        String   @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId  String   @map("tenant_id") @db.ObjectId
+  name      String
+  contact   Json?
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parts          Part[]          @relation("PreferredVendor")
+  purchaseOrders PurchaseOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("vendors")
+  @@index([tenantId])
+  @@index([tenantId, name])
+}
+
+model Warehouse {
+  id         String  @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId   String  @map("tenant_id") @db.ObjectId
+  name       String
+  code       String?
+  location   String?
+  isDefault  Boolean @map("is_default") @default(false)
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  stockLevels StockLevel[]
+  purchaseLines PurchaseOrderLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("warehouses")
+  @@index([tenantId])
+  @@unique([tenantId, code], map: "warehouse_tenant_code_unique")
+}
+
+model Part {
+  id               String  @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId         String  @map("tenant_id") @db.ObjectId
+  sku              String
+  name             String
+  description      String?
+  unitOfMeasure    String? @map("unit_of_measure")
+  cost             Float?  @map("unit_cost")
+  defaultMinLevel  Int     @map("default_min_level") @default(0)
+  defaultMaxLevel  Int     @map("default_max_level") @default(0)
+  preferredVendorId String? @map("preferred_vendor_id") @db.ObjectId
+
+  tenant          Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  preferredVendor Vendor?            @relation("PreferredVendor", fields: [preferredVendorId], references: [id])
+  stockLevels     StockLevel[]
+  purchaseLines   PurchaseOrderLine[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("parts")
   @@index([tenantId])
-  @@index([minLevel, onHand, tenantId], map: "parts_min_onhand_tenant_idx")
+  @@unique([tenantId, sku], map: "parts_tenant_sku_unique")
+}
+
+model StockLevel {
+  id          String     @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId    String     @map("tenant_id") @db.ObjectId
+  partId      String     @map("part_id") @db.ObjectId
+  warehouseId String     @map("warehouse_id") @db.ObjectId
+  onHand      Int        @map("on_hand") @default(0)
+  onOrder     Int        @map("on_order") @default(0)
+  allocated   Int        @default(0)
+  minLevel    Int        @map("min_level") @default(0)
+  maxLevel    Int        @map("max_level") @default(0)
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  part      Part      @relation(fields: [partId], references: [id], onDelete: Cascade)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("stock_levels")
+  @@unique([partId, warehouseId], map: "stock_levels_part_wh_unique")
+  @@index([tenantId, partId])
+}
+
+model PurchaseOrder {
+  id         String               @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId   String               @map("tenant_id") @db.ObjectId
+  vendorId   String               @map("vendor_id") @db.ObjectId
+  status     PurchaseOrderStatus  @default(draft)
+  number     String?
+  notes      String?
+  orderedAt  DateTime?            @map("ordered_at")
+  receivedAt DateTime?            @map("received_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  lines  PurchaseOrderLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("purchase_orders")
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+model PurchaseOrderLine {
+  id              String        @id @map("_id") @default(auto()) @db.ObjectId
+  tenantId        String        @map("tenant_id") @db.ObjectId
+  purchaseOrderId String        @map("purchase_order_id") @db.ObjectId
+  partId          String        @map("part_id") @db.ObjectId
+  warehouseId     String?       @map("warehouse_id") @db.ObjectId
+  quantity        Int           @default(0)
+  receivedQty     Int           @map("received_qty") @default(0)
+  unitCost        Float?        @map("unit_cost")
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  part          Part          @relation(fields: [partId], references: [id], onDelete: Cascade)
+  warehouse     Warehouse?    @relation(fields: [warehouseId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("purchase_order_lines")
+  @@index([tenantId])
+  @@index([purchaseOrderId])
+  @@index([partId])
 }
