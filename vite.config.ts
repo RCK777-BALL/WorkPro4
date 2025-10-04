@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import { configDefaults } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
@@ -27,14 +28,9 @@ export default defineConfig({
     },
   },
   test: {
-    include: [
-      'src/**/*.{test,spec}.{ts,tsx}',
-      'backend/src/**/*.{test,spec}.{ts,tsx}',
-    ],
-    environment: 'jsdom',
-    setupFiles: './src/tests/setup.ts',
     globals: true,
-    css: true,
-    exclude: ['tests/e2e/**'],
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
+    exclude: [...configDefaults.exclude, 'frontend/**'],
   },
 })
