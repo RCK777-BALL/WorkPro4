@@ -22,3 +22,27 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </BrowserRouter>
 );
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    void import('workbox-window')
+      .then(({ Workbox }) => {
+        const wb = new Workbox('/sw.js', { scope: '/' });
+
+        wb.addEventListener('waiting', () => {
+          void wb.messageSkipWaiting();
+        });
+
+        wb.addEventListener('controlling', () => {
+          window.location.reload();
+        });
+
+        void wb.register();
+      })
+      .catch((error) => {
+        if (import.meta.env.DEV) {
+          console.error('Failed to register service worker', error);
+        }
+      });
+  });
+}

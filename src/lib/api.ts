@@ -33,7 +33,7 @@ const baseURL = (() => {
   return `${withLeadingSlash}/api`;
 };
 
-const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_URL);
+export const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_URL);
 const TOKEN_STORAGE_KEY = 'auth_token';
 
 export interface ApiResult<T> {
@@ -42,7 +42,22 @@ export interface ApiResult<T> {
     code: number;
     message: string;
     details?: unknown;
+    offline?: boolean;
   } | null;
+}
+
+export class ApiRequestError extends Error {
+  readonly code: number;
+  readonly offline: boolean;
+  readonly details?: unknown;
+
+  constructor({ code, message, details, offline }: NonNullable<ApiResult<unknown>['error']>) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.code = code;
+    this.offline = Boolean(offline);
+    this.details = details;
+  }
 }
 
 export class ApiClient {
@@ -122,7 +137,7 @@ export class ApiClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<ApiResult<T>> {
-    const url = `${API_BASE_URL}${endpoint}`;
+    const url = ApiClient.resolveUrl(endpoint);
 
     const config: RequestInit = {
       ...options,
@@ -183,8 +198,10 @@ export class ApiClient {
         return {
           data: null,
           error: {
-            code: 503,
-            message: 'Backend unavailable and no mock data available',
+            code: 0,
+            message: 'Network unavailable. Changes will be synced when back online.',
+            details: error instanceof Error ? { message: error.message } : undefined,
+            offline: true,
           },
         } satisfies ApiResult<T>;
       }
