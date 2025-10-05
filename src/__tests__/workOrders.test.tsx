@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import WorkOrders from '../pages/WorkOrders';
-import { workOrdersApi } from '../lib/workOrdersApi';
+import { workOrdersApi } from '../lib/api';
 import { renderWithQueryClient } from '../test/utils';
 
 describe('WorkOrders page states', () => {
