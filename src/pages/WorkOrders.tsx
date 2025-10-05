@@ -9,27 +9,9 @@ import { SlideOver } from '../components/premium/SlideOver';
 import { ConfirmDialog } from '../components/premium/ConfirmDialog';
 import { DataBadge } from '../components/premium/DataBadge';
 import { EmptyState } from '../components/premium/EmptyState';
-import { useToast } from '../components/ui/toast';
-import { useCan } from '../lib/rbac';
-import {
-  isApiErrorResponse,
-  workOrdersApi,
-  type ApiError,
-  type ApiResponse,
-  type PaginatedWorkOrders,
-  type SaveWorkOrderPayload,
-  type WorkOrderPriority,
-  type WorkOrderRecord,
-  type WorkOrderStatus,
-} from '../lib/api';
-import {
-  errorMessage,
-  formatDate,
-  formatWorkOrderPriority,
-  formatWorkOrderStatus,
-  toTitleCase,
-} from '../lib/utils';
-import { utils, writeFile, read } from 'xlsx';
+import { api, isApiErrorResponse, workOrdersApi } from '../lib/api';
+import { formatDate, formatWorkOrderPriority, formatWorkOrderStatus } from '../lib/format';
+import { normalizeWorkOrders, type WorkOrderRecord } from '../lib/workOrders';
 
 type QueryState = {
   page: number;
@@ -678,7 +660,7 @@ export default function WorkOrders() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 text-xs font-semibold text-mutedfg">
-            <Filter className="h-4 w-4" />
+            <Filter className="w-4 h-4" />
             Filters active: {filtersActive}
           </div>
           <input
@@ -705,7 +687,7 @@ export default function WorkOrders() {
             disabled={exporting}
             data-testid="work-orders-export-csv"
           >
-            <Download className="mr-2 inline h-4 w-4" /> Export CSV
+            <Download className="inline w-4 h-4 mr-2" /> Export CSV
           </button>
           <button
             type="button"
@@ -721,28 +703,28 @@ export default function WorkOrders() {
             className="inline-flex items-center gap-2 rounded-2xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl"
             data-testid="work-orders-new"
           >
-            <Plus className="h-4 w-4" /> New work order
+            <Plus className="w-4 h-4" /> New work order
           </button>
         </div>
       </header>
 
-      <div className="space-y-4 rounded-3xl border border-border bg-surface p-5 shadow-xl">
-        <div className="flex flex-wrap items-center gap-3 border-b border-border/60 pb-4">
+      <div className="p-5 space-y-4 border shadow-xl rounded-3xl border-border bg-surface">
+        <div className="flex flex-wrap items-center gap-3 pb-4 border-b border-border/60">
           <div className="relative flex-1 min-w-[220px]">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-mutedfg" />
+            <Search className="absolute w-4 h-4 -translate-y-1/2 pointer-events-none left-4 top-1/2 text-mutedfg" />
             <input
               type="search"
               value={queryState.search}
               onChange={handleSearchChange}
               placeholder="Search work orders"
-              className="w-full rounded-2xl border border-border bg-white px-10 py-3 text-sm text-fg shadow-inner outline-none focus:ring-2 focus:ring-brand"
+              className="w-full px-10 py-3 text-sm bg-white border shadow-inner outline-none rounded-2xl border-border text-fg focus:ring-2 focus:ring-brand"
               data-testid="work-orders-search"
             />
           </div>
           <select
             value={queryState.sortBy}
             onChange={(event) => setQueryState((previous) => ({ ...previous, sortBy: event.target.value as QueryState['sortBy'], page: 1 }))}
-            className="rounded-2xl border border-border bg-white px-4 py-2 text-xs font-semibold text-fg shadow-sm"
+            className="px-4 py-2 text-xs font-semibold bg-white border shadow-sm rounded-2xl border-border text-fg"
             data-testid="work-orders-sort-field"
             disabled={sortingDisabled}
           >
@@ -755,7 +737,7 @@ export default function WorkOrders() {
           <select
             value={queryState.sortDir}
             onChange={(event) => setQueryState((previous) => ({ ...previous, sortDir: event.target.value as QueryState['sortDir'], page: 1 }))}
-            className="rounded-2xl border border-border bg-white px-4 py-2 text-xs font-semibold text-fg shadow-sm"
+            className="px-4 py-2 text-xs font-semibold bg-white border shadow-sm rounded-2xl border-border text-fg"
             data-testid="work-orders-sort-direction"
             disabled={sortingDisabled}
           >
@@ -769,7 +751,7 @@ export default function WorkOrders() {
             disabled={selectedIds.length === 0 || !canManage}
             data-testid="work-orders-complete"
           >
-            <ListChecks className="h-4 w-4" /> Mark complete
+            <ListChecks className="w-4 h-4" /> Mark complete
           </button>
           <button
             type="button"
@@ -778,7 +760,7 @@ export default function WorkOrders() {
             disabled={selectedIds.length === 0 || !canManage}
             data-testid="work-orders-archive"
           >
-            <Calendar className="h-4 w-4" /> Archive
+            <Calendar className="w-4 h-4" /> Archive
           </button>
           <button
             type="button"
@@ -787,7 +769,7 @@ export default function WorkOrders() {
             disabled={selectedIds.length === 0 || !canManage}
             data-testid="work-orders-duplicate"
           >
-            <Copy className="h-4 w-4" /> Duplicate
+            <Copy className="w-4 h-4" /> Duplicate
           </button>
           <button
             type="button"
@@ -796,7 +778,7 @@ export default function WorkOrders() {
             disabled={selectedIds.length === 0 || !canDelete}
             data-testid="work-orders-delete"
           >
-            <Trash2 className="h-4 w-4" /> Delete
+            <Trash2 className="w-4 h-4" /> Delete
           </button>
         </div>
 
@@ -810,7 +792,7 @@ export default function WorkOrders() {
         />
 
         {queryErrorMessage && (
-          <div className="flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning" data-testid="work-orders-error">
+          <div className="flex items-start gap-3 px-4 py-3 text-sm border rounded-2xl border-warning/30 bg-warning/10 text-warning" data-testid="work-orders-error">
             <AlertTriangle className="mt-0.5 h-4 w-4" />
             <span>{queryErrorMessage}</span>
           </div>
@@ -831,7 +813,7 @@ export default function WorkOrders() {
                   event.stopPropagation();
                   navigate(`/work-orders/${row.id}`);
                 }}
-                className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-brand hover:bg-brand/10"
+                className="px-3 py-1 text-xs font-semibold border rounded-full border-border text-brand hover:bg-brand/10"
                 data-testid={`work-orders-view-${row.id}`}
               >
                 View
@@ -842,7 +824,7 @@ export default function WorkOrders() {
                   event.stopPropagation();
                   openEditDrawer(row.id);
                 }}
-                className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-fg hover:bg-muted"
+                className="px-3 py-1 text-xs font-semibold border rounded-full border-border text-fg hover:bg-muted"
                 data-testid={`work-orders-edit-${row.id}`}
                 disabled={!canManage}
               >
@@ -854,7 +836,7 @@ export default function WorkOrders() {
             <EmptyState
               title="No work orders found"
               description="Try changing your filters or creating a new work order."
-              icon={<Calendar className="h-8 w-8" />}
+              icon={<Calendar className="w-8 h-8" />}
             />
           }
           onExportCsv={() => exportCurrentQuery('csv')}
@@ -883,17 +865,17 @@ export default function WorkOrders() {
             Title
             <input
               {...register('title', { required: 'Title is required' })}
-              className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+              className="w-full px-4 py-2 mt-2 text-sm bg-white border shadow-inner rounded-2xl border-border text-fg focus:outline-none focus:ring-2 focus:ring-brand"
               data-testid="work-orders-form-title"
               disabled={createMutation.isPending || updateMutation.isPending}
             />
-            {errors.title && <span className="mt-1 block text-xs text-danger">{errors.title.message}</span>}
+            {errors.title && <span className="block mt-1 text-xs text-danger">{errors.title.message}</span>}
           </label>
           <label className="block text-sm font-semibold text-mutedfg">
             Description
             <textarea
               {...register('description')}
-              className="mt-2 h-32 w-full rounded-2xl border border-border bg-white px-4 py-3 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+              className="w-full h-32 px-4 py-3 mt-2 text-sm bg-white border shadow-inner rounded-2xl border-border text-fg focus:outline-none focus:ring-2 focus:ring-brand"
               data-testid="work-orders-form-description"
               disabled={createMutation.isPending || updateMutation.isPending}
             />
@@ -903,7 +885,7 @@ export default function WorkOrders() {
               Status
               <select
                 {...register('status')}
-                className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+                className="w-full px-4 py-2 mt-2 text-sm bg-white border shadow-inner rounded-2xl border-border text-fg focus:outline-none focus:ring-2 focus:ring-brand"
                 data-testid="work-orders-form-status"
                 disabled={createMutation.isPending || updateMutation.isPending}
               >
@@ -918,7 +900,7 @@ export default function WorkOrders() {
               Priority
               <select
                 {...register('priority')}
-                className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+                className="w-full px-4 py-2 mt-2 text-sm bg-white border shadow-inner rounded-2xl border-border text-fg focus:outline-none focus:ring-2 focus:ring-brand"
                 data-testid="work-orders-form-priority"
                 disabled={createMutation.isPending || updateMutation.isPending}
               >
@@ -935,7 +917,7 @@ export default function WorkOrders() {
             <input
               type="date"
               {...register('dueDate')}
-              className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+              className="w-full px-4 py-2 mt-2 text-sm bg-white border shadow-inner rounded-2xl border-border text-fg focus:outline-none focus:ring-2 focus:ring-brand"
               data-testid="work-orders-form-due"
               disabled={createMutation.isPending || updateMutation.isPending}
             />
@@ -944,7 +926,7 @@ export default function WorkOrders() {
             Category
             <input
               {...register('category')}
-              className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+              className="w-full px-4 py-2 mt-2 text-sm bg-white border shadow-inner rounded-2xl border-border text-fg focus:outline-none focus:ring-2 focus:ring-brand"
               data-testid="work-orders-form-category"
               disabled={createMutation.isPending || updateMutation.isPending}
             />
@@ -953,7 +935,7 @@ export default function WorkOrders() {
             Assignee ID
             <input
               {...register('assigneeId')}
-              className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+              className="w-full px-4 py-2 mt-2 text-sm bg-white border shadow-inner rounded-2xl border-border text-fg focus:outline-none focus:ring-2 focus:ring-brand"
               data-testid="work-orders-form-assignee"
               disabled={createMutation.isPending || updateMutation.isPending}
             />
@@ -962,7 +944,7 @@ export default function WorkOrders() {
             Asset ID
             <input
               {...register('assetId')}
-              className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+              className="w-full px-4 py-2 mt-2 text-sm bg-white border shadow-inner rounded-2xl border-border text-fg focus:outline-none focus:ring-2 focus:ring-brand"
               data-testid="work-orders-form-asset"
               disabled={createMutation.isPending || updateMutation.isPending}
             />
@@ -971,7 +953,7 @@ export default function WorkOrders() {
             <button
               type="button"
               onClick={closeDrawer}
-              className="rounded-2xl border border-border px-4 py-2 text-sm font-semibold text-fg"
+              className="px-4 py-2 text-sm font-semibold border rounded-2xl border-border text-fg"
               data-testid="work-orders-form-cancel"
               disabled={createMutation.isPending || updateMutation.isPending}
             >
@@ -979,7 +961,7 @@ export default function WorkOrders() {
             </button>
             <button
               type="submit"
-              className="rounded-2xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-lg disabled:opacity-60"
+              className="px-4 py-2 text-sm font-semibold text-white shadow-lg rounded-2xl bg-brand disabled:opacity-60"
               data-testid="work-orders-form-submit"
               disabled={createMutation.isPending || updateMutation.isPending || !canManage}
             >
@@ -1001,7 +983,7 @@ export default function WorkOrders() {
 
       {isImporting && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/40">
-          <div className="rounded-2xl bg-white px-6 py-4 text-sm font-semibold text-fg shadow-xl">Importing work orders…</div>
+          <div className="px-6 py-4 text-sm font-semibold bg-white shadow-xl rounded-2xl text-fg">Importing work orders…</div>
         </div>
       )}
     </div>

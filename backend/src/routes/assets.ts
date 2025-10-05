@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import type { Asset, Prisma } from '@prisma/client';
+import type { AssetBomItem, Prisma } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { prisma } from '../db';
 import { asyncHandler, fail, ok } from '../utils/response';
@@ -37,11 +37,22 @@ const emptyToUndefined = (value: unknown) => {
   return value;
 };
 
+const normalizeOptionalString = (value: unknown) => {
+  if (value === undefined) {
+    return undefined;
+  }
   if (value === null) {
     return null;
   }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length === 0 ? null : trimmed;
+  }
+  return value;
+};
 
-  if (typeof value === 'string' && value.trim() === '') {
+const normalizeOptionalNumber = (value: unknown) => {
+  if (value === undefined) {
     return undefined;
   }
   if (value === null) {
@@ -52,7 +63,7 @@ const emptyToUndefined = (value: unknown) => {
   }
   if (typeof value === 'string') {
     const trimmed = value.trim();
-    if (!trimmed) {
+    if (trimmed.length === 0) {
       return null;
     }
     const parsed = Number(trimmed);
@@ -61,7 +72,7 @@ const emptyToUndefined = (value: unknown) => {
   return value;
 };
 
-const normalizeNullableDate = (value: unknown) => {
+const normalizeOptionalDate = (value: unknown) => {
   if (value === undefined) {
     return undefined;
   }
@@ -69,10 +80,21 @@ const normalizeNullableDate = (value: unknown) => {
     return null;
   }
   if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? value : value;
+    return value;
   }
-  if (typeof value === 'string' && value.trim()) {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      return value;
+    }
     const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? value : parsed;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+    const parsed = new Date(trimmed);
     return Number.isNaN(parsed.getTime()) ? value : parsed;
   }
   return value;
@@ -105,6 +127,129 @@ const assetPayloadSchema = z
 const updateAssetSchema = assetPayloadSchema.partial().strict();
 
 type AssetStatus = z.infer<typeof assetStatusEnum>;
+
+const optionalCriticality = z.preprocess(
+  (value) => {
+    if (value === undefined || value === null || value === '') {
+      return undefined;
+    }
+    if (typeof value === 'number') {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return undefined;
+      }
+      const parsed = Number(trimmed);
+      return Number.isFinite(parsed) ? parsed : value;
+    }
+    return value;
+  },
+  z.number().int().min(1).max(5).optional(),
+);
+
+const optionalObjectId = z.preprocess(
+  (value) => {
+    if (value === undefined || value === null || value === '') {
+      return undefined;
+    }
+    return value;
+  },
+  z
+    .string()
+    .regex(objectIdRegex, 'Invalid identifier')
+    .optional(),
+);
+
+const bomLineSchema = z.object({
+  id: optionalObjectId.optional(),
+  reference: z.string().trim().min(1, 'Reference is required'),
+  description: z.string().trim().min(1, 'Description is required'),
+  quantity: z.preprocess(
+    normalizeOptionalNumber,
+    z.union([z.number().min(0), z.null()]).optional(),
+  ),
+  unit: z.preprocess(normalizeOptionalString, z.union([z.string(), z.null()]).optional()),
+  notes: z.preprocess(normalizeOptionalString, z.union([z.string(), z.null()]).optional()),
+  position: z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === '') {
+        return undefined;
+      }
+      if (typeof value === 'number') {
+        return value;
+      }
+      if (typeof value === 'string') {
+        const parsed = Number(value.trim());
+        return Number.isFinite(parsed) ? parsed : value;
+      }
+      return value;
+    }, z.number().int().min(0).optional()),
+});
+
+const createAssetSchema = assetPayloadSchema.extend({
+  criticality: optionalCriticality,
+  manufacturer: z.preprocess(
+    normalizeOptionalString,
+    z.union([z.string().trim().min(1), z.null()]).optional(),
+  ),
+  modelNumber: z.preprocess(
+    normalizeOptionalString,
+    z.union([z.string().trim().min(1), z.null()]).optional(),
+  ),
+  serialNumber: z.preprocess(
+    normalizeOptionalString,
+    z.union([z.string().trim().min(1), z.null()]).optional(),
+  ),
+  commissionedAt: z.preprocess(
+    normalizeOptionalDate,
+    z.union([z.coerce.date(), z.null()]).optional(),
+  ),
+  warrantyProvider: z.preprocess(
+    normalizeOptionalString,
+    z.union([z.string().trim().min(1), z.null()]).optional(),
+  ),
+  warrantyContact: z.preprocess(
+    normalizeOptionalString,
+    z.union([z.string().trim().min(1), z.null()]).optional(),
+  ),
+  warrantyExpiresAt: z.preprocess(
+    normalizeOptionalDate,
+    z.union([z.coerce.date(), z.null()]).optional(),
+  ),
+  warrantyNotes: z.preprocess(
+    normalizeOptionalString,
+    z.union([z.string().trim().min(1), z.null()]).optional(),
+  ),
+  siteId: optionalObjectId,
+  areaId: optionalObjectId,
+  lineId: optionalObjectId,
+  stationId: optionalObjectId,
+});
+
+const lifecycleUpdateSchema = createAssetSchema.partial().extend({
+  bomLines: z.array(bomLineSchema).optional(),
+});
+
+type AssetWithRelations = Prisma.AssetGetPayload<{
+  include: {
+    site: true;
+    area: true;
+    line: true;
+    station: true;
+  };
+}>;
+
+type AssetWithLifecycle = Prisma.AssetGetPayload<{
+  include: {
+    site: true;
+    area: true;
+    line: true;
+    station: true;
+    bomItems: true;
+  };
+}>;
 
 type TenantScopedWhere = {
   tenantId: string;
@@ -299,6 +444,25 @@ router.post(
   }),
 );
 
+async function assertAssetAccess(req: AuthRequest, assetId: string) {
+  if (!req.user) {
+    return null;
+  }
+
+  const asset = await prisma.asset.findFirst({
+    where: { id: assetId, tenantId: req.user.tenantId },
+    include: {
+      site: true,
+      area: true,
+      line: true,
+      station: true,
+      bomItems: true,
+    },
+  });
+
+  return asset;
+}
+
 router.put(
   '/:id',
   auditLog('update', 'asset'),
@@ -309,11 +473,50 @@ router.put(
 
     const payload = assetPayloadSchema.parse(req.body);
 
-    if (!asset) {
+    const scope = buildTenantScope({ tenantId: req.user.tenantId, siteId: req.user.siteId ?? null });
+    const existing = await prisma.asset.findFirst({
+      where: { id: req.params.id, ...scope },
+      select: { id: true },
+    });
+
+    if (!existing) {
       return fail(res, 404, 'Asset not found');
     }
 
-    return ok(res, serializeAssetLifecycle(asset));
+    const data: Prisma.AssetUpdateInput = {
+      code: payload.code,
+      name: payload.name,
+    };
+
+    if (payload.location !== undefined) {
+      data.location = payload.location;
+    }
+    if (payload.category !== undefined) {
+      data.category = payload.category;
+    }
+    if (payload.purchaseDate !== undefined) {
+      data.purchaseDate = payload.purchaseDate;
+    }
+    if (payload.cost !== undefined) {
+      data.cost = payload.cost;
+    }
+    if (payload.status !== undefined) {
+      data.status = payload.status;
+    }
+
+    const updated = await prisma.asset.update({
+      where: { id: existing.id },
+      data,
+      include: {
+        site: true,
+        area: true,
+        line: true,
+        station: true,
+        bomItems: true,
+      },
+    });
+
+    return ok(res, serializeAssetLifecycle(updated));
   }),
 );
 
@@ -324,28 +527,23 @@ router.get(
       return fail(res, 401, 'Authentication required');
     }
 
-    const existing = await prisma.asset.findFirst({
+    const scope = buildTenantScope({ tenantId: req.user.tenantId, siteId: req.user.siteId ?? null });
+    const asset = await prisma.asset.findFirst({
       where: { id: req.params.id, ...scope },
-    });
-
-    if (!existing) {
-      return res.status(404).json({ ok: false, error: 'Asset not found' });
-    }
-
-    const updated = await prisma.asset.update({
-      where: { id: existing.id },
-      data: {
-        code: payload.code,
-        name: payload.name,
-        location: payload.location,
-        category: payload.category,
-        purchaseDate: payload.purchaseDate,
-        cost: payload.cost,
-        status: payload.status ?? existing.status,
+      include: {
+        site: true,
+        area: true,
+        line: true,
+        station: true,
+        bomItems: true,
       },
     });
 
-    return res.json({ ok: true, asset: serializeAsset(updated) });
+    if (!asset) {
+      return fail(res, 404, 'Asset not found');
+    }
+
+    return ok(res, serializeAssetLifecycle(asset));
   }),
 );
 

@@ -1,31 +1,10 @@
-import { isApiErrorResponse } from './api';
-
-export function formatDateTime(dateString: string): string {
-  const date = new Date(dateString);
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  }).format(date);
-}
-
-export function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  }).format(date);
-}
-
-export function formatCurrency(amount: number, currency = 'USD'): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency
-  }).format(amount);
-}
+export {
+  formatDateTime,
+  formatDate,
+  formatCurrency,
+  formatWorkOrderPriority,
+  formatWorkOrderStatus,
+} from './format';
 
 export function getStatusColor(status: string): string {
   const colors: Record<string, string> = {
@@ -54,6 +33,7 @@ export function getPriorityColor(priority: string): string {
 export function cn(...classes: (string | undefined | null | false)[]): string {
   return classes.filter(Boolean).join(' ');
 }
+
 
 export function formatWorkOrderStatus(value: string): string {
   const normalized = value.replace(/_/g, ' ').trim();
@@ -84,29 +64,3 @@ export function toTitleCase(value: string): string {
     .join(' ');
 }
 
-export function errorMessage(error: unknown, fallback = 'Request failed'): string {
-  if (!error) {
-    return fallback;
-  }
-
-  if (typeof error === 'string' && error.trim().length > 0) {
-    return error;
-  }
-
-  if (isApiErrorResponse(error)) {
-    return error.error.message ?? fallback;
-  }
-
-  if (error instanceof Error) {
-    return error.message || fallback;
-  }
-
-  if (typeof error === 'object' && error !== null && 'message' in error) {
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === 'string' && message.trim().length > 0) {
-      return message;
-    }
-  }
-
-  return fallback;
-}
