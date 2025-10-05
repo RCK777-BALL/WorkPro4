@@ -4,6 +4,7 @@ import { prisma } from '../db';
 import { createWorkOrderValidator } from '../validators/workOrderValidators';
 import { asyncHandler, fail, ok } from '../utils/response';
 import { authenticateToken, type AuthRequest } from '../middleware/auth';
+import { emitTenantWebhookEvent } from '../lib/webhookDispatcher';
 
 const router = Router();
 
@@ -197,7 +198,7 @@ router.post(
 
     const normalized = mapWorkOrder(workOrder);
 
-    void emitTenantWebhookEvent(defaultUser.tenantId, 'work-order.created', {
+    void emitTenantWebhookEvent(req.user.tenantId, 'work-order.created', {
       workOrder: normalized,
     });
 
