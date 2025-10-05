@@ -34,6 +34,10 @@ const assetStatuses = ['operational', 'maintenance', 'down', 'retired', 'decommi
 
 type AssetStatus = (typeof assetStatuses)[number];
 
+const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
+const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
+const DEFAULT_SORT = 'updatedAt:desc';
+
 
 export interface AssetRecord {
   id: string;
@@ -95,23 +99,26 @@ type DrawerState =
   | null;
 
 const assetColumns: ProTableColumn<AssetRecord>[] = [
-  { key: 'code', header: 'Tag' },
-  { key: 'name', header: 'Asset' },
-  { key: 'location', header: 'Location' },
-  { key: 'category', header: 'Category' },
+  { key: 'code', header: 'Tag', sortable: true },
+  { key: 'name', header: 'Asset', sortable: true },
+  { key: 'location', header: 'Location', sortable: true },
+  { key: 'category', header: 'Category', sortable: true },
   {
     key: 'cost',
     header: 'Cost',
+    sortable: true,
     accessor: (row) => (row.cost != null ? formatCurrency(row.cost) : '—'),
   },
   {
     key: 'status',
     header: 'Status',
-    accessor: (row) => <DataBadge status={row.status} />, 
+    sortable: true,
+    accessor: (row) => <DataBadge status={row.status} />,
   },
   {
     key: 'updatedAt',
     header: 'Updated',
+    sortable: true,
     accessor: (row) => new Date(row.updatedAt).toLocaleDateString(),
   },
 ];
@@ -179,29 +186,48 @@ function buildQueryString(params: Record<string, string | number | undefined | n
   return qs ? `?${qs}` : '';
 }
 
+type SortState = { key: string; direction: 'asc' | 'desc' };
+
+const [DEFAULT_SORT_KEY, DEFAULT_SORT_DIRECTION] = DEFAULT_SORT.split(':') as [string, string];
+const DEFAULT_SORT_DIRECTION_NORMALIZED: 'asc' | 'desc' = DEFAULT_SORT_DIRECTION === 'asc' ? 'asc' : 'desc';
+
+function parseSortParam(sortValue: string | null | undefined): SortState {
+  const [rawKey, rawDirection] = (sortValue ?? DEFAULT_SORT).split(':');
+  const key = rawKey && rawKey.length > 0 ? rawKey : DEFAULT_SORT_KEY;
+  const direction = rawDirection === 'asc' ? 'asc' : rawDirection === 'desc' ? 'desc' : DEFAULT_SORT_DIRECTION_NORMALIZED;
+  return { key, direction };
+}
+
+function formatSortParam(sortState: SortState): string {
+  return `${sortState.key}:${sortState.direction}`;
+}
+
 function useAssetFilters(searchParams: URLSearchParams) {
   const parsedPage = Number.parseInt(searchParams.get('page') ?? '1', 10);
-  const parsedPageSize = Number.parseInt(searchParams.get('pageSize') ?? '10', 10);
+  const parsedPageSize = Number.parseInt(searchParams.get('pageSize') ?? String(DEFAULT_PAGE_SIZE), 10);
   const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
-  const rawPageSize = Number.isFinite(parsedPageSize) && parsedPageSize > 0 ? parsedPageSize : 10;
-  const pageSize = Math.min(Math.max(rawPageSize, 5), 100);
+  const pageSize = Number.isFinite(parsedPageSize) && parsedPageSize > 0 ? parsedPageSize : DEFAULT_PAGE_SIZE;
+  const normalizedPageSize = PAGE_SIZE_OPTIONS.includes(pageSize as (typeof PAGE_SIZE_OPTIONS)[number])
+    ? pageSize
+    : DEFAULT_PAGE_SIZE;
   const search = searchParams.get('search') ?? '';
   const status = searchParams.get('status') ?? '';
   const location = searchParams.get('location') ?? '';
   const category = searchParams.get('category') ?? '';
-  const sort = searchParams.get('sort') ?? 'createdAt:desc';
+  const sort = searchParams.get('sort') ?? DEFAULT_SORT;
 
   const filters = useMemo(
-    () => ({ page, pageSize, search, status, location, category, sort }),
-    [page, pageSize, search, status, location, category, sort],
+    () => ({ page, pageSize: normalizedPageSize, search, status, location, category, sort }),
+    [page, normalizedPageSize, search, status, location, category, sort],
   );
 
-  return { filters, page, pageSize, search, status, location, category, sort };
+  return { filters, page, pageSize: normalizedPageSize, search, status, location, category, sort };
 }
 
 export default function Assets() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { filters, page, pageSize, search, status, location, category } = useAssetFilters(searchParams);
+  const sortState = useMemo(() => parseSortParam(filters.sort), [filters.sort]);
   const [drawerState, setDrawerState] = useState<DrawerState>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -239,7 +265,15 @@ export default function Assets() {
   const hierarchy = hierarchyData?.sites ?? [];
 
   const assets = data?.assets ?? [];
-  const meta = data?.meta ?? { page: 1, pageSize: 10, total: 0, totalPages: 1 };
+  const meta = data?.meta ?? { page: 1, pageSize: DEFAULT_PAGE_SIZE, total: 0, totalPages: 1 };
+
+  const currentPage = meta.page && meta.page > 0 ? meta.page : page;
+  const currentPageSize = meta.pageSize && meta.pageSize > 0 ? meta.pageSize : pageSize;
+  const totalItems = meta.total ?? 0;
+  const totalPages = meta.totalPages && meta.totalPages > 0 ? meta.totalPages : Math.max(1, Math.ceil(totalItems / currentPageSize));
+  const hasRecords = totalItems > 0;
+  const startIndex = hasRecords ? (currentPage - 1) * currentPageSize + 1 : 0;
+  const endIndex = hasRecords ? Math.min(totalItems, startIndex + assets.length - 1) : 0;
 
   useEffect(() => {
     setSelectedIds([]);
@@ -281,6 +315,30 @@ export default function Assets() {
           next.delete('page');
         }
 
+        return next;
+      });
+    },
+    [setSearchParams],
+  );
+
+  const handleSortChange = useCallback(
+    (nextSort: SortState) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('sort', formatSortParam(nextSort));
+        next.set('page', '1');
+        return next;
+      });
+    },
+    [setSearchParams],
+  );
+
+  const handlePageSizeChange = useCallback(
+    (nextSize: number) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('pageSize', String(nextSize));
+        next.set('page', '1');
         return next;
       });
     },
@@ -807,6 +865,8 @@ export default function Assets() {
             loading={isLoading || isFetching}
             onRowClick={openViewDrawer}
             onSelectionChange={(ids) => setSelectedIds(ids)}
+            sort={sortState}
+            onSortChange={handleSortChange}
             rowActions={(row) => (
               <div className="flex items-center gap-2">
                 <button
@@ -916,29 +976,49 @@ export default function Assets() {
             ))}
           </div>
         )}
-        <div className="flex items-center justify-between px-5 py-4 text-sm border rounded-3xl border-border bg-surface text-mutedfg">
+        <div className="flex flex-col gap-3 px-5 py-4 text-sm border rounded-3xl border-border bg-surface text-mutedfg md:flex-row md:items-center md:justify-between">
           <div>
-            Showing {(page - 1) * meta.pageSize + Math.min(1, assets.length)}-
-            {(page - 1) * meta.pageSize + assets.length} of {meta.total} assets
+            {hasRecords ? (
+              <span>
+                Showing {startIndex}-{endIndex} of {totalItems} assets
+              </span>
+            ) : (
+              <span>No assets to display</span>
+            )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-mutedfg">
+              <span>Rows per page</span>
+              <select
+                value={currentPageSize}
+                onChange={(event) => handlePageSizeChange(Number(event.target.value))}
+                className="rounded-xl border border-border bg-bg px-2 py-1 text-xs font-semibold text-fg"
+                data-testid="asset-pagination-size"
+              >
+                {PAGE_SIZE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
             <Button
               variant="outline"
               size="sm"
-              disabled={page <= 1}
-              onClick={() => updateSearchParam('page', Math.max(page - 1, 1))}
+              disabled={currentPage <= 1}
+              onClick={() => updateSearchParam('page', Math.max(currentPage - 1, 1))}
               data-testid="asset-pagination-prev"
             >
               Previous
             </Button>
             <span className="text-xs font-semibold tracking-wide uppercase text-mutedfg">
-              Page {page} of {Math.max(meta.totalPages, 1)}
+              Page {currentPage} of {Math.max(totalPages, 1)}
             </span>
             <Button
               variant="outline"
               size="sm"
-              disabled={page >= meta.totalPages}
-              onClick={() => updateSearchParam('page', Math.min(page + 1, meta.totalPages))}
+              disabled={currentPage >= totalPages}
+              onClick={() => updateSearchParam('page', Math.min(currentPage + 1, totalPages))}
               data-testid="asset-pagination-next"
             >
               Next
