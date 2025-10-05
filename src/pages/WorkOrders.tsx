@@ -590,19 +590,29 @@ export default function WorkOrders() {
         const buffer = await file.arrayBuffer();
         const workbook = read(buffer, { type: 'array' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = utils.sheet_to_json<Record<string, unknown>>(sheet);
+        const rows: Record<string, unknown>[] = utils.sheet_to_json<Record<string, unknown>>(sheet);
         payload = rows
-          .map((row) => ({
+          .map((row: Record<string, unknown>): SaveWorkOrderPayload => ({
             title: String(row.title ?? row.Title ?? '').trim(),
             description: String(row.description ?? row.Description ?? '').trim() || undefined,
             status: normalizeStatus(row.status ?? row.Status),
             priority: normalizePriority(row.priority ?? row.Priority),
-            dueDate: typeof row.dueDate === 'string' ? row.dueDate : typeof row['Due Date'] === 'string' ? row['Due Date'] : undefined,
-            category: typeof row.category === 'string' ? row.category : typeof row.Category === 'string' ? row.Category : undefined,
+            dueDate:
+              typeof row.dueDate === 'string'
+                ? row.dueDate
+                : typeof row['Due Date'] === 'string'
+                  ? (row['Due Date'] as string)
+                  : undefined,
+            category:
+              typeof row.category === 'string'
+                ? row.category
+                : typeof row.Category === 'string'
+                  ? (row.Category as string)
+                  : undefined,
             assigneeId: typeof row.assigneeId === 'string' ? row.assigneeId : undefined,
             assetId: typeof row.assetId === 'string' ? row.assetId : undefined,
           }))
-          .filter((item) => item.title.trim().length >= 3);
+          .filter((item): item is SaveWorkOrderPayload => item.title.trim().length >= 3);
       }
 
       if (payload.length === 0) {
