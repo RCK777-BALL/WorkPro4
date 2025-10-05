@@ -2,6 +2,7 @@ export interface ApiError {
   code: number;
   message: string;
   details?: unknown;
+  offline?: boolean;
 }
 
 export interface ApiResponse<T> {

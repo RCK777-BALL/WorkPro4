@@ -4,9 +4,10 @@ import axios, {
   type AxiosInstance,
   type AxiosRequestConfig,
   type AxiosResponse,
+  type InternalAxiosRequestConfig,
   isAxiosError,
 } from 'axios';
-import type { ApiError, ApiResponse } from '../../shared/types/http';
+import type { ApiResponse } from '../../shared/types/http';
 import {
   ApiRequestError,
   isApiErrorResponse,
@@ -125,7 +126,7 @@ function applyDefaultAuthorization(token: string | null) {
   }
 }
 
-httpClient.interceptors.request.use((config) => {
+httpClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = getToken();
   if (token) {
     const headers =
@@ -140,8 +141,8 @@ httpClient.interceptors.request.use((config) => {
 });
 
 httpClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
+  (response: AxiosResponse<ApiResponse<unknown>>) => response,
+  (error: AxiosError<ApiResponse<unknown>>) => {
     if (isAxiosError(error)) {
       const status = error.response?.status;
       if (status === 401 || status === 403) {
