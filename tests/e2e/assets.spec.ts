@@ -1,191 +1,113 @@
-import { expect, test, type Route, type Request } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { setupAssetsApi } from './utils/assetApi';
 
-interface TestAsset {
-  id: string;
-  code: string;
-  name: string;
-  status: 'operational' | 'maintenance' | 'down' | 'retired' | 'decommissioned';
-  location: string | null;
-  category: string | null;
-  purchaseDate: string | null;
-  cost: number | null;
-  createdAt: string;
-  updatedAt: string;
-}
+test.describe('Assets experience', () => {
+  test('supports discovery, lifecycle management, imports/exports, and offline queues', async ({ page }) => {
+    const api = await setupAssetsApi(page);
 
-test.describe('Assets flow', () => {
-  test.beforeEach(async ({ page }) => {
-    const now = new Date().toISOString();
-    const assets: TestAsset[] = [
-      {
-        id: 'asset-1',
-        code: 'PUMP-001',
-        name: 'Main Pump',
-        status: 'operational',
-        location: 'Plant 1',
-        category: 'Utilities',
-        purchaseDate: now,
-        cost: 1500,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ];
-
-    await page.addInitScript((state) => {
-      window.localStorage.setItem(
-        'auth-storage',
-        JSON.stringify({ state: { user: state.user, isAuthenticated: true }, version: 0 }),
-      );
-      window.localStorage.setItem('auth_token', 'test-token');
-    }, {
-      user: {
-        id: '1',
-        tenantId: 'tenant-1',
-        email: 'admin@example.com',
-        name: 'Admin',
-        role: 'admin',
-        createdAt: now,
-        updatedAt: now,
-      },
-    });
-
-    await page.route('**/api/auth/me', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          id: '1',
-          tenantId: 'tenant-1',
-          email: 'admin@example.com',
-          name: 'Admin',
-          role: 'admin',
-          createdAt: now,
-          updatedAt: now,
-        }),
-      });
-    });
-
-    const fulfillAssets = async (route: Route) => {
-      const request: Request = route.request();
-      const url = new URL(request.url());
-      const method = request.method();
-
-      if (method === 'GET') {
-        const pageParam = Number.parseInt(url.searchParams.get('page') ?? '1', 10) || 1;
-        const pageSize = Number.parseInt(url.searchParams.get('pageSize') ?? '10', 10) || 10;
-        const start = (pageParam - 1) * pageSize;
-        const slice = assets.slice(start, start + pageSize);
-
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            ok: true,
-            assets: slice,
-            meta: {
-              page: pageParam,
-              pageSize,
-              total: assets.length,
-              totalPages: Math.max(1, Math.ceil(Math.max(assets.length, 1) / pageSize)),
-            },
-          }),
-        });
-        return;
-      }
-
-      const parsedBody =
-        typeof request.postDataJSON === 'function' ? request.postDataJSON() : undefined;
-      const body = (parsedBody ?? {}) as Partial<TestAsset> & Record<string, unknown>;
-
-      if (method === 'POST') {
-        const code = body.code as string;
-        const name = body.name as string;
-        const created: TestAsset = {
-          id: `asset-${assets.length + 1}`,
-          code,
-          name,
-          status: body.status ?? 'operational',
-          location: body.location ?? null,
-          category: body.category ?? null,
-          purchaseDate: body.purchaseDate ?? null,
-          cost: body.cost ?? null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        assets.unshift(created);
-        await route.fulfill({
-          status: 201,
-          contentType: 'application/json',
-          body: JSON.stringify({ ok: true, asset: created }),
-        });
-        return;
-      }
-
-      const id = url.pathname.split('/').pop() ?? '';
-      const existingIndex = assets.findIndex((asset) => asset.id === id);
-      if (existingIndex === -1) {
-        await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ ok: false }) });
-        return;
-      }
-
-      if (method === 'PUT') {
-        const updated = {
-          ...assets[existingIndex],
-          ...body,
-          location: body.location ?? null,
-          category: body.category ?? null,
-          purchaseDate: body.purchaseDate ?? null,
-          cost: body.cost ?? null,
-          updatedAt: new Date().toISOString(),
-        } satisfies TestAsset;
-        assets[existingIndex] = updated;
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ ok: true, asset: updated }),
-        });
-        return;
-      }
-
-      if (method === 'DELETE') {
-        const removed = assets.splice(existingIndex, 1)[0];
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ ok: true, asset: removed }),
-        });
-        return;
-      }
-
-      await route.fallback();
-    };
-
-    await page.route('**/api/assets*', fulfillAssets);
-  });
-
-  test('can create, edit, and delete an asset', async ({ page }) => {
     await page.goto('/assets');
 
     await expect(page.getByText('Main Pump')).toBeVisible();
 
+    const catalogSearch = page.getByTestId('asset-search-input');
+    await catalogSearch.fill('compressor');
+    await expect(page.getByText('Line Compressor')).toBeVisible();
+    await expect(page.locator('[data-testid="asset-row-edit-asset-1"]')).toHaveCount(0);
+
+    await catalogSearch.fill('');
+    await expect(page.locator('[data-testid="asset-row-edit-asset-1"]')).toHaveCount(1);
+
+    await page.getByTestId('asset-filter-status').selectOption('maintenance');
+    await expect(page.getByText('Packaging Robot')).toBeVisible();
+    await expect(page.locator('[data-testid="asset-row-edit-asset-1"]')).toHaveCount(0);
+
+    await page.getByTestId('asset-filter-location').fill('Line 2');
+    await expect(page.getByText('Line Compressor')).toBeVisible();
+
+    await page.getByTestId('asset-filter-status').selectOption('');
+    await page.getByTestId('asset-filter-location').fill('');
+
+    const hierarchyAsset = page.getByRole('button', { name: 'CMP-200 · Line Compressor' });
+    await hierarchyAsset.click();
+    await expect(hierarchyAsset).toHaveClass(/bg-brand/);
+
+    await expect(page.getByText('Page 1 of 2')).toBeVisible();
+    await page.getByTestId('asset-pagination-next').click();
+    await expect(page.getByText('Cooling Tower')).toBeVisible();
+    await page.getByTestId('asset-pagination-prev').click();
+    await expect(page.getByText('Main Pump')).toBeVisible();
+
+    const templateContents = await api.downloadTemplate(page);
+    expect(templateContents).toContain('Asset name');
+    expect(api.templateDownloads).toBe(1);
+
+    await api.requestExport(page, 'csv');
+    await api.requestExport(page, 'xlsx');
+    expect(api.exportCounts.csv).toBe(1);
+    expect(api.exportCounts.xlsx).toBe(1);
+
+    const imported = await api.importAssets(page, [
+      {
+        code: 'IMP-900',
+        name: 'Imported Pump',
+        status: 'operational',
+        location: 'Remote Site',
+        category: 'Imported',
+      },
+    ]);
+    await page.reload();
+    const importedId = imported.at(0)?.id;
+    if (importedId) {
+      await expect(page.getByTestId(`asset-row-edit-${importedId}`)).toBeVisible();
+    } else {
+      await expect(page.getByText('Imported Pump')).toBeVisible();
+    }
+
     await page.getByTestId('asset-toolbar-create').click();
-    await page.getByTestId('asset-form-name').fill('Conveyor');
-    await page.getByTestId('asset-form-code').fill('CON-100');
-    await page.getByTestId('asset-form-location').fill('Plant 3');
-    await page.getByTestId('asset-form-category').fill('Production');
+    await page.getByTestId('asset-form-name').fill('Conveyor Prime');
+    await page.getByTestId('asset-form-code').fill('CON-500');
+    await page.getByTestId('asset-form-location').fill('Line 1');
+    await page.getByTestId('asset-form-category').fill('Conveyance');
     await page.getByTestId('asset-form-cost').fill('9000');
-    await page.getByTestId('asset-form-purchaseDate').fill('2024-02-20');
+    await page.getByTestId('asset-form-purchaseDate').fill('2024-03-01');
     await page.getByTestId('asset-form-submit').click();
+    await expect(page.getByText('Conveyor Prime')).toBeVisible();
+    await expect(page.getByRole('status', { name: /Asset created/i })).toBeVisible();
 
-    await expect(page.getByText('Conveyor')).toBeVisible();
+    const createdId = api.getAssetIdByCode('CON-500');
+    expect(createdId).toBeDefined();
 
-    await page.getByTestId('asset-row-edit-asset-2').click();
-    await page.getByTestId('asset-form-location').fill('Plant 4');
+    if (createdId) {
+      await page.getByTestId(`asset-row-edit-${createdId}`).click();
+      await page.getByTestId('asset-form-location').fill('Line 4');
+      await page.getByTestId('asset-form-submit').click();
+      await expect(page.getByRole('status', { name: /Asset updated/i })).toBeVisible();
+      await expect(page.getByText('Line 4')).toBeVisible();
+
+      await page.getByTestId(`asset-row-delete-${createdId}`).click();
+      await expect(page.getByRole('status', { name: /Asset deleted/i })).toBeVisible();
+      await expect(page.locator(`[data-testid="asset-row-edit-${createdId}"]`)).toHaveCount(0);
+    }
+
+    api.goOfflineNext('create');
+    await page.getByTestId('asset-toolbar-create').click();
+    await page.getByTestId('asset-form-name').fill('Offline Valve');
+    await page.getByTestId('asset-form-code').fill('OFF-777');
+    await page.getByTestId('asset-form-location').fill('Boiler Room');
+    await page.getByTestId('asset-form-category').fill('Steam');
     await page.getByTestId('asset-form-submit').click();
+    await expect(page.getByRole('status', { name: /Unable to create asset/i })).toBeVisible();
+    await page.getByTestId('asset-form-cancel').click();
 
-    await expect(page.getByText('Plant 4')).toBeVisible();
+    const queued = api.flushQueuedMutations();
+    const offlineAsset = queued.find((asset) => asset.code === 'OFF-777');
+    expect(offlineAsset).toBeDefined();
 
-    await page.getByTestId('asset-row-delete-asset-2').click();
-    await expect(page.getByText('Conveyor')).not.toBeVisible({ timeout: 5000 });
+    await page.reload();
+    if (offlineAsset) {
+      await expect(page.getByTestId(`asset-row-edit-${offlineAsset.id}`)).toBeVisible();
+    } else {
+      await expect(page.getByText('Offline Valve')).toBeVisible();
+    }
   });
 });
