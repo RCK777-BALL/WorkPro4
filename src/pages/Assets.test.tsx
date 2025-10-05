@@ -3,7 +3,7 @@ import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { act, cleanup, screen, waitFor, fireEvent } from '@testing-library/react';
 import Assets from './Assets';
 import { renderWithProviders, createTestQueryClient } from '../tests/testUtils';
-import { api } from '../lib/api';
+import * as assetsApi from '../lib/assets';
 import type { ReactNode } from 'react';
 
 vi.mock('../lib/api', () => ({
@@ -15,6 +15,14 @@ vi.mock('../lib/api', () => ({
     setToken: vi.fn(),
     clearToken: vi.fn(),
   },
+}));
+
+vi.mock('../lib/assets', () => ({
+  assetStatuses: ['operational', 'maintenance', 'down', 'retired', 'decommissioned'] as const,
+  listAssets: vi.fn(),
+  createAsset: vi.fn(),
+  updateAsset: vi.fn(),
+  deleteAsset: vi.fn(),
 }));
 
 vi.mock('../components/ui/toast', () => ({
@@ -41,11 +49,11 @@ vi.mock('@tanstack/react-query', async () => {
   };
 });
 
-const mockedApi = api as unknown as {
-  get: ReturnType<typeof vi.fn>;
-  post: ReturnType<typeof vi.fn>;
-  put: ReturnType<typeof vi.fn>;
-  delete: ReturnType<typeof vi.fn>;
+const mockedAssetsApi = assetsApi as unknown as {
+  listAssets: ReturnType<typeof vi.fn>;
+  createAsset: ReturnType<typeof vi.fn>;
+  updateAsset: ReturnType<typeof vi.fn>;
+  deleteAsset: ReturnType<typeof vi.fn>;
 };
 
 const queryClientMocks = {
@@ -133,7 +141,7 @@ describe('Assets page', () => {
     };
 
     mockedUseQuery.mockReturnValue({
-      data: { ok: true, assets: [asset], meta: { page: 1, pageSize: 25, total: 1, totalPages: 1 } },
+      data: { assets: [asset], meta: { page: 1, pageSize: 10, total: 1, totalPages: 1 } },
       isLoading: false,
       isFetching: false,
     });
@@ -147,25 +155,22 @@ describe('Assets page', () => {
 
   it('submits the create asset form', async () => {
     mockedUseQuery.mockReturnValue({
-      data: { ok: true, assets: [], meta: { page: 1, pageSize: 25, total: 0, totalPages: 1 } },
+      data: { assets: [], meta: { page: 1, pageSize: 10, total: 0, totalPages: 1 } },
       isLoading: false,
       isFetching: false,
     });
 
-    mockedApi.post.mockResolvedValue({
-      ok: true,
-      asset: {
-        id: 'asset-2',
-        code: 'GEN-200',
-        name: 'Generator',
-        status: 'operational',
-        location: 'Plant 2',
-        category: 'Power',
-        purchaseDate: new Date('2024-01-15').toISOString(),
-        cost: 25000,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
+    mockedAssetsApi.createAsset.mockResolvedValue({
+      id: 'asset-2',
+      code: 'GEN-200',
+      name: 'Generator',
+      status: 'operational',
+      location: 'Plant 2',
+      category: 'Power',
+      purchaseDate: new Date('2024-01-15').toISOString(),
+      cost: 25000,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
 
     renderWithProviders(<Assets />, { queryClient: createTestQueryClient() });
@@ -189,7 +194,7 @@ describe('Assets page', () => {
     });
 
     await waitFor(() => {
-      expect(mockedApi.post).toHaveBeenCalledWith('/assets', {
+      expect(mockedAssetsApi.createAsset).toHaveBeenCalledWith({
         name: 'Generator',
         code: 'GEN-200',
         status: 'operational',
@@ -203,7 +208,7 @@ describe('Assets page', () => {
 
   it('updates the URL when filters change', async () => {
     mockedUseQuery.mockReturnValue({
-      data: { ok: true, assets: [], meta: { page: 1, pageSize: 25, total: 0, totalPages: 1 } },
+      data: { assets: [], meta: { page: 1, pageSize: 10, total: 0, totalPages: 1 } },
       isLoading: false,
       isFetching: false,
     });

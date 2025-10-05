@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -28,41 +28,18 @@ import { Button } from '../components/ui/button';
 import { useToast } from '../components/ui/toast';
 import { useCan } from '../lib/rbac';
 import { api } from '../lib/api';
+import {
+  assetStatuses,
+  type AssetRecord,
+  type AssetsResponse,
+  type AssetQuery,
+  type SaveAssetPayload,
+  createAsset as createAssetApi,
+  updateAsset as updateAssetApi,
+  deleteAsset as deleteAssetApi,
+  listAssets,
+} from '../lib/assets';
 import { cn, formatCurrency } from '../lib/utils';
-
-const assetStatuses = ['operational', 'maintenance', 'down', 'retired', 'decommissioned'] as const;
-
-type AssetStatus = (typeof assetStatuses)[number];
-
-const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
-const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
-const DEFAULT_SORT = 'updatedAt:desc';
-
-
-export interface AssetRecord {
-  id: string;
-  code: string;
-  name: string;
-  status: AssetStatus;
-  location: string | null;
-  category: string | null;
-  purchaseDate: string | null;
-  cost: number | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-
-interface AssetsResponse {
-  ok: boolean;
-  assets: AssetRecord[];
-  meta: {
-    page: number;
-    pageSize: number;
-    total: number;
-    totalPages: number;
-  };
-}
 
 const assetFormSchema = z.object({
   name: z.string().min(1, 'Asset name is required'),
@@ -132,7 +109,6 @@ const baseFilters: FilterDefinition[] = [
     options: assetStatuses.map((value) => ({ value, label: value.charAt(0).toUpperCase() + value.slice(1) })),
     testId: 'asset-filter-status',
   },
-  { key: 'location', label: 'Location', type: 'text', placeholder: 'Plant or area', testId: 'asset-filter-location' },
   { key: 'category', label: 'Category', type: 'text', placeholder: 'Category', testId: 'asset-filter-category' },
 ];
 
@@ -174,6 +150,178 @@ const countAssetsInArea = (area: HierarchyArea) =>
 const countAssetsInSite = (site: HierarchySite) =>
   site.areas.reduce((total, area) => total + countAssetsInArea(area), 0);
 
+interface LocationPopoverOption {
+  id: string;
+  name: string;
+  count: number;
+}
+
+interface LocationLevelSelectorProps {
+  label: string;
+  placeholder: string;
+  options: LocationPopoverOption[];
+  onSelect: (option: LocationPopoverOption | null) => void;
+  disabled?: boolean;
+  selected?: LocationPopoverOption | null;
+  testId?: string;
+}
+
+function LocationLevelSelector({
+  label,
+  placeholder,
+  options,
+  onSelect,
+  disabled = false,
+  selected = null,
+  testId,
+}: LocationLevelSelectorProps) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        triggerRef.current &&
+        popoverRef.current &&
+        !triggerRef.current.contains(event.target as Node) &&
+        !popoverRef.current.contains(event.target as Node)
+      ) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  useEffect(() => {
+    if (disabled) {
+      setOpen(false);
+    }
+  }, [disabled]);
+
+  return (
+    <div className="relative">
+      <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-mutedfg">{label}</span>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        disabled={disabled}
+        className={cn(
+          'flex min-w-[200px] items-center justify-between gap-2 rounded-2xl border border-border bg-white px-3 py-2 text-left text-sm font-semibold text-fg shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg',
+          disabled ? 'cursor-not-allowed opacity-60 hover:translate-y-0 hover:shadow-none' : '',
+        )}
+        data-testid={testId}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="truncate">{selected ? selected.name : placeholder}</span>
+        <span className="text-xs font-semibold uppercase tracking-wide text-mutedfg">{options.length}</span>
+      </button>
+      {open && (
+        <div
+          ref={popoverRef}
+          className="absolute z-50 mt-2 w-[260px] rounded-3xl border border-border bg-surface shadow-2xl"
+          role="listbox"
+        >
+          <div className="px-4 pt-3 pb-2 text-xs font-semibold uppercase tracking-wide text-mutedfg">{label} options</div>
+          <div className="max-h-64 space-y-1 overflow-auto px-2 pb-3">
+            <button
+              type="button"
+              onClick={() => {
+                onSelect(null);
+                setOpen(false);
+              }}
+              className="flex w-full items-center justify-between rounded-2xl px-3 py-2 text-sm text-mutedfg transition hover:bg-muted/70 hover:text-fg"
+            >
+              <span>All {label.toLowerCase()}s</span>
+            </button>
+            {options.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => {
+                  onSelect(option);
+                  setOpen(false);
+                }}
+                className={cn(
+                  'flex w-full items-center justify-between rounded-2xl px-3 py-2 text-sm transition',
+                  selected?.id === option.id
+                    ? 'bg-brand/10 text-brand'
+                    : 'text-fg hover:bg-muted/70 hover:text-fg',
+                )}
+              >
+                <span className="truncate">{option.name}</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-mutedfg">{option.count}</span>
+              </button>
+            ))}
+            {options.length === 0 && (
+              <div className="px-3 py-2 text-xs text-mutedfg">No {label.toLowerCase()}s available.</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface HierarchyBreadcrumbProps {
+  site?: HierarchySite | null;
+  area?: HierarchyArea | null;
+  line?: HierarchyLine | null;
+  onNavigate: (level: 'root' | 'site' | 'area') => void;
+}
+
+function HierarchyBreadcrumb({ site, area, line, onNavigate }: HierarchyBreadcrumbProps) {
+  return (
+    <nav className="flex flex-wrap items-center gap-1 text-xs font-semibold uppercase tracking-wide text-mutedfg">
+      <button
+        type="button"
+        onClick={() => onNavigate('root')}
+        className="rounded-full px-3 py-1 transition hover:bg-muted/70 hover:text-fg"
+      >
+        All locations
+      </button>
+      {site && (
+        <>
+          <span>/</span>
+          <button
+            type="button"
+            onClick={() => onNavigate('site')}
+            className="rounded-full px-3 py-1 transition hover:bg-muted/70 hover:text-fg"
+          >
+            {site.name}
+          </button>
+        </>
+      )}
+      {area && (
+        <>
+          <span>/</span>
+          <button
+            type="button"
+            onClick={() => onNavigate('area')}
+            className="rounded-full px-3 py-1 transition hover:bg-muted/70 hover:text-fg"
+          >
+            {area.name}
+          </button>
+        </>
+      )}
+      {line && (
+        <>
+          <span>/</span>
+          <span className="rounded-full bg-brand/10 px-3 py-1 text-brand">{line.name}</span>
+        </>
+      )}
+    </nav>
+  );
+}
+
 function buildQueryString(params: Record<string, string | number | undefined | null>): string {
   const searchParams = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -214,20 +362,23 @@ function useAssetFilters(searchParams: URLSearchParams) {
   const status = searchParams.get('status') ?? '';
   const location = searchParams.get('location') ?? '';
   const category = searchParams.get('category') ?? '';
-  const sort = searchParams.get('sort') ?? DEFAULT_SORT;
+  const sort = searchParams.get('sort') ?? 'createdAt:desc';
+  const siteId = searchParams.get('siteId') ?? '';
+  const areaId = searchParams.get('areaId') ?? '';
+  const lineId = searchParams.get('lineId') ?? '';
 
-  const filters = useMemo(
-    () => ({ page, pageSize: normalizedPageSize, search, status, location, category, sort }),
-    [page, normalizedPageSize, search, status, location, category, sort],
+  const filters = useMemo<AssetQuery>(
+    () => ({ page, pageSize, search, status, location, category, sort }),
+    [page, pageSize, search, status, location, category, sort],
   );
 
-  return { filters, page, pageSize: normalizedPageSize, search, status, location, category, sort };
+  return { filters, page, pageSize, search, status, location, category, sort, siteId, areaId, lineId };
 }
 
 export default function Assets() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { filters, page, pageSize, search, status, location, category } = useAssetFilters(searchParams);
-  const sortState = useMemo(() => parseSortParam(filters.sort), [filters.sort]);
+  const { filters, page, pageSize, search, status, location, category, siteId, areaId, lineId } =
+    useAssetFilters(searchParams);
   const [drawerState, setDrawerState] = useState<DrawerState>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -253,7 +404,7 @@ export default function Assets() {
 
   const { data, isLoading, isFetching } = useQuery<AssetsResponse>({
     queryKey: assetsQueryKey,
-    queryFn: async () => api.get<AssetsResponse>(`/assets${buildQueryString(filters)}`),
+    queryFn: () => listAssets(filters),
     keepPreviousData: true,
   });
 
@@ -348,10 +499,160 @@ export default function Assets() {
   const handleResetFilters = () => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
-      ['search', 'status', 'location', 'category', 'page'].forEach((param) => next.delete(param));
+      ['search', 'status', 'location', 'category', 'siteId', 'areaId', 'lineId', 'page'].forEach((param) =>
+        next.delete(param),
+      );
       return next;
     });
   };
+
+  const setHierarchySelection = useCallback(
+    (nextSiteId: string | null, nextAreaId: string | null, nextLineId: string | null) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+
+        const selectedSite = nextSiteId
+          ? hierarchy.find((site) => site.id === nextSiteId) ?? null
+          : null;
+        const selectedArea =
+          selectedSite && nextAreaId
+            ? selectedSite.areas.find((area) => area.id === nextAreaId) ?? null
+            : null;
+        const selectedLine =
+          selectedArea && nextLineId
+            ? selectedArea.lines.find((line) => line.id === nextLineId) ?? null
+            : null;
+
+        const apply = (key: string, value: string | null) => {
+          if (!value) {
+            next.delete(key);
+          } else {
+            next.set(key, value);
+          }
+        };
+
+        apply('siteId', selectedSite ? selectedSite.id : null);
+        apply('areaId', selectedArea ? selectedArea.id : null);
+        apply('lineId', selectedLine ? selectedLine.id : null);
+
+        const locationLabel = selectedLine?.name ?? selectedArea?.name ?? selectedSite?.name ?? null;
+        apply('location', locationLabel);
+
+        next.delete('page');
+        return next;
+      });
+    },
+    [hierarchy, setSearchParams],
+  );
+
+  const selectedSite = useMemo(
+    () => hierarchy.find((site) => site.id === siteId) ?? null,
+    [hierarchy, siteId],
+  );
+
+  const selectedArea = useMemo(() => {
+    if (!selectedSite) {
+      return null;
+    }
+
+    return selectedSite.areas.find((area) => area.id === areaId) ?? null;
+  }, [areaId, selectedSite]);
+
+  const selectedLine = useMemo(() => {
+    if (!selectedArea) {
+      return null;
+    }
+
+    return selectedArea.lines.find((line) => line.id === lineId) ?? null;
+  }, [lineId, selectedArea]);
+
+  const siteOptions = useMemo<LocationPopoverOption[]>(
+    () =>
+      hierarchy.map((site) => ({
+        id: site.id,
+        name: site.name,
+        count: countAssetsInSite(site),
+      })),
+    [hierarchy],
+  );
+
+  const areaOptions = useMemo<LocationPopoverOption[]>(() => {
+    if (!selectedSite) {
+      return [];
+    }
+
+    return selectedSite.areas.map((area) => ({
+      id: area.id,
+      name: area.name,
+      count: countAssetsInArea(area),
+    }));
+  }, [selectedSite]);
+
+  const lineOptions = useMemo<LocationPopoverOption[]>(() => {
+    if (!selectedArea) {
+      return [];
+    }
+
+    return selectedArea.lines.map((line) => ({
+      id: line.id,
+      name: line.name,
+      count: countAssetsInLine(line),
+    }));
+  }, [selectedArea]);
+
+  const selectedSiteOption = useMemo<LocationPopoverOption | null>(() => {
+    if (!selectedSite) {
+      return null;
+    }
+
+    return {
+      id: selectedSite.id,
+      name: selectedSite.name,
+      count: countAssetsInSite(selectedSite),
+    };
+  }, [selectedSite]);
+
+  const selectedAreaOption = useMemo<LocationPopoverOption | null>(() => {
+    if (!selectedArea) {
+      return null;
+    }
+
+    return {
+      id: selectedArea.id,
+      name: selectedArea.name,
+      count: countAssetsInArea(selectedArea),
+    };
+  }, [selectedArea]);
+
+  const selectedLineOption = useMemo<LocationPopoverOption | null>(() => {
+    if (!selectedLine) {
+      return null;
+    }
+
+    return {
+      id: selectedLine.id,
+      name: selectedLine.name,
+      count: countAssetsInLine(selectedLine),
+    };
+  }, [selectedLine]);
+
+  useEffect(() => {
+    const expectedLocation = selectedLine?.name ?? selectedArea?.name ?? selectedSite?.name ?? '';
+    if (!expectedLocation) {
+      return;
+    }
+
+    if (location === expectedLocation) {
+      return;
+    }
+
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('location', expectedLocation);
+      next.delete('page');
+      return next;
+    });
+  }, [location, selectedArea, selectedLine, selectedSite, setSearchParams]);
 
   const buildPayload = (values: AssetFormValues) => ({
     name: values.name.trim(),
@@ -366,7 +667,7 @@ export default function Assets() {
   const createAssetMutation = useMutation({
     mutationFn: async (values: AssetFormValues) => {
       const payload = buildPayload(values);
-      return api.post<{ ok: boolean; asset: AssetRecord }>('/assets', payload);
+      return createAssetApi(payload);
     },
     onMutate: async (values) => {
       await queryClient.cancelQueries({ queryKey: assetsQueryKey });
@@ -384,10 +685,9 @@ export default function Assets() {
         updatedAt: new Date().toISOString(),
       };
 
-      queryClient.setQueryData<AssetsResponse>(assetsQueryKey, (current) => {
+      queryClient.setQueryData<AssetsResponse | undefined>(assetsQueryKey, (current) => {
         if (!current) {
           return {
-            ok: true,
             assets: [optimisticAsset],
             meta: { page: 1, pageSize: pageSize, total: 1, totalPages: 1 },
           };
@@ -417,12 +717,10 @@ export default function Assets() {
         variant: 'error',
       });
     },
-    onSuccess: (result, _values, context) => {
-      const created = result.asset;
-      queryClient.setQueryData<AssetsResponse>(assetsQueryKey, (current) => {
+    onSuccess: (created, _values, context) => {
+      queryClient.setQueryData<AssetsResponse | undefined>(assetsQueryKey, (current) => {
         if (!current) {
           return {
-            ok: true,
             assets: [created],
             meta: {
               page: 1,
@@ -456,12 +754,12 @@ export default function Assets() {
   const updateAssetMutation = useMutation({
     mutationFn: async ({ id, values }: { id: string; values: AssetFormValues }) => {
       const payload = buildPayload(values);
-      return api.put<{ ok: boolean; asset: AssetRecord }>(`/assets/${id}`, payload);
+      return updateAssetApi(id, payload);
     },
     onMutate: async ({ id, values }) => {
       await queryClient.cancelQueries({ queryKey: assetsQueryKey });
       const previous = queryClient.getQueryData<AssetsResponse>(assetsQueryKey);
-      queryClient.setQueryData<AssetsResponse>(assetsQueryKey, (current) => {
+      queryClient.setQueryData<AssetsResponse | undefined>(assetsQueryKey, (current) => {
         if (!current) {
           return current;
         }
@@ -494,9 +792,8 @@ export default function Assets() {
         variant: 'error',
       });
     },
-    onSuccess: (result) => {
-      const updated = result.asset;
-      queryClient.setQueryData<AssetsResponse>(assetsQueryKey, (current) => {
+    onSuccess: (updated) => {
+      queryClient.setQueryData<AssetsResponse | undefined>(assetsQueryKey, (current) => {
         if (!current) {
           return current;
         }
@@ -519,7 +816,7 @@ export default function Assets() {
 
   const undoDelete = async (asset: AssetRecord) => {
     try {
-      await api.post<{ ok: boolean; asset: AssetRecord }>('/assets', {
+      const payload: SaveAssetPayload = {
         name: asset.name,
         code: asset.code,
         status: asset.status,
@@ -527,7 +824,8 @@ export default function Assets() {
         category: asset.category ?? undefined,
         purchaseDate: asset.purchaseDate ?? undefined,
         cost: asset.cost ?? undefined,
-      });
+      };
+      await createAssetApi(payload);
       queryClient.invalidateQueries({ queryKey: ['assets'] });
       showToast({ title: 'Asset restored', description: `${asset.name} was restored`, variant: 'success' });
     } catch (error) {
@@ -540,14 +838,11 @@ export default function Assets() {
   };
 
   const deleteAssetMutation = useMutation({
-    mutationFn: async (asset: AssetRecord) => {
-      await api.delete<{ ok: boolean; asset: AssetRecord }>(`/assets/${asset.id}`);
-      return asset;
-    },
+    mutationFn: async (asset: AssetRecord) => deleteAssetApi(asset.id),
     onMutate: async (asset) => {
       await queryClient.cancelQueries({ queryKey: assetsQueryKey });
       const previous = queryClient.getQueryData<AssetsResponse>(assetsQueryKey);
-      queryClient.setQueryData<AssetsResponse>(assetsQueryKey, (current) => {
+      queryClient.setQueryData<AssetsResponse | undefined>(assetsQueryKey, (current) => {
         if (!current) {
           return current;
         }
@@ -593,14 +888,12 @@ export default function Assets() {
   });
 
   const bulkDeleteMutation = useMutation({
-    mutationFn: async (assetsToDelete: AssetRecord[]) => {
-      await Promise.all(assetsToDelete.map((asset) => api.delete<{ ok: boolean; asset: AssetRecord }>(`/assets/${asset.id}`)));
-      return assetsToDelete;
-    },
+    mutationFn: async (assetsToDelete: AssetRecord[]) =>
+      Promise.all(assetsToDelete.map((asset) => deleteAssetApi(asset.id))),
     onMutate: async (assetsToDelete) => {
       await queryClient.cancelQueries({ queryKey: assetsQueryKey });
       const previous = queryClient.getQueryData<AssetsResponse>(assetsQueryKey);
-      queryClient.setQueryData<AssetsResponse>(assetsQueryKey, (current) => {
+      queryClient.setQueryData<AssetsResponse | undefined>(assetsQueryKey, (current) => {
         if (!current) {
           return current;
         }
@@ -838,9 +1131,63 @@ export default function Assets() {
             </button>
           </div>
         </header>
+        <div className="rounded-3xl border border-border bg-surface px-5 py-4 shadow-sm">
+          <div className="flex flex-wrap gap-6">
+            <LocationLevelSelector
+              label="Site"
+              placeholder="All sites"
+              options={siteOptions}
+              selected={selectedSiteOption}
+              onSelect={(option) => setHierarchySelection(option?.id ?? null, null, null)}
+              testId="asset-filter-site"
+            />
+            <LocationLevelSelector
+              label="Area"
+              placeholder={selectedSite ? 'All areas' : 'Select a site first'}
+              options={areaOptions}
+              selected={selectedAreaOption}
+              onSelect={(option) =>
+                setHierarchySelection(selectedSite ? selectedSite.id : null, option?.id ?? null, null)
+              }
+              disabled={!selectedSite}
+              testId="asset-filter-area"
+            />
+            <LocationLevelSelector
+              label="Line"
+              placeholder={selectedArea ? 'All lines' : 'Select an area first'}
+              options={lineOptions}
+              selected={selectedLineOption}
+              onSelect={(option) =>
+                setHierarchySelection(
+                  selectedSite ? selectedSite.id : null,
+                  selectedArea ? selectedArea.id : null,
+                  option?.id ?? null,
+                )
+              }
+              disabled={!selectedArea}
+              testId="asset-filter-line"
+            />
+          </div>
+          <div className="mt-4">
+            <HierarchyBreadcrumb
+              site={selectedSite}
+              area={selectedArea}
+              line={selectedLine}
+              onNavigate={(level) => {
+                if (level === 'root') {
+                  setHierarchySelection(null, null, null);
+                } else if (level === 'site' && selectedSite) {
+                  setHierarchySelection(selectedSite.id, null, null);
+                } else if (level === 'area' && selectedSite && selectedArea) {
+                  setHierarchySelection(selectedSite.id, selectedArea.id, null);
+                }
+              }}
+            />
+          </div>
+        </div>
         <FilterBar
           filters={baseFilters}
-          values={{ search, status, location, category }}
+          values={{ search, status, category }}
           onChange={(key, value) => updateSearchParam(key, value)}
           onReset={handleResetFilters}
           sticky={false}
