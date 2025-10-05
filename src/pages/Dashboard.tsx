@@ -5,8 +5,7 @@ import { KPICard } from '../components/premium/KPICard';
 import { DataBadge } from '../components/premium/DataBadge';
 import { ProTable, type ProTableColumn } from '../components/premium/ProTable';
 import { EmptyState } from '../components/premium/EmptyState';
-import { api } from '../lib/api';
-import { workOrdersApi } from '../lib/workOrdersApi';
+import { api, workOrdersApi } from '../lib/api';
 import { formatDate, formatWorkOrderPriority, formatWorkOrderStatus } from '../lib/utils';
 import { normalizeWorkOrders, type WorkOrderRecord } from '../lib/workOrders';
 

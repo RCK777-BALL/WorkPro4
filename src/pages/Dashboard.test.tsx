@@ -11,9 +11,6 @@ vi.mock('../lib/api', () => ({
   api: {
     get: mockApiGet,
   },
-}));
-
-vi.mock('../lib/workOrdersApi', () => ({
   workOrdersApi: {
     list: mockWorkOrdersList,
   },

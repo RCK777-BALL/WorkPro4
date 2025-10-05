@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import Dashboard from '../pages/Dashboard';
-import { api } from '../lib/api';
-import { workOrdersApi } from '../lib/workOrdersApi';
+import { api, workOrdersApi } from '../lib/api';
 import { renderWithQueryClient } from '../test/utils';
 
 const noopPromise = () => new Promise<any>(() => {});
