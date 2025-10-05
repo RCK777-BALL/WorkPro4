@@ -15,7 +15,7 @@ import { normalizeWorkOrders, type WorkOrderRecord } from '../lib/workOrders';
 import { useToast } from '@/components/ui/toast';
 import { useCan } from '@/lib/rbac';
 import { toTitleCase } from '@/lib/utils';
-import { writeFile, read } from 'fs';
+import { read, utils, writeFile } from 'xlsx';
 
 type QueryState = {
   page: number;
