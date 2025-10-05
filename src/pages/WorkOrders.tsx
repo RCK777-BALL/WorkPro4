@@ -247,7 +247,7 @@ export default function WorkOrders() {
 
   const queryErrorMessage = isError
     ? isApiErrorResponse(error)
-      ? error.error.message
+      ? error.error?.message ?? 'Unable to load work orders'
       : errorMessage(error, 'Unable to load work orders')
     : null;
 
