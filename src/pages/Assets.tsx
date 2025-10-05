@@ -212,7 +212,7 @@ function LocationLevelSelector({
 
   return (
     <div className="relative">
-      <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-mutedfg">{label}</span>
+      <span className="block mb-1 text-xs font-semibold tracking-wide uppercase text-mutedfg">{label}</span>
       <button
         ref={triggerRef}
         type="button"
@@ -227,7 +227,7 @@ function LocationLevelSelector({
         aria-expanded={open}
       >
         <span className="truncate">{selected ? selected.name : placeholder}</span>
-        <span className="text-xs font-semibold uppercase tracking-wide text-mutedfg">{options.length}</span>
+        <span className="text-xs font-semibold tracking-wide uppercase text-mutedfg">{options.length}</span>
       </button>
       {open && (
         <div
@@ -235,15 +235,15 @@ function LocationLevelSelector({
           className="absolute z-50 mt-2 w-[260px] rounded-3xl border border-border bg-surface shadow-2xl"
           role="listbox"
         >
-          <div className="px-4 pt-3 pb-2 text-xs font-semibold uppercase tracking-wide text-mutedfg">{label} options</div>
-          <div className="max-h-64 space-y-1 overflow-auto px-2 pb-3">
+          <div className="px-4 pt-3 pb-2 text-xs font-semibold tracking-wide uppercase text-mutedfg">{label} options</div>
+          <div className="px-2 pb-3 space-y-1 overflow-auto max-h-64">
             <button
               type="button"
               onClick={() => {
                 onSelect(null);
                 setOpen(false);
               }}
-              className="flex w-full items-center justify-between rounded-2xl px-3 py-2 text-sm text-mutedfg transition hover:bg-muted/70 hover:text-fg"
+              className="flex items-center justify-between w-full px-3 py-2 text-sm transition rounded-2xl text-mutedfg hover:bg-muted/70 hover:text-fg"
             >
               <span>All {label.toLowerCase()}s</span>
             </button>
@@ -263,7 +263,7 @@ function LocationLevelSelector({
                 )}
               >
                 <span className="truncate">{option.name}</span>
-                <span className="text-xs font-semibold uppercase tracking-wide text-mutedfg">{option.count}</span>
+                <span className="text-xs font-semibold tracking-wide uppercase text-mutedfg">{option.count}</span>
               </button>
             ))}
             {options.length === 0 && (
@@ -285,11 +285,11 @@ interface HierarchyBreadcrumbProps {
 
 function HierarchyBreadcrumb({ site, area, line, onNavigate }: HierarchyBreadcrumbProps) {
   return (
-    <nav className="flex flex-wrap items-center gap-1 text-xs font-semibold uppercase tracking-wide text-mutedfg">
+    <nav className="flex flex-wrap items-center gap-1 text-xs font-semibold tracking-wide uppercase text-mutedfg">
       <button
         type="button"
         onClick={() => onNavigate('root')}
-        className="rounded-full px-3 py-1 transition hover:bg-muted/70 hover:text-fg"
+        className="px-3 py-1 transition rounded-full hover:bg-muted/70 hover:text-fg"
       >
         All locations
       </button>
@@ -299,7 +299,7 @@ function HierarchyBreadcrumb({ site, area, line, onNavigate }: HierarchyBreadcru
           <button
             type="button"
             onClick={() => onNavigate('site')}
-            className="rounded-full px-3 py-1 transition hover:bg-muted/70 hover:text-fg"
+            className="px-3 py-1 transition rounded-full hover:bg-muted/70 hover:text-fg"
           >
             {site.name}
           </button>
@@ -311,7 +311,7 @@ function HierarchyBreadcrumb({ site, area, line, onNavigate }: HierarchyBreadcru
           <button
             type="button"
             onClick={() => onNavigate('area')}
-            className="rounded-full px-3 py-1 transition hover:bg-muted/70 hover:text-fg"
+            className="px-3 py-1 transition rounded-full hover:bg-muted/70 hover:text-fg"
           >
             {area.name}
           </button>
@@ -320,7 +320,7 @@ function HierarchyBreadcrumb({ site, area, line, onNavigate }: HierarchyBreadcru
       {line && (
         <>
           <span>/</span>
-          <span className="rounded-full bg-brand/10 px-3 py-1 text-brand">{line.name}</span>
+          <span className="px-3 py-1 rounded-full bg-brand/10 text-brand">{line.name}</span>
         </>
       )}
     </nav>
@@ -329,11 +329,11 @@ function HierarchyBreadcrumb({ site, area, line, onNavigate }: HierarchyBreadcru
 
 type SortState = { key: string; direction: 'asc' | 'desc' };
 
-const [DEFAULT_SORT_KEY, DEFAULT_SORT_DIRECTION] = DEFAULT_SORT.split(':') as [string, string];
+const [DEFAULT_SORT_KEY, DEFAULT_SORT_DIRECTION] = DEFAULT_SORT_KEY.split(':') as [string, string];
 const DEFAULT_SORT_DIRECTION_NORMALIZED: 'asc' | 'desc' = DEFAULT_SORT_DIRECTION === 'asc' ? 'asc' : 'desc';
 
 function parseSortParam(sortValue: string | null | undefined): SortState {
-  const [rawKey, rawDirection] = (sortValue ?? DEFAULT_SORT).split(':');
+  const [rawKey, rawDirection] = (sortValue ?? DEFAULT_SORT_KEY).split(':');
   const key = rawKey && rawKey.length > 0 ? rawKey : DEFAULT_SORT_KEY;
   const direction = rawDirection === 'asc' ? 'asc' : rawDirection === 'desc' ? 'desc' : DEFAULT_SORT_DIRECTION_NORMALIZED;
   return { key, direction };
@@ -1139,7 +1139,7 @@ export default function Assets() {
             </button>
           </div>
         </header>
-        <div className="rounded-3xl border border-border bg-surface px-5 py-4 shadow-sm">
+        <div className="px-5 py-4 border shadow-sm rounded-3xl border-border bg-surface">
           <div className="flex flex-wrap gap-6">
             <LocationLevelSelector
               label="Site"
@@ -1342,12 +1342,12 @@ export default function Assets() {
             )}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-mutedfg">
+            <label className="flex items-center gap-2 text-xs font-semibold tracking-wide uppercase text-mutedfg">
               <span>Rows per page</span>
               <select
                 value={currentPageSize}
                 onChange={(event) => handlePageSizeChange(Number(event.target.value))}
-                className="rounded-xl border border-border bg-bg px-2 py-1 text-xs font-semibold text-fg"
+                className="px-2 py-1 text-xs font-semibold border rounded-xl border-border bg-bg text-fg"
                 data-testid="asset-pagination-size"
               >
                 {PAGE_SIZE_OPTIONS.map((option) => (
