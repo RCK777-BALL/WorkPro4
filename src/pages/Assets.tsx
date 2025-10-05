@@ -329,7 +329,7 @@ function HierarchyBreadcrumb({ site, area, line, onNavigate }: HierarchyBreadcru
 
 type SortState = { key: string; direction: 'asc' | 'desc' };
 
-const [DEFAULT_SORT_KEY, DEFAULT_SORT_DIRECTION] = DEFAULT_SORT_KEY.split(':') as [string, string];
+const [DEFAULT_SORT_KEY, DEFAULT_SORT_DIRECTION] = DEFAULT_SORT.split(':') as [string, string];
 const DEFAULT_SORT_DIRECTION_NORMALIZED: 'asc' | 'desc' = DEFAULT_SORT_DIRECTION === 'asc' ? 'asc' : 'desc';
 
 function parseSortParam(sortValue: string | null | undefined): SortState {
