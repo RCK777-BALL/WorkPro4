@@ -8,6 +8,8 @@ export interface ProTableColumn<T> {
   accessor?: (row: T) => ReactNode;
   width?: string;
   align?: 'left' | 'right' | 'center';
+  sortable?: boolean;
+  sortKey?: string;
 }
 
 interface PaginationConfig {
@@ -34,6 +36,8 @@ interface ProTableProps<T> {
   onExportXlsx?: () => void;
   exportDisabled?: boolean;
   pagination?: PaginationConfig;
+  sort?: { key: string; direction: 'asc' | 'desc' };
+  onSortChange?: (sort: { key: string; direction: 'asc' | 'desc' }) => void;
 }
 
 export function ProTable<T>({
@@ -50,6 +54,8 @@ export function ProTable<T>({
   onExportXlsx,
   exportDisabled,
   pagination,
+  sort,
+  onSortChange,
 }: ProTableProps<T>) {
   const [selected, setSelected] = useState<string[]>([]);
   const [density, setDensity] = useState<Density>('comfortable');
@@ -201,15 +207,52 @@ export function ProTable<T>({
                   data-testid="pro-table-select-all"
                 />
               </th>
-              {columnList.map((column) => (
-                <th
-                  key={String(column.key)}
-                  className={`${headerCellClass} border-b border-border bg-bg px-4 text-left font-semibold text-mutedfg`}
-                  style={{ width: column.width }}
-                >
-                  {column.header}
-                </th>
-              ))}
+              {columnList.map((column) => {
+                const sortable = Boolean(column.sortable && onSortChange);
+                const sortKey = column.sortKey ?? String(column.key);
+                const isSorted = sortable && sort?.key === sortKey;
+                const nextDirection = isSorted && sort?.direction === 'asc' ? 'desc' : 'asc';
+                const ariaSort = isSorted ? (sort?.direction === 'asc' ? 'ascending' : 'descending') : 'none';
+
+                const handleSort = () => {
+                  if (!sortable) {
+                    return;
+                  }
+                  onSortChange?.({ key: sortKey, direction: nextDirection });
+                };
+
+                return (
+                  <th
+                    key={String(column.key)}
+                    className={`${headerCellClass} border-b border-border bg-bg px-4 text-left font-semibold text-mutedfg`}
+                    style={{ width: column.width }}
+                    aria-sort={ariaSort}
+                    scope="col"
+                  >
+                    {sortable ? (
+                      <button
+                        type="button"
+                        onClick={handleSort}
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold transition ${
+                          isSorted ? 'bg-brand/10 text-brand' : 'text-mutedfg hover:bg-muted hover:text-fg'
+                        }`}
+                        data-testid={`pro-table-sort-${sortKey}`}
+                      >
+                        <span>{column.header}</span>
+                        <span aria-hidden="true" className="text-[10px] leading-none">
+                          {isSorted ? (sort?.direction === 'asc' ? '▲' : '▼') : '↕'}
+                        </span>
+                        <span className="sr-only">
+                          Sort by {column.header}{' '}
+                          {isSorted ? (sort?.direction === 'asc' ? 'descending' : 'ascending') : 'ascending'}
+                        </span>
+                      </button>
+                    ) : (
+                      column.header
+                    )}
+                  </th>
+                );
+              })}
               {rowActions && <th className={`${headerCellClass} border-b border-border bg-bg px-4 text-right text-mutedfg`}>Actions</th>}
             </tr>
           </thead>
