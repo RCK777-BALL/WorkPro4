@@ -1,5 +1,6 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import '@testing-library/jest-dom/vitest';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import { ProTable, type ProTableColumn } from './ProTable';
 
 interface Row {
@@ -10,6 +11,10 @@ interface Row {
 const columns: ProTableColumn<Row>[] = [{ key: 'name', header: 'Name' }];
 
 describe('ProTable', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it('exposes export callbacks via data-testids', () => {
     const onExportCsv = vi.fn();
     const onExportXlsx = vi.fn();
@@ -47,7 +52,7 @@ describe('ProTable', () => {
         columns={columns}
         getRowId={(row) => row.id}
         onSelectionChange={onSelectionChange}
-      />,
+      />, 
     );
 
     fireEvent.click(screen.getByTestId('pro-table-row-select-1'));
@@ -55,6 +60,26 @@ describe('ProTable', () => {
 
     fireEvent.click(screen.getByTestId('pro-table-select-all'));
     expect(onSelectionChange).toHaveBeenLastCalledWith([]);
+  });
+
+  it('emits sort changes when sortable headers are clicked', () => {
+    const onSortChange = vi.fn();
+
+    render(
+      <ProTable
+        data={[{ id: '1', name: 'Alpha' }]}
+        columns={[{ key: 'name', header: 'Name', sortable: true }]}
+        getRowId={(row) => row.id}
+        sort={{ key: 'name', direction: 'asc' }}
+        onSortChange={onSortChange}
+      />,
+    );
+
+    expect(screen.getByRole('columnheader', { name: /Name/ })).toHaveAttribute('aria-sort', 'ascending');
+
+    fireEvent.click(screen.getByTestId('pro-table-sort-name'));
+
+    expect(onSortChange).toHaveBeenCalledWith({ key: 'name', direction: 'desc' });
   });
 });
 

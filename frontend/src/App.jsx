@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -5,6 +6,7 @@ import { Layout } from './components/Layout';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Toaster } from '@/components/ui/toaster';
+import { registerServiceWorker } from './serviceWorker';
 import { Dashboard } from './pages/Dashboard';
 import { WorkOrders } from './pages/WorkOrders';
 import { Assets } from './pages/Assets';
@@ -70,6 +72,10 @@ function AppRoutes() {
 }
 
 function App() {
+  useEffect(() => {
+    registerServiceWorker();
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
