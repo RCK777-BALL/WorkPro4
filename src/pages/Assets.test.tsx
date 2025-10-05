@@ -4,6 +4,7 @@ import { act, cleanup, screen, waitFor, fireEvent } from '@testing-library/react
 import Assets from './Assets';
 import { renderWithProviders, createTestQueryClient } from '../tests/testUtils';
 import * as assetsApi from '../lib/assets';
+import type { AssetQuery } from '../lib/assets';
 import type { ReactNode } from 'react';
 
 vi.mock('../lib/api', () => ({
@@ -141,7 +142,7 @@ describe('Assets page', () => {
     };
 
     mockedUseQuery.mockReturnValue({
-      data: { assets: [asset], meta: { page: 1, pageSize: 10, total: 1, totalPages: 1 } },
+      data: { assets: [asset], meta: { page: 1, pageSize: 25, total: 1, totalPages: 1 } },
       isLoading: false,
       isFetching: false,
     });
@@ -155,7 +156,7 @@ describe('Assets page', () => {
 
   it('submits the create asset form', async () => {
     mockedUseQuery.mockReturnValue({
-      data: { assets: [], meta: { page: 1, pageSize: 10, total: 0, totalPages: 1 } },
+      data: { assets: [], meta: { page: 1, pageSize: 25, total: 0, totalPages: 1 } },
       isLoading: false,
       isFetching: false,
     });
@@ -208,7 +209,7 @@ describe('Assets page', () => {
 
   it('updates the URL when filters change', async () => {
     mockedUseQuery.mockReturnValue({
-      data: { assets: [], meta: { page: 1, pageSize: 10, total: 0, totalPages: 1 } },
+      data: { assets: [], meta: { page: 1, pageSize: 25, total: 0, totalPages: 1 } },
       isLoading: false,
       isFetching: false,
     });
@@ -268,7 +269,7 @@ describe('Assets page', () => {
     });
 
     await waitFor(() => {
-      const lastQuery = queryKeys.at(-1);
+      const lastQuery = queryKeys.at(-1) as readonly [unknown, AssetQuery] | undefined;
       expect(lastQuery?.[1]?.sort).toBe('code:asc');
     });
 
@@ -280,7 +281,7 @@ describe('Assets page', () => {
     });
 
     await waitFor(() => {
-      const lastQuery = queryKeys.at(-1);
+      const lastQuery = queryKeys.at(-1) as readonly [unknown, AssetQuery] | undefined;
       expect(lastQuery?.[1]?.sort).toBe('code:desc');
     });
 
@@ -345,7 +346,7 @@ describe('Assets page', () => {
     });
 
     await waitFor(() => {
-      const lastQuery = queryKeys.at(-1);
+      const lastQuery = queryKeys.at(-1) as readonly [unknown, AssetQuery] | undefined;
       expect(lastQuery?.[1]?.pageSize).toBe(50);
       expect(lastQuery?.[1]?.page).toBe(1);
     });

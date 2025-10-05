@@ -30,6 +30,7 @@ import { useCan } from '../lib/rbac';
 import { api } from '../lib/api';
 import {
   assetStatuses,
+  type AssetStatus,
   type AssetRecord,
   type AssetsResponse,
   type AssetQuery,
@@ -40,6 +41,10 @@ import {
   listAssets,
 } from '../lib/assets';
 import { cn, formatCurrency } from '../lib/utils';
+
+const DEFAULT_SORT = 'updatedAt:desc';
+const DEFAULT_PAGE_SIZE = 25;
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
 
 const assetFormSchema = z.object({
   name: z.string().min(1, 'Asset name is required'),
@@ -322,18 +327,6 @@ function HierarchyBreadcrumb({ site, area, line, onNavigate }: HierarchyBreadcru
   );
 }
 
-function buildQueryString(params: Record<string, string | number | undefined | null>): string {
-  const searchParams = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === '') {
-      return;
-    }
-    searchParams.set(key, String(value));
-  });
-  const qs = searchParams.toString();
-  return qs ? `?${qs}` : '';
-}
-
 type SortState = { key: string; direction: 'asc' | 'desc' };
 
 const [DEFAULT_SORT_KEY, DEFAULT_SORT_DIRECTION] = DEFAULT_SORT.split(':') as [string, string];
@@ -359,25 +352,38 @@ function useAssetFilters(searchParams: URLSearchParams) {
     ? pageSize
     : DEFAULT_PAGE_SIZE;
   const search = searchParams.get('search') ?? '';
-  const status = searchParams.get('status') ?? '';
+  const rawStatus = searchParams.get('status');
+  const status = assetStatuses.includes(rawStatus as AssetStatus) ? (rawStatus as AssetStatus) : '';
   const location = searchParams.get('location') ?? '';
   const category = searchParams.get('category') ?? '';
-  const sort = searchParams.get('sort') ?? 'createdAt:desc';
+  const sort = searchParams.get('sort') ?? DEFAULT_SORT;
   const siteId = searchParams.get('siteId') ?? '';
   const areaId = searchParams.get('areaId') ?? '';
   const lineId = searchParams.get('lineId') ?? '';
 
   const filters = useMemo<AssetQuery>(
-    () => ({ page, pageSize, search, status, location, category, sort }),
-    [page, pageSize, search, status, location, category, sort],
+    () => ({ page, pageSize: normalizedPageSize, search, status, location, category, sort }),
+    [page, normalizedPageSize, search, status, location, category, sort],
   );
 
-  return { filters, page, pageSize, search, status, location, category, sort, siteId, areaId, lineId };
+  return {
+    filters,
+    page,
+    pageSize: normalizedPageSize,
+    search,
+    status,
+    location,
+    category,
+    sort,
+    siteId,
+    areaId,
+    lineId,
+  };
 }
 
 export default function Assets() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { filters, page, pageSize, search, status, location, category, siteId, areaId, lineId } =
+  const { filters, page, pageSize, search, status, location, category, sort, siteId, areaId, lineId } =
     useAssetFilters(searchParams);
   const [drawerState, setDrawerState] = useState<DrawerState>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -417,6 +423,8 @@ export default function Assets() {
 
   const assets = data?.assets ?? [];
   const meta = data?.meta ?? { page: 1, pageSize: DEFAULT_PAGE_SIZE, total: 0, totalPages: 1 };
+
+  const sortState = useMemo(() => parseSortParam(sort), [sort]);
 
   const currentPage = meta.page && meta.page > 0 ? meta.page : page;
   const currentPageSize = meta.pageSize && meta.pageSize > 0 ? meta.pageSize : pageSize;
@@ -724,7 +732,7 @@ export default function Assets() {
             assets: [created],
             meta: {
               page: 1,
-              pageSize: filters.pageSize,
+              pageSize,
               total: 1,
               totalPages: 1,
             },
