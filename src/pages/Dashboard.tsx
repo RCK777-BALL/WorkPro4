@@ -6,6 +6,7 @@ import { DataBadge } from '../components/premium/DataBadge';
 import { ProTable, type ProTableColumn } from '../components/premium/ProTable';
 import { EmptyState } from '../components/premium/EmptyState';
 import { api } from '../lib/api';
+import { workOrdersApi } from '../lib/workOrdersApi';
 import { normalizeWorkOrders, type WorkOrderRecord } from '../lib/workOrders';
 
 type PriorityBuckets = Record<'critical' | 'high' | 'medium' | 'low', number>;
@@ -156,8 +157,8 @@ export default function Dashboard() {
   } = useQuery<WorkOrderRecord[]>({
     queryKey: ['dashboard', 'work-orders-preview'],
     queryFn: async () => {
-      const response = await api.get<unknown>('/work-orders');
-      return normalizeWorkOrders(response).slice(0, 8);
+      const response = await workOrdersApi.list({ page: 1, limit: 16 });
+      return normalizeWorkOrders(response.items).slice(0, 8);
     },
     staleTime: 60_000,
     retry: false,
