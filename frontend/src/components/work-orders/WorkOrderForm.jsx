@@ -59,7 +59,7 @@ const DEFAULT_VALUES = {
   stationNumber: '',
 };
 
-export function WorkOrderForm({ onClose, onSuccess, defaultValues, asset: assetProp }) {
+export function WorkOrderForm({ onClose, onSuccess, onQueued, defaultValues, asset: assetProp }) {
 
   const [submitError, setSubmitError] = useState('');
   const { toast } = useToast();
@@ -190,6 +190,26 @@ export function WorkOrderForm({ onClose, onSuccess, defaultValues, asset: assetP
         onClose();
       }
     } catch (error) {
+      const isOffline =
+        (typeof navigator !== 'undefined' && navigator.onLine === false) ||
+        error?.code === 'ERR_NETWORK' ||
+        (typeof error?.message === 'string' && error.message.toLowerCase().includes('network'));
+
+      if (isOffline && typeof onQueued === 'function') {
+        try {
+          const queueResult = await onQueued({ payload, values });
+          if (queueResult?.queued) {
+            reset();
+            if (typeof onClose === 'function') {
+              onClose();
+            }
+            return;
+          }
+        } catch (queueError) {
+          console.warn('Failed to queue work order for background sync.', queueError);
+        }
+      }
+
       const payloadError = error?.data?.error ?? {
         message: error?.message || 'Unable to create work order',
       };

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -27,7 +27,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { api } from '@/lib/api';
-import { formatDate, getPriorityColor, getStatusColor } from '@/lib/utils';
+import { queueMutation } from '@/lib/backgroundSync';
+import { readListCache, saveListCache } from '@/lib/offline-cache';
+import { useToast } from '@/hooks/use-toast';
+import { formatDate, formatDateTime, getPriorityColor, getStatusColor } from '@/lib/utils';
 
 const INITIAL_ADVANCED_FILTERS = {
 
@@ -49,6 +52,13 @@ export function WorkOrders() {
     ...INITIAL_ADVANCED_FILTERS,
   }));
   const [showCreate, setShowCreate] = useState(false);
+  const [offlineState, setOfflineState] = useState({
+    isOffline: false,
+    usedCache: false,
+    cachedAt: null,
+  });
+  const [pendingWorkOrders, setPendingWorkOrders] = useState([]);
+  const pendingToastHandles = useRef(new Map());
 
   useEffect(() => {
     if (!isFiltersOpen) {
@@ -65,39 +75,107 @@ export function WorkOrders() {
   }, [isFiltersOpen, advancedFilters]);
 
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
+  const filters = useMemo(
+    () => ({
+      search,
+      status: statusFilter,
+      priority: advancedFilters.priority,
+      assignee: advancedFilters.assignee,
+      from: advancedFilters.from,
+      to: advancedFilters.to,
+    }),
+    [search, statusFilter, advancedFilters],
+  );
+
+  const initialCacheEntry = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    return readListCache(filters);
+  }, [filters]);
+
+  useEffect(() => {
+    if (!initialCacheEntry?.data) {
+      return;
+    }
+
+    const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+
+    if (!isOffline) {
+      return;
+    }
+
+    setOfflineState((previous) => {
+      if (
+        previous.isOffline &&
+        previous.usedCache &&
+        previous.cachedAt === (initialCacheEntry.cachedAt ?? null)
+      ) {
+        return previous;
+      }
+
+      return {
+        isOffline: true,
+        usedCache: true,
+        cachedAt: initialCacheEntry.cachedAt ?? null,
+      };
+    });
+  }, [initialCacheEntry]);
 
   const {
     data,
     isLoading,
   } = useQuery({
-    queryKey: [
-      'work-orders',
-      {
-        search,
-        status: statusFilter,
-        priority: advancedFilters.priority,
-        assignee: advancedFilters.assignee,
-        from: advancedFilters.from,
-        to: advancedFilters.to,
-
-      },
-    ],
+    queryKey: ['work-orders', filters],
     queryFn: async () => {
+      // eslint-disable-next-line no-console
       const params = new URLSearchParams();
-      if (search) params.set('q', search);
-      if (statusFilter) params.set('status', statusFilter);
-      if (advancedFilters.priority)
-        params.set('priority', advancedFilters.priority);
-      if (advancedFilters.assignee)
-        params.set('assignee', advancedFilters.assignee);
-      if (advancedFilters.from) params.set('from', advancedFilters.from);
-      if (advancedFilters.to) params.set('to', advancedFilters.to);
+      if (filters.search) params.set('q', filters.search);
+      if (filters.status) params.set('status', filters.status);
+      if (filters.priority) params.set('priority', filters.priority);
+      if (filters.assignee) params.set('assignee', filters.assignee);
+      if (filters.from) params.set('from', filters.from);
+      if (filters.to) params.set('to', filters.to);
 
+      const cacheFilters = { ...filters };
 
-      const result = await api.get(`/work-orders?${params}`);
-      return result?.data ?? result;
+      try {
+        const result = await api.get(`/work-orders?${params}`);
+        const payload = result?.data ?? result;
+        const cachedAt = Date.now();
+        saveListCache(cacheFilters, payload);
+        setOfflineState({
+          isOffline: false,
+          usedCache: false,
+          cachedAt,
+        });
+        return payload;
+      } catch (error) {
+        const offline =
+          (typeof navigator !== 'undefined' && navigator.onLine === false) ||
+          error?.code === 'ERR_NETWORK';
+
+        if (offline) {
+          const cached = readListCache(cacheFilters);
+          if (cached) {
+            setOfflineState({
+              isOffline: true,
+              usedCache: true,
+              cachedAt: cached.cachedAt ?? null,
+            });
+            return cached.data;
+          }
+
+          setOfflineState({ isOffline: true, usedCache: false, cachedAt: null });
+        }
+
+        throw error;
+      }
     },
+    initialData: initialCacheEntry?.data,
+    initialDataUpdatedAt: initialCacheEntry?.cachedAt ?? undefined,
   });
 
   const workOrders = Array.isArray(data) ? data : data?.workOrders || [];
@@ -130,12 +208,128 @@ export function WorkOrders() {
     };
   });
 
-  const statusCounts = normalizedWorkOrders.reduce((acc, wo) => {
+  const optimisticWorkOrders = useMemo(
+    () =>
+      pendingWorkOrders.map((workOrder) => ({
+        ...workOrder,
+        assigneeNames: Array.isArray(workOrder.assigneeNames)
+          ? workOrder.assigneeNames
+          : [],
+      })),
+    [pendingWorkOrders],
+  );
+
+  const displayedWorkOrders = useMemo(
+    () => [...optimisticWorkOrders, ...normalizedWorkOrders],
+    [normalizedWorkOrders, optimisticWorkOrders],
+  );
+
+  const statusCounts = displayedWorkOrders.reduce((acc, wo) => {
     acc[wo.status] = (acc[wo.status] || 0) + 1;
     return acc;
   }, {});
 
-  if (isLoading) {
+  const queueWorkOrder = useCallback(
+    async ({ payload }) => {
+      const clientId = `pending-${Date.now()}-${Math.random()
+        .toString(16)
+        .slice(2)}`;
+
+      const result = await queueMutation({
+        endpoint: '/work-orders',
+        method: 'POST',
+        body: payload,
+        entity: 'work-order',
+        clientId,
+      });
+
+      if (!result.queued) {
+        return { queued: false };
+      }
+
+      const toastHandle = toast({
+        title: 'Work order queued',
+        description: 'It will sync automatically once you are back online.',
+      });
+      if (toastHandle && typeof toastHandle.dismiss === 'function') {
+        pendingToastHandles.current.set(clientId, toastHandle);
+      }
+
+      setPendingWorkOrders((previous) => [
+        {
+          id: clientId,
+          title: payload.title,
+          description: payload.description || '',
+          status: 'requested',
+          priority: payload.priority || 'medium',
+          assigneeNames: [],
+          assetName: payload.assetId || '',
+          requestedByName: 'You',
+          createdAt: new Date().toISOString(),
+          dueDate: payload.dueDate,
+          pendingSync: true,
+        },
+        ...previous,
+      ]);
+
+      return { queued: true, clientId };
+    },
+    [toast],
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const serviceWorker = navigator.serviceWorker;
+    if (!serviceWorker || typeof serviceWorker.addEventListener !== 'function') {
+      return;
+    }
+
+    const handleMessage = (event) => {
+      const { data: message } = event;
+      if (!message || message.type !== 'mutation-synced') {
+        return;
+      }
+
+      const { clientId } = message.payload || {};
+      if (!clientId) {
+        return;
+      }
+
+      setPendingWorkOrders((previous) => previous.filter((item) => item.id !== clientId));
+
+      const toastHandle = pendingToastHandles.current.get(clientId);
+      if (toastHandle && typeof toastHandle.dismiss === 'function') {
+        toastHandle.dismiss();
+      }
+      pendingToastHandles.current.delete(clientId);
+
+      queryClient.invalidateQueries({ queryKey: ['work-orders'] });
+    };
+
+    serviceWorker.addEventListener('message', handleMessage);
+
+    return () => {
+      serviceWorker.removeEventListener('message', handleMessage);
+    };
+  }, [queryClient]);
+
+  useEffect(() => {
+    return () => {
+      pendingToastHandles.current.forEach((handle) => {
+        if (handle && typeof handle.dismiss === 'function') {
+          handle.dismiss();
+        }
+      });
+      pendingToastHandles.current.clear();
+    };
+  }, []);
+
+  const hasInitialCache = Boolean(initialCacheEntry?.data);
+
+  if (isLoading && !hasInitialCache) {
     return (
       <div className="space-y-6">
         <div className="h-8 bg-gray-200 rounded animate-pulse" />
@@ -296,11 +490,27 @@ export function WorkOrders() {
         </Card>
       )}
 
+      {offlineState.isOffline && offlineState.usedCache && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <p>
+            Offline mode. Showing cached results
+            {offlineState.cachedAt
+              ? ` from ${formatDateTime(offlineState.cachedAt)}.`
+              : '.'}
+          </p>
+        </div>
+      )}
+
       {/* Work Orders List */}
       <div className="space-y-4">
-        {normalizedWorkOrders.map((workOrder) => (
+        {displayedWorkOrders.map((workOrder) => (
           <Card
-            key={workOrder.id}
+            key={
+              workOrder.id ||
+              workOrder._id ||
+              workOrder.uuid ||
+              `${workOrder.title}-${workOrder.createdAt}`
+            }
             className="hover:shadow-md transition-shadow cursor-pointer"
           >
             <CardContent className="p-6">
@@ -316,6 +526,14 @@ export function WorkOrders() {
                     <Badge className={getPriorityColor(workOrder.priority)}>
                       {workOrder.priority}
                     </Badge>
+                    {workOrder.pendingSync && (
+                      <Badge
+                        variant="outline"
+                        className="border-dashed border-amber-500 bg-amber-50 text-amber-700"
+                      >
+                        Pending sync
+                      </Badge>
+                    )}
                   </div>
 
                   {workOrder.description && (
@@ -386,7 +604,7 @@ export function WorkOrders() {
         ))}
       </div>
 
-      {normalizedWorkOrders.length === 0 && (
+      {displayedWorkOrders.length === 0 && (
         <Card>
           <CardContent className="p-12 text-center">
             <Wrench className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -431,6 +649,13 @@ export function WorkOrders() {
                 onSuccess={() => {
                   setShowCreate(false);
                   queryClient.invalidateQueries({ queryKey: ['work-orders'] });
+                }}
+                onQueued={async ({ payload }) => {
+                  const result = await queueWorkOrder({ payload });
+                  if (result.queued) {
+                    setShowCreate(false);
+                  }
+                  return result;
                 }}
               />
             </div>

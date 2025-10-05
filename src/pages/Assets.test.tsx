@@ -1,9 +1,9 @@
+import '@testing-library/jest-dom/vitest';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { act, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { act, cleanup, screen, waitFor, fireEvent } from '@testing-library/react';
 import Assets from './Assets';
 import { renderWithProviders, createTestQueryClient } from '../tests/testUtils';
-import { api } from '../lib/api';
+import * as assetsApi from '../lib/assets';
 import type { ReactNode } from 'react';
 
 vi.mock('../lib/api', () => ({
@@ -15,6 +15,14 @@ vi.mock('../lib/api', () => ({
     setToken: vi.fn(),
     clearToken: vi.fn(),
   },
+}));
+
+vi.mock('../lib/assets', () => ({
+  assetStatuses: ['operational', 'maintenance', 'down', 'retired', 'decommissioned'] as const,
+  listAssets: vi.fn(),
+  createAsset: vi.fn(),
+  updateAsset: vi.fn(),
+  deleteAsset: vi.fn(),
 }));
 
 vi.mock('../components/ui/toast', () => ({
@@ -41,11 +49,11 @@ vi.mock('@tanstack/react-query', async () => {
   };
 });
 
-const mockedApi = api as unknown as {
-  get: ReturnType<typeof vi.fn>;
-  post: ReturnType<typeof vi.fn>;
-  put: ReturnType<typeof vi.fn>;
-  delete: ReturnType<typeof vi.fn>;
+const mockedAssetsApi = assetsApi as unknown as {
+  listAssets: ReturnType<typeof vi.fn>;
+  createAsset: ReturnType<typeof vi.fn>;
+  updateAsset: ReturnType<typeof vi.fn>;
+  deleteAsset: ReturnType<typeof vi.fn>;
 };
 
 const queryClientMocks = {
@@ -115,6 +123,7 @@ describe('Assets page', () => {
 
   afterEach(() => {
     vi.clearAllTimers();
+    cleanup();
   });
 
   it('renders assets from the API', async () => {
@@ -132,7 +141,7 @@ describe('Assets page', () => {
     };
 
     mockedUseQuery.mockReturnValue({
-      data: { ok: true, assets: [asset], meta: { page: 1, pageSize: 10, total: 1, totalPages: 1 } },
+      data: { assets: [asset], meta: { page: 1, pageSize: 10, total: 1, totalPages: 1 } },
       isLoading: false,
       isFetching: false,
     });
@@ -145,28 +154,23 @@ describe('Assets page', () => {
   });
 
   it('submits the create asset form', async () => {
-    const user = userEvent.setup();
-
     mockedUseQuery.mockReturnValue({
-      data: { ok: true, assets: [], meta: { page: 1, pageSize: 10, total: 0, totalPages: 1 } },
+      data: { assets: [], meta: { page: 1, pageSize: 10, total: 0, totalPages: 1 } },
       isLoading: false,
       isFetching: false,
     });
 
-    mockedApi.post.mockResolvedValue({
-      ok: true,
-      asset: {
-        id: 'asset-2',
-        code: 'GEN-200',
-        name: 'Generator',
-        status: 'operational',
-        location: 'Plant 2',
-        category: 'Power',
-        purchaseDate: new Date('2024-01-15').toISOString(),
-        cost: 25000,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
+    mockedAssetsApi.createAsset.mockResolvedValue({
+      id: 'asset-2',
+      code: 'GEN-200',
+      name: 'Generator',
+      status: 'operational',
+      location: 'Plant 2',
+      category: 'Power',
+      purchaseDate: new Date('2024-01-15').toISOString(),
+      cost: 25000,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
 
     renderWithProviders(<Assets />, { queryClient: createTestQueryClient() });
@@ -174,24 +178,23 @@ describe('Assets page', () => {
     await screen.findByText('Assets');
 
     await act(async () => {
-      await user.click(screen.getByTestId('asset-toolbar-create'));
+      fireEvent.click(screen.getByTestId('asset-toolbar-create'));
     });
 
     const nameInput = await screen.findByTestId('asset-form-name');
 
     await act(async () => {
-      await user.type(nameInput, 'Generator');
-      await user.type(screen.getByTestId('asset-form-code'), 'GEN-200');
-      await user.type(screen.getByTestId('asset-form-location'), 'Plant 2');
-      await user.type(screen.getByTestId('asset-form-category'), 'Power');
-      await user.clear(screen.getByTestId('asset-form-cost'));
-      await user.type(screen.getByTestId('asset-form-cost'), '25000');
-      await user.type(screen.getByTestId('asset-form-purchaseDate'), '2024-01-15');
-      await user.click(screen.getByTestId('asset-form-submit'));
+      fireEvent.change(nameInput, { target: { value: 'Generator' } });
+      fireEvent.change(screen.getByTestId('asset-form-code'), { target: { value: 'GEN-200' } });
+      fireEvent.change(screen.getByTestId('asset-form-location'), { target: { value: 'Plant 2' } });
+      fireEvent.change(screen.getByTestId('asset-form-category'), { target: { value: 'Power' } });
+      fireEvent.change(screen.getByTestId('asset-form-cost'), { target: { value: '25000' } });
+      fireEvent.change(screen.getByTestId('asset-form-purchaseDate'), { target: { value: '2024-01-15' } });
+      fireEvent.click(screen.getByTestId('asset-form-submit'));
     });
 
     await waitFor(() => {
-      expect(mockedApi.post).toHaveBeenCalledWith('/assets', {
+      expect(mockedAssetsApi.createAsset).toHaveBeenCalledWith({
         name: 'Generator',
         code: 'GEN-200',
         status: 'operational',
@@ -205,7 +208,7 @@ describe('Assets page', () => {
 
   it('updates the URL when filters change', async () => {
     mockedUseQuery.mockReturnValue({
-      data: { ok: true, assets: [], meta: { page: 1, pageSize: 10, total: 0, totalPages: 1 } },
+      data: { assets: [], meta: { page: 1, pageSize: 10, total: 0, totalPages: 1 } },
       isLoading: false,
       isFetching: false,
     });
@@ -214,12 +217,141 @@ describe('Assets page', () => {
 
     const searchInput = await screen.findByTestId('asset-filter-search');
     await act(async () => {
-      await userEvent.type(searchInput, 'pump');
+      fireEvent.change(searchInput, { target: { value: 'pump' } });
     });
 
     await waitFor(() => {
       const lastCall = mockedUseQuery.mock.calls.at(-1)?.[0];
       expect(lastCall?.queryKey?.[1]?.search).toBe('pump');
     });
+  });
+
+  it('updates sort parameters when a sortable column header is clicked', async () => {
+    const queryKeys: unknown[][] = [];
+    const now = new Date('2024-01-01').toISOString();
+
+    mockedUseQuery.mockImplementation((options: any) => {
+      queryKeys.push(options.queryKey ?? []);
+      return {
+        data: {
+          ok: true,
+          assets: [
+            {
+              id: 'asset-1',
+              code: 'PUMP-001',
+              name: 'Main Pump',
+              status: 'operational',
+              location: 'Plant 1',
+              category: 'Utilities',
+              purchaseDate: now,
+              cost: 1500,
+              createdAt: now,
+              updatedAt: now,
+            },
+          ],
+          meta: { page: 1, pageSize: 25, total: 1, totalPages: 1 },
+        },
+        isLoading: false,
+        isFetching: false,
+      };
+    });
+
+    renderWithProviders(<Assets />);
+
+    const updatedHeaderButton = await screen.findByTestId('pro-table-sort-updatedAt');
+    expect(updatedHeaderButton.closest('th')?.getAttribute('aria-sort')).toBe('descending');
+
+    const sortButton = await screen.findByTestId('pro-table-sort-code');
+
+    await act(async () => {
+      fireEvent.click(sortButton);
+    });
+
+    await waitFor(() => {
+      const lastQuery = queryKeys.at(-1);
+      expect(lastQuery?.[1]?.sort).toBe('code:asc');
+    });
+
+    const tagHeaderAsc = screen.getByTestId('pro-table-sort-code').closest('th');
+    expect(tagHeaderAsc?.getAttribute('aria-sort')).toBe('ascending');
+
+    await act(async () => {
+      fireEvent.click(sortButton);
+    });
+
+    await waitFor(() => {
+      const lastQuery = queryKeys.at(-1);
+      expect(lastQuery?.[1]?.sort).toBe('code:desc');
+    });
+
+    const tagHeaderDesc = screen.getByTestId('pro-table-sort-code').closest('th');
+    expect(tagHeaderDesc?.getAttribute('aria-sort')).toBe('descending');
+  });
+
+  it('updates page size and resets pagination when the dropdown changes', async () => {
+    const queryKeys: unknown[][] = [];
+    const totalRecords = 60;
+    const now = new Date('2024-01-01').toISOString();
+
+    mockedUseQuery.mockImplementation((options: any) => {
+      const filters = options.queryKey?.[1] ?? {};
+      const size = filters.pageSize ?? 25;
+      const page = filters.page ?? 1;
+      const startIndex = (page - 1) * size;
+      const remaining = Math.max(totalRecords - startIndex, 0);
+      const pageLength = Math.min(size, remaining);
+      const assets = Array.from({ length: pageLength }, (_, index) => {
+        const idNumber = startIndex + index + 1;
+        return {
+          id: `asset-${idNumber}`,
+          code: `CODE-${idNumber.toString().padStart(3, '0')}`,
+          name: `Asset ${idNumber}`,
+          status: 'operational',
+          location: 'Plant 1',
+          category: 'Utilities',
+          purchaseDate: now,
+          cost: 1500,
+          createdAt: now,
+          updatedAt: now,
+        };
+      });
+
+      queryKeys.push(options.queryKey ?? []);
+
+      return {
+        data: {
+          ok: true,
+          assets,
+          meta: {
+            page,
+            pageSize: size,
+            total: totalRecords,
+            totalPages: Math.max(1, Math.ceil(totalRecords / size)),
+          },
+        },
+        isLoading: false,
+        isFetching: false,
+      };
+    });
+
+    renderWithProviders(<Assets />);
+
+    const pageSizeSelect = await screen.findByTestId('asset-pagination-size');
+    expect(pageSizeSelect).toHaveValue('25');
+    expect(screen.getByText(/Page 1 of 3/i)).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(pageSizeSelect, { target: { value: '50' } });
+    });
+
+    await waitFor(() => {
+      const lastQuery = queryKeys.at(-1);
+      expect(lastQuery?.[1]?.pageSize).toBe(50);
+      expect(lastQuery?.[1]?.page).toBe(1);
+    });
+
+    const updatedSelect = await screen.findByTestId('asset-pagination-size');
+    expect(updatedSelect).toHaveValue('50');
+    expect(screen.getByText(/Page 1 of 2/i)).toBeInTheDocument();
   });
 });
