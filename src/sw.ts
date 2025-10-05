@@ -54,7 +54,7 @@ async function broadcastQueueState(
 }
 
 registerRoute(
-  ({ request }) => request.mode === 'navigate',
+  ({ request }: { request: Request }) => request.mode === 'navigate',
   new NetworkFirst({
     cacheName: PAGE_CACHE,
     networkTimeoutSeconds: 5,
@@ -66,7 +66,7 @@ registerRoute(
 );
 
 registerRoute(
-  ({ request }) => ['style', 'script', 'font'].includes(request.destination),
+  ({ request }: { request: Request }) => ['style', 'script', 'font'].includes(request.destination),
   new StaleWhileRevalidate({
     cacheName: CORE_CACHE,
     plugins: [
@@ -77,7 +77,7 @@ registerRoute(
 );
 
 registerRoute(
-  ({ url, request }) => {
+  ({ url, request }: { url: URL; request: Request }) => {
     if (request.method !== 'GET') {
       return false;
     }
