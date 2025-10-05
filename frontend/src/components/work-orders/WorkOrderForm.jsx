@@ -18,14 +18,14 @@ const fileSchema = z.custom(
   },
 );
 
-const workOrderSchema = z.object({
+const OBJECT_ID_REGEX = /^[a-fA-F0-9]{24}$/;`r`n`r`nconst workOrderSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   description: z
     .string()
     .max(2000, 'Description must be 2000 characters or fewer')
     .optional()
     .or(z.literal('')),
-  assetId: z.string().min(1, 'Asset is required'),
+  assetId: z\n    .string()\n    .optional()\n    .or(z.literal(''))\n    .transform((value) => (value && value.trim().length > 0 ? value.trim() : '')),
   priority: z.enum(['low', 'medium', 'high', 'urgent'], {
     errorMap: () => ({ message: 'Select a priority' }),
   }),
@@ -36,11 +36,7 @@ const workOrderSchema = z.object({
       (value) => !value || !Number.isNaN(Date.parse(value)),
       'Enter a valid due date',
     ),
-  assignedTo: z
-    .string()
-    .max(255, 'Assigned to must be 255 characters or fewer')
-    .optional()
-    .or(z.literal('')),
+
   category: z
     .string()
     .max(255, 'Category must be 255 characters or fewer')
@@ -56,8 +52,8 @@ const DEFAULT_VALUES = {
   assetId: '',
   lineName: '',
   stationNumber: '',
-  assignees: [''],
-  checklists: [{ text: '', note: '' }],
+
+
 };
 
 export function WorkOrderForm({ onClose, onSuccess, defaultValues, asset: assetProp }) {
@@ -161,20 +157,24 @@ export function WorkOrderForm({ onClose, onSuccess, defaultValues, asset: assetP
   const onSubmit = handleSubmit(async (values) => {
     setSubmitError('');
 
+    const assetIdValue = values.assetId && values.assetId.length > 0 ? values.assetId : undefined;
+
+    if (assetIdValue && !OBJECT_ID_REGEX.test(assetIdValue)) {
+      const message = 'Enter a valid asset ID or leave the field blank';
+      setError('assetId', { type: 'manual', message });
+      setSubmitError(message);
+      return;
+    }
+
     const payload = {
       title: values.title,
-      description: values.description?.trim() ? values.description : undefined,
+      description: values.description?.trim() ? values.description.trim() : undefined,
       priority: values.priority,
-      assetId: values.assetId,
+      assetId: assetIdValue,
       dueDate: values.dueDate ? new Date(values.dueDate).toISOString() : undefined,
-      assignedTo: values.assignedTo?.trim() ? values.assignedTo : undefined,
-      category: values.category?.trim() ? values.category : undefined,
-      attachments: attachments.map((file) => ({
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        lastModified: file.lastModified,
-      })),
+
+      category: values.category?.trim() ? values.category.trim() : undefined,
+
     };
 
     try {
@@ -315,16 +315,6 @@ export function WorkOrderForm({ onClose, onSuccess, defaultValues, asset: assetP
 
         <div className="space-y-2">
           <label className="block text-sm font-medium text-gray-700">
-            Assigned To <span className="text-gray-400">(optional)</span>
-          </label>
-          <Input placeholder="Technician or team" {...register('assignedTo')} />
-          {errors.assignedTo && (
-            <p className="text-sm text-red-600">{errors.assignedTo.message}</p>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-gray-700">
             Category <span className="text-gray-400">(optional)</span>
           </label>
           <Input placeholder="Maintenance category" {...register('category')} />
@@ -386,3 +376,18 @@ export function WorkOrderForm({ onClose, onSuccess, defaultValues, asset: assetP
     </form>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
