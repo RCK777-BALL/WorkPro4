@@ -37,11 +37,22 @@ const emptyToUndefined = (value: unknown) => {
   return value;
 };
 
+const normalizeOptionalString = (value: unknown) => {
+  if (value === undefined) {
+    return undefined;
+  }
   if (value === null) {
     return null;
   }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length === 0 ? null : trimmed;
+  }
+  return value;
+};
 
-  if (typeof value === 'string' && value.trim() === '') {
+const normalizeOptionalNumber = (value: unknown) => {
+  if (value === undefined) {
     return undefined;
   }
   if (value === null) {
@@ -52,7 +63,7 @@ const emptyToUndefined = (value: unknown) => {
   }
   if (typeof value === 'string') {
     const trimmed = value.trim();
-    if (!trimmed) {
+    if (trimmed.length === 0) {
       return null;
     }
     const parsed = Number(trimmed);
@@ -61,7 +72,7 @@ const emptyToUndefined = (value: unknown) => {
   return value;
 };
 
-const normalizeNullableDate = (value: unknown) => {
+const normalizeOptionalDate = (value: unknown) => {
   if (value === undefined) {
     return undefined;
   }
@@ -69,10 +80,21 @@ const normalizeNullableDate = (value: unknown) => {
     return null;
   }
   if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? value : value;
+    return value;
   }
-  if (typeof value === 'string' && value.trim()) {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      return value;
+    }
     const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? value : parsed;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+    const parsed = new Date(trimmed);
     return Number.isNaN(parsed.getTime()) ? value : parsed;
   }
   return value;
