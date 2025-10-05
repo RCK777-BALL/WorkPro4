@@ -315,7 +315,16 @@ describe('WorkOrders page', () => {
     const inputs = screen.getAllByTestId('work-orders-import-input') as HTMLInputElement[];
     const targetInput = inputs.find((element) => {
       const reactKey = Object.keys(element).find((key) => key.startsWith('__reactProps$'));
-      return Boolean(reactKey && (element as Record<string, { onChange?: unknown }>)[reactKey]?.onChange);
+      if (!reactKey) {
+        return false;
+      }
+
+      const props = (element as unknown as Record<string, unknown>)[reactKey];
+      if (!props || typeof props !== 'object') {
+        return false;
+      }
+
+      return typeof (props as { onChange?: unknown }).onChange === 'function';
     });
     if (!targetInput) {
       throw new Error('Unable to locate file input with onChange handler');
