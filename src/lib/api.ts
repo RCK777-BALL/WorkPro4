@@ -443,3 +443,11 @@ export {
   normalizeApiError,
 } from './errors';
 export type { ApiError, ApiResponse } from '../../shared/types/http';
+export { workOrdersApi } from './workOrdersApi';
+export type {
+  WorkOrderRecord,
+  WorkOrderStatus,
+  WorkOrderPriority,
+  SaveWorkOrderPayload,
+  PaginatedWorkOrders,
+} from './workOrdersApi';

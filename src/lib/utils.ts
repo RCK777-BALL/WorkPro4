@@ -33,3 +33,34 @@ export function getPriorityColor(priority: string): string {
 export function cn(...classes: (string | undefined | null | false)[]): string {
   return classes.filter(Boolean).join(' ');
 }
+
+
+export function formatWorkOrderStatus(value: string): string {
+  const normalized = value.replace(/_/g, ' ').trim();
+  return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+export function formatWorkOrderPriority(value: string): string {
+  if (!value) {
+    return '';
+  }
+
+  const lower = value.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
+}
+
+export function toTitleCase(value: string): string {
+  if (!value) {
+    return '';
+  }
+
+  const cleaned = value.replace(/[_-]+/g, ' ');
+
+  return cleaned
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((segment) => segment.length > 0)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
+}
+
