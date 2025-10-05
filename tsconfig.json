@@ -13,7 +13,7 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "types": ["vitest/globals", "vite/client"],
+    "types": ["vitest/globals", "vite/client", "node"],
 
     /* Linting */
     "strict": true,
@@ -27,6 +27,14 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "tests", "vite.config.ts"],
+  "include": [
+    "src",
+    "tests",
+    "vite.config.ts",
+    "playwright.config.ts",
+    "vitest.config.ts",
+    "vitest.setup.ts",
+    "tailwind.config.ts"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
