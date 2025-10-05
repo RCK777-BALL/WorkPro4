@@ -56,6 +56,8 @@ export interface SaveWorkOrderPayload {
   dueDate?: string | null;
 }
 
+export type WorkOrderRecord = WorkOrderListItem;
+
 export const workOrdersApi = {
   list: (query: WorkOrderQuery) =>
     unwrapResponse<PaginatedWorkOrders>(

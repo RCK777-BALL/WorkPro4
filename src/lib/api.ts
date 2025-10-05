@@ -26,15 +26,16 @@ const baseURL = (() => {
   return 'http://localhost:5010/api';
 })();
 
-  if (withLeadingSlash.endsWith('/api')) {
-    return withLeadingSlash;
+function normalizeApiBaseUrl(value?: string) {
+  const trimmed = typeof value === 'string' && value.trim().length > 0 ? value.trim() : baseURL;
+  const withoutTrailingSlash = trimmed.replace(/\/+$/, '');
+  if (withoutTrailingSlash.endsWith('/api')) {
+    return withoutTrailingSlash;
   }
-
-  return `${withLeadingSlash}/api`;
-};
+  return `${withoutTrailingSlash}/api`;
+}
 
 export const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_URL);
-const TOKEN_STORAGE_KEY = 'auth_token';
 
 export interface ApiResult<T> {
   data: T | null;
@@ -704,3 +705,11 @@ export const api = {
 };
 
 export type { ApiError, ApiResponse } from '../../shared/types/http';
+export { workOrdersApi } from './workOrdersApi';
+export type {
+  WorkOrderRecord,
+  WorkOrderStatus,
+  WorkOrderPriority,
+  SaveWorkOrderPayload,
+  PaginatedWorkOrders,
+} from './workOrdersApi';

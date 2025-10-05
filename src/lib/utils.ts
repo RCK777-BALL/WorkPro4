@@ -1,3 +1,5 @@
+import { isApiErrorResponse } from './api';
+
 export function formatDateTime(dateString: string): string {
   const date = new Date(dateString);
   return new Intl.DateTimeFormat('en-US', {
@@ -65,4 +67,46 @@ export function formatWorkOrderPriority(value: string): string {
 
   const lower = value.toLowerCase();
   return lower.charAt(0).toUpperCase() + lower.slice(1);
+}
+
+export function toTitleCase(value: string): string {
+  if (!value) {
+    return '';
+  }
+
+  const cleaned = value.replace(/[_-]+/g, ' ');
+
+  return cleaned
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((segment) => segment.length > 0)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
+}
+
+export function errorMessage(error: unknown, fallback = 'Request failed'): string {
+  if (!error) {
+    return fallback;
+  }
+
+  if (typeof error === 'string' && error.trim().length > 0) {
+    return error;
+  }
+
+  if (isApiErrorResponse(error)) {
+    return error.error.message ?? fallback;
+  }
+
+  if (error instanceof Error) {
+    return error.message || fallback;
+  }
+
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim().length > 0) {
+      return message;
+    }
+  }
+
+  return fallback;
 }
