@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -32,18 +32,6 @@ const assetStatuses = ['operational', 'maintenance', 'down', 'retired', 'decommi
 
 type AssetStatus = (typeof assetStatuses)[number];
 
-interface AssetFormState {
-  id: string;
-  code: string;
-  name: string;
-  status: AssetStatus;
-  location: string | null;
-  category: string | null;
-  purchaseDate: string | null;
-  cost: number | null;
-  createdAt: string;
-  updatedAt: string;
-}
 
 interface AssetsResponse {
   ok: boolean;
@@ -610,27 +598,31 @@ export default function Assets() {
   const disableBulkDelete = selectedIds.length === 0 || !canManageAssets || bulkDeleteMutation.isLoading;
   const disableCreateOrEdit = createAssetMutation.isLoading || updateAssetMutation.isLoading;
 
+  function handleAssetSelect(id: any): void {
+    throw new Error('Function not implemented.');
+  }
+
   return (
     <div className="grid gap-6 xl:grid-cols-[320px_1fr]">
-      <aside className="space-y-6 rounded-3xl border border-border bg-surface p-6 shadow-xl">
+      <aside className="p-6 space-y-6 border shadow-xl rounded-3xl border-border bg-surface">
         <div className="flex items-center gap-3">
-          <Building2 className="h-6 w-6 text-brand" />
+          <Building2 className="w-6 h-6 text-brand" />
           <div>
             <h2 className="text-lg font-semibold text-fg">Asset catalog</h2>
             <p className="text-sm text-mutedfg">Explore locations, tags, and hierarchies.</p>
           </div>
         </div>
         <div className="relative">
-          <Search className="pointer-events-none absolute left-4 top-3 h-4 w-4 text-mutedfg" />
+          <Search className="absolute w-4 h-4 pointer-events-none left-4 top-3 text-mutedfg" />
           <input
             value={search}
             onChange={(event) => updateSearchParam('search', event.target.value)}
             placeholder="Search assets"
-            className="w-full rounded-2xl border border-border bg-white px-10 py-3 text-sm text-fg shadow-inner outline-none transition focus:ring-2 focus:ring-brand"
+            className="w-full px-10 py-3 text-sm transition bg-white border shadow-inner outline-none rounded-2xl border-border text-fg focus:ring-2 focus:ring-brand"
             data-testid="asset-search-input"
           />
           {assetsFetching && (
-            <Loader2 className="absolute right-4 top-3 h-4 w-4 animate-spin text-mutedfg" />
+            <Loader2 className="absolute w-4 h-4 right-4 top-3 animate-spin text-mutedfg" />
           )}
         </div>
         <button
@@ -638,28 +630,32 @@ export default function Assets() {
           type="button"
           data-testid="asset-toolbar-saved-views"
         >
-          <SlidersHorizontal className="mr-2 inline h-4 w-4" /> Saved views
+          <SlidersHorizontal className="inline w-4 h-4 mr-2" /> Saved views
         </button>
         <div className="space-y-4">
           {hierarchyLoading && (
             <div className="flex items-center gap-2 text-sm text-mutedfg">
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" />
               Loading hierarchy…
             </div>
           )}
           {!hierarchyLoading && hierarchy.length === 0 && (
             <p className="text-sm text-mutedfg">No hierarchy data available yet.</p>
           )}
-          {hierarchy.map((site) => {
+          {hierarchy.map((site: { id: Key | null | undefined; name: string | number | boolean | ReactElement<any, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | null | undefined; areas: any[]; }) => {
             const siteAssetCount = countAssetsInSite(site);
+            function countAssetsInArea(area: any) {
+              throw new Error('Function not implemented.');
+            }
+
             return (
               <div key={site.id} className="space-y-3">
                 <div className="flex items-center justify-between text-sm font-semibold text-fg">
                   <span>{site.name}</span>
-                  <span className="rounded-full bg-muted px-3 py-1 text-xs text-mutedfg">{siteAssetCount}</span>
+                  <span className="px-3 py-1 text-xs rounded-full bg-muted text-mutedfg">{siteAssetCount}</span>
                 </div>
-                <div className="space-y-2 pl-3 text-sm text-mutedfg">
-                  {site.areas.map((area) => {
+                <div className="pl-3 space-y-2 text-sm text-mutedfg">
+                  {site.areas.map((area: { id: Key | null | undefined; name: string | number | boolean | ReactElement<any, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | null | undefined; lines: any[]; }) => {
                     const areaCount = countAssetsInArea(area);
                     return (
                       <div key={area.id} className="space-y-2">
@@ -667,23 +663,23 @@ export default function Assets() {
                           <span>{area.name}</span>
                           <span>{areaCount}</span>
                         </div>
-                        <div className="space-y-2 pl-3">
-                          {area.lines.map((line) => {
+                        <div className="pl-3 space-y-2">
+                          {area.lines.map((line: { id: Key | null | undefined; name: string | number | boolean | ReactElement<any, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | null | undefined; stations: any[]; }) => {
                             const lineCount = countAssetsInLine(line);
                             return (
                               <div key={line.id} className="space-y-2">
-                                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-mutedfg">
+                                <div className="flex items-center justify-between text-xs font-semibold tracking-wide uppercase text-mutedfg">
                                   <span>{line.name}</span>
                                   <span>{lineCount}</span>
                                 </div>
-                                <ul className="space-y-1 pl-2">
-                                  {line.stations.map((station) => (
+                                <ul className="pl-2 space-y-1">
+                                  {line.stations.map((station: { id: Key | null | undefined; name: string | number | boolean | ReactElement<any, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | null | undefined; assets: any[]; }) => (
                                     <li key={station.id} className="space-y-1">
                                       <div className="text-xs font-medium text-mutedfg">
                                         {station.name} ({station.assets.length})
                                       </div>
-                                      <ul className="space-y-1 pl-3">
-                                        {station.assets.map((asset) => (
+                                      <ul className="pl-3 space-y-1">
+                                        {station.assets.map((asset: { id: Key | null | undefined; code: string | number | boolean | ReactElement<any, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | null | undefined; name: string | number | boolean | ReactElement<any, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | null | undefined; }) => (
                                           <li key={asset.id}>
                                             <button
                                               type="button"
@@ -723,14 +719,14 @@ export default function Assets() {
             <p className="mt-2 text-sm text-mutedfg">Monitor lifecycle state, compliance, and investments for every asset.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-full border border-border bg-white/70 p-1 text-xs font-semibold text-mutedfg shadow-inner">
+            <div className="flex p-1 text-xs font-semibold border rounded-full shadow-inner border-border bg-white/70 text-mutedfg">
               <button
                 type="button"
                 className={cn('flex items-center gap-2 rounded-full px-4 py-1', view === 'table' ? 'bg-brand text-white shadow' : '')}
                 onClick={() => updateSearchParam('view', 'table')}
                 data-testid="asset-view-table"
               >
-                <List className="h-4 w-4" /> Table
+                <List className="w-4 h-4" /> Table
               </button>
               <button
                 type="button"
@@ -738,7 +734,7 @@ export default function Assets() {
                 onClick={() => updateSearchParam('view', 'cards')}
                 data-testid="asset-view-cards"
               >
-                <LayoutGrid className="h-4 w-4" /> Cards
+                <LayoutGrid className="w-4 h-4" /> Cards
               </button>
             </div>
             <button
@@ -746,7 +742,7 @@ export default function Assets() {
               type="button"
               data-testid="asset-toolbar-advanced-filters"
             >
-              <Filter className="h-4 w-4" /> Advanced filters
+              <Filter className="w-4 h-4" /> Advanced filters
             </button>
             <button
               onClick={openCreateDrawer}
@@ -756,7 +752,7 @@ export default function Assets() {
               title={canManageAssets ? undefined : 'You need asset manager permissions'}
               data-testid="asset-toolbar-create"
             >
-              <Plus className="h-4 w-4" /> Add asset
+              <Plus className="w-4 h-4" /> Add asset
             </button>
           </div>
         </header>
@@ -775,7 +771,7 @@ export default function Assets() {
               title={canManageAssets ? undefined : 'You need asset manager permissions'}
               data-testid="asset-toolbar-bulk-delete"
             >
-              <Trash2 className="mr-2 h-4 w-4" /> Delete selected
+              <Trash2 className="w-4 h-4 mr-2" /> Delete selected
             </Button>
           }
         />
@@ -791,18 +787,18 @@ export default function Assets() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  className="rounded-full border border-border px-3 py-1 text-xs text-mutedfg hover:text-brand"
+                  className="px-3 py-1 text-xs border rounded-full border-border text-mutedfg hover:text-brand"
                   onClick={(event) => {
                     event.stopPropagation();
                     openViewDrawer(row);
                   }}
                   data-testid={`asset-row-view-${row.id}`}
                 >
-                  <Eye className="mr-1 inline h-3 w-3" /> View
+                  <Eye className="inline w-3 h-3 mr-1" /> View
                 </button>
                 <button
                   type="button"
-                  className="rounded-full border border-border px-3 py-1 text-xs text-mutedfg hover:text-brand disabled:cursor-not-allowed disabled:opacity-60"
+                  className="px-3 py-1 text-xs border rounded-full border-border text-mutedfg hover:text-brand disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={(event) => {
                     event.stopPropagation();
                     openEditDrawer(row);
@@ -811,11 +807,11 @@ export default function Assets() {
                   title={canManageAssets ? undefined : 'You need asset manager permissions'}
                   data-testid={`asset-row-edit-${row.id}`}
                 >
-                  <Pencil className="mr-1 inline h-3 w-3" /> Edit
+                  <Pencil className="inline w-3 h-3 mr-1" /> Edit
                 </button>
                 <button
                   type="button"
-                  className="rounded-full border border-border px-3 py-1 text-xs text-danger hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="px-3 py-1 text-xs border rounded-full border-border text-danger hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={(event) => {
                     event.stopPropagation();
                     deleteAssetMutation.mutate(row);
@@ -824,19 +820,19 @@ export default function Assets() {
                   title={canManageAssets ? undefined : 'You need asset manager permissions'}
                   data-testid={`asset-row-delete-${row.id}`}
                 >
-                  <Trash2 className="mr-1 inline h-3 w-3" /> Delete
+                  <Trash2 className="inline w-3 h-3 mr-1" /> Delete
                 </button>
               </div>
             )}
-            emptyState={<div className="rounded-3xl border border-border bg-surface p-10 text-center text-sm text-mutedfg">No assets match your filters.</div>}
+            emptyState={<div className="p-10 text-sm text-center border rounded-3xl border-border bg-surface text-mutedfg">No assets match your filters.</div>}
           />
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
             {assets.map((asset) => (
-              <article key={asset.id} className="rounded-3xl border border-border bg-surface p-6 shadow-xl transition hover:-translate-y-1 hover:shadow-2xl">
+              <article key={asset.id} className="p-6 transition border shadow-xl rounded-3xl border-border bg-surface hover:-translate-y-1 hover:shadow-2xl">
                 <div className="flex items-start justify-between">
-                  <div className="rounded-2xl bg-brand/10 p-3 text-brand">
-                    <Wrench className="h-6 w-6" />
+                  <div className="p-3 rounded-2xl bg-brand/10 text-brand">
+                    <Wrench className="w-6 h-6" />
                   </div>
                   <DataBadge status={asset.status} />
                 </div>
@@ -844,25 +840,25 @@ export default function Assets() {
                 <p className="text-sm text-mutedfg">{asset.code}</p>
                 <div className="mt-4 space-y-2 text-sm text-mutedfg">
                   <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4" />
+                    <MapPin className="w-4 h-4" />
                     <span>{asset.location ?? 'Unassigned'}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
+                    <Building2 className="w-4 h-4" />
                     <span>{asset.category ?? 'Uncategorized'}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <List className="h-4 w-4" />
+                    <List className="w-4 h-4" />
                     <span>{asset.cost != null ? formatCurrency(asset.cost) : 'No cost'}</span>
                   </div>
                 </div>
-                <div className="mt-4 flex items-center justify-between text-xs uppercase tracking-wide text-mutedfg">
+                <div className="flex items-center justify-between mt-4 text-xs tracking-wide uppercase text-mutedfg">
                   <span>Updated</span>
                   <span className="font-semibold text-fg">{new Date(asset.updatedAt).toLocaleDateString()}</span>
                 </div>
-                <div className="mt-5 flex items-center gap-2">
+                <div className="flex items-center gap-2 mt-5">
                   <Button size="sm" variant="secondary" onClick={() => openViewDrawer(asset)} data-testid={`asset-card-view-${asset.id}`}>
-                    <Eye className="mr-2 h-4 w-4" /> View
+                    <Eye className="w-4 h-4 mr-2" /> View
                   </Button>
                   <Button
                     size="sm"
@@ -872,7 +868,7 @@ export default function Assets() {
                     title={canManageAssets ? undefined : 'You need asset manager permissions'}
                     data-testid={`asset-card-edit-${asset.id}`}
                   >
-                    <Pencil className="mr-2 h-4 w-4" /> Edit
+                    <Pencil className="w-4 h-4 mr-2" /> Edit
                   </Button>
                   <Button
                     size="sm"
@@ -882,7 +878,7 @@ export default function Assets() {
                     title={canManageAssets ? undefined : 'You need asset manager permissions'}
                     data-testid={`asset-card-delete-${asset.id}`}
                   >
-                    <Trash2 className="mr-2 h-4 w-4" /> Delete
+                    <Trash2 className="w-4 h-4 mr-2" /> Delete
                   </Button>
                 </div>
                 <button
@@ -896,7 +892,7 @@ export default function Assets() {
             ))}
           </div>
         )}
-        <div className="flex items-center justify-between rounded-3xl border border-border bg-surface px-5 py-4 text-sm text-mutedfg">
+        <div className="flex items-center justify-between px-5 py-4 text-sm border rounded-3xl border-border bg-surface text-mutedfg">
           <div>
             Showing {(page - 1) * meta.pageSize + Math.min(1, assets.length)}-
             {(page - 1) * meta.pageSize + assets.length} of {meta.total} assets
@@ -911,7 +907,7 @@ export default function Assets() {
             >
               Previous
             </Button>
-            <span className="text-xs font-semibold uppercase tracking-wide text-mutedfg">
+            <span className="text-xs font-semibold tracking-wide uppercase text-mutedfg">
               Page {page} of {Math.max(meta.totalPages, 1)}
             </span>
             <Button
@@ -1003,28 +999,28 @@ export default function Assets() {
               Asset name
               <input
                 {...form.register('name')}
-                className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+                className="w-full px-4 py-2 mt-2 text-sm bg-white border shadow-inner rounded-2xl border-border text-fg focus:outline-none focus:ring-2 focus:ring-brand"
                 disabled={disableCreateOrEdit}
                 data-testid="asset-form-name"
               />
-              {form.formState.errors.name && <span className="mt-1 block text-xs text-danger">{form.formState.errors.name.message}</span>}
+              {form.formState.errors.name && <span className="block mt-1 text-xs text-danger">{form.formState.errors.name.message}</span>}
             </label>
             <label className="block text-sm font-semibold text-mutedfg">
               Asset tag
               <input
                 {...form.register('code')}
-                className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+                className="w-full px-4 py-2 mt-2 text-sm bg-white border shadow-inner rounded-2xl border-border text-fg focus:outline-none focus:ring-2 focus:ring-brand"
                 disabled={disableCreateOrEdit}
                 data-testid="asset-form-code"
               />
-              {form.formState.errors.code && <span className="mt-1 block text-xs text-danger">{form.formState.errors.code.message}</span>}
+              {form.formState.errors.code && <span className="block mt-1 text-xs text-danger">{form.formState.errors.code.message}</span>}
             </label>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <label className="block text-sm font-semibold text-mutedfg">
                 Location
                 <input
                   {...form.register('location')}
-                  className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+                  className="w-full px-4 py-2 mt-2 text-sm bg-white border shadow-inner rounded-2xl border-border text-fg focus:outline-none focus:ring-2 focus:ring-brand"
                   disabled={disableCreateOrEdit}
                   data-testid="asset-form-location"
                 />
@@ -1033,7 +1029,7 @@ export default function Assets() {
                 Category
                 <input
                   {...form.register('category')}
-                  className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+                  className="w-full px-4 py-2 mt-2 text-sm bg-white border shadow-inner rounded-2xl border-border text-fg focus:outline-none focus:ring-2 focus:ring-brand"
                   disabled={disableCreateOrEdit}
                   data-testid="asset-form-category"
                 />
@@ -1044,7 +1040,7 @@ export default function Assets() {
                 Status
                 <select
                   {...form.register('status')}
-                  className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+                  className="w-full px-4 py-2 mt-2 text-sm bg-white border shadow-inner rounded-2xl border-border text-fg focus:outline-none focus:ring-2 focus:ring-brand"
                   disabled={disableCreateOrEdit}
                   data-testid="asset-form-status"
                 >
@@ -1059,11 +1055,11 @@ export default function Assets() {
                 Cost
                 <input
                   {...form.register('cost')}
-                  className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+                  className="w-full px-4 py-2 mt-2 text-sm bg-white border shadow-inner rounded-2xl border-border text-fg focus:outline-none focus:ring-2 focus:ring-brand"
                   disabled={disableCreateOrEdit}
                   data-testid="asset-form-cost"
                 />
-                {form.formState.errors.cost && <span className="mt-1 block text-xs text-danger">{form.formState.errors.cost.message}</span>}
+                {form.formState.errors.cost && <span className="block mt-1 text-xs text-danger">{form.formState.errors.cost.message}</span>}
               </label>
             </div>
             <label className="block text-sm font-semibold text-mutedfg">
@@ -1071,12 +1067,12 @@ export default function Assets() {
               <input
                 type="date"
                 {...form.register('purchaseDate')}
-                className="mt-2 w-full rounded-2xl border border-border bg-white px-4 py-2 text-sm text-fg shadow-inner focus:outline-none focus:ring-2 focus:ring-brand"
+                className="w-full px-4 py-2 mt-2 text-sm bg-white border shadow-inner rounded-2xl border-border text-fg focus:outline-none focus:ring-2 focus:ring-brand"
                 disabled={disableCreateOrEdit}
                 data-testid="asset-form-purchaseDate"
               />
               {form.formState.errors.purchaseDate && (
-                <span className="mt-1 block text-xs text-danger">{form.formState.errors.purchaseDate.message}</span>
+                <span className="block mt-1 text-xs text-danger">{form.formState.errors.purchaseDate.message}</span>
               )}
             </label>
             <div className="flex justify-end gap-3 pt-2">
