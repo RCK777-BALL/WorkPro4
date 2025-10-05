@@ -10,90 +10,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import WorkOrders from './WorkOrders';
 import { ToastProvider } from '../components/ui/toast';
 import { useAuth } from '../hooks/useAuth';
+import { workOrdersApi } from '../lib/api';
 import type { WorkOrderListItem } from '../lib/api';
 
-const now = new Date().toISOString();
+const now = vi.hoisted(() => new Date().toISOString());
 
-let workOrders: WorkOrderListItem[] = [];
-
-vi.mock('../lib/api', () => {
-  const api = {
-    get: vi.fn(async () => workOrders),
-  };
-
-  return {
-    api,
-    workOrdersApi: {
-      list: vi.fn(async () => ({
-        items: [...workOrders],
-        total: workOrders.length,
-        page: 1,
-        limit: Math.max(workOrders.length, 1),
-        totalPages: 1,
-      })),
-      get: vi.fn(async (id: string) => workOrders.find((item) => item.id === id) ?? workOrders[0]),
-      create: vi.fn(async (payload: any) => {
-        const created: WorkOrderListItem = {
-          id: `wo-${Date.now()}`,
-          tenantId: 'tenant-1',
-          title: payload.title,
-          description: payload.description ?? null,
-          status: payload.status ?? 'requested',
-          priority: payload.priority ?? 'medium',
-          assigneeId: null,
-          assignee: null,
-          assetId: null,
-          asset: null,
-          category: payload.category ?? null,
-          dueDate: payload.dueDate ?? null,
-          attachments: [],
-          createdBy: 'user-1',
-          createdByUser: { id: 'user-1', name: 'Admin User' },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          completedAt: null,
-        };
-        workOrders = [created, ...workOrders];
-        return created;
-      }),
-      update: vi.fn(async (id: string, payload: any) => {
-        let updated: WorkOrderListItem | null = null;
-        workOrders = workOrders.map((item) => {
-          if (item.id === id) {
-            updated = {
-              ...item,
-              title: payload.title ?? item.title,
-              description: payload.description ?? item.description,
-              status: payload.status ?? item.status,
-              priority: payload.priority ?? item.priority,
-              dueDate: payload.dueDate ?? item.dueDate,
-              category: payload.category ?? item.category,
-              updatedAt: new Date().toISOString(),
-            };
-            return updated;
-          }
-          return item;
-        });
-        return updated ?? workOrders[0];
-      }),
-      bulkComplete: vi.fn(async (ids: string[]) => {
-        const timestamp = new Date().toISOString();
-        workOrders = workOrders.map((item) =>
-          ids.includes(item.id)
-            ? { ...item, status: 'completed', completedAt: timestamp, updatedAt: timestamp }
-            : item,
-        );
-        return workOrders.filter((item) => ids.includes(item.id));
-      }),
-      bulkArchive: vi.fn(async () => []),
-      bulkDelete: vi.fn(async () => ({ count: 0, ids: [] })),
-      bulkDuplicate: vi.fn(async () => []),
-      export: vi.fn(async () => ({ items: [...workOrders] })),
-      import: vi.fn(async () => workOrders),
-    },
-    isApiErrorResponse: () => false,
-  };
-});
+let workOrders = vi.hoisted(() => [] as WorkOrderListItem[]);
 
 const workOrdersApiMock = vi.hoisted(() => ({
   list: vi.fn(),
@@ -123,21 +45,13 @@ const apiStub = vi.hoisted(() => ({
   client: {},
 }));
 
-vi.mock('../lib/api', () => {
-  return {
-    api: apiStub,
-    isApiErrorResponse: apiStub.isApiErrorResponse,
-    workOrdersApi: workOrdersApiMock,
-  };
-});
-
-import { workOrdersApi } from '../lib/api';
+vi.mock('../lib/api', () => ({
+  api: apiStub,
+  isApiErrorResponse: apiStub.isApiErrorResponse,
+  workOrdersApi: workOrdersApiMock,
+}));
 
 const mockedApi = vi.mocked(workOrdersApi);
-
-const now = new Date().toISOString();
-
-let workOrders: WorkOrderRecord[] = [];
 
 function renderWorkOrders() {
   const queryClient = new QueryClient({
@@ -194,7 +108,7 @@ describe('WorkOrders page', () => {
     }));
 
     mockedApi.create.mockImplementation(async (payload) => {
-      const created: WorkOrderRecord = {
+      const created: WorkOrderListItem = {
         id: `wo-${Date.now()}`,
         tenantId: 'tenant-1',
         title: payload.title,
@@ -219,7 +133,7 @@ describe('WorkOrders page', () => {
     });
 
     mockedApi.update.mockImplementation(async (id, payload) => {
-      let updated: WorkOrderRecord | null = null;
+      let updated: WorkOrderListItem | null = null;
       workOrders = workOrders.map((item) => {
         if (item.id === id) {
           updated = {
@@ -295,7 +209,7 @@ describe('WorkOrders page', () => {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         completedAt: null,
-      } satisfies WorkOrderRecord));
+      } satisfies WorkOrderListItem));
       workOrders = [...imported, ...workOrders];
       return imported;
     });
