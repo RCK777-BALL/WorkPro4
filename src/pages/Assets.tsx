@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Building2,
+  Loader2,
   Eye,
   Filter,
   Loader2,
@@ -19,6 +20,7 @@ import {
   Trash2,
   Wrench,
 } from 'lucide-react';
+import type { Area, AssetTree, Line, Site } from '../../shared/types/asset';
 import { DataBadge } from '../components/premium/DataBadge';
 import { SlideOver } from '../components/premium/SlideOver';
 import { ProTable, type ProTableColumn } from '../components/premium/ProTable';
@@ -430,6 +432,15 @@ export default function Assets() {
     queryFn: async () => api.get<AssetsResponse>(`/assets${buildQueryString(filters)}`),
     keepPreviousData: true,
   });
+
+  const assetsFetching = isFetching;
+
+  const { data: hierarchyData, isLoading: hierarchyLoading } = useQuery<AssetTree>({
+    queryKey: ['asset-hierarchy'],
+    queryFn: () => api.get<AssetTree>('/hierarchy/assets'),
+  });
+
+  const hierarchy = hierarchyData?.sites ?? [];
 
   const assets = data?.assets ?? [];
   const meta = data?.meta ?? { page: 1, pageSize: 10, total: 0, totalPages: 1 };
@@ -893,7 +904,7 @@ export default function Assets() {
                                   {line.stations.map((station) => (
                                     <li key={station.id} className="space-y-1">
                                       <div className="text-xs font-medium text-mutedfg">
-                                        {station.name} ({station.assets.length})
+                                        {station.name} ({station.assets?.length ?? 0})
                                       </div>
                                       <ul className="pl-3 space-y-1">
                                         {station.assets.map((asset) => (
