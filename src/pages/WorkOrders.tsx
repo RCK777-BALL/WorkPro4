@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEventHandler } from 'react';
+import { isAxiosError } from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -9,7 +10,7 @@ import { SlideOver } from '../components/premium/SlideOver';
 import { ConfirmDialog } from '../components/premium/ConfirmDialog';
 import { DataBadge } from '../components/premium/DataBadge';
 import { EmptyState } from '../components/premium/EmptyState';
-import { api, ApiError, ApiResponse, isApiErrorResponse, PaginatedWorkOrders, SaveWorkOrderPayload, WorkOrderPriority, workOrdersApi, WorkOrderStatus } from '../lib/api';
+import { api, ApiError, ApiRequestError, ApiResponse, isApiErrorResponse, PaginatedWorkOrders, SaveWorkOrderPayload, WorkOrderPriority, workOrdersApi, WorkOrderStatus } from '../lib/api';
 import { formatDate, formatWorkOrderPriority, formatWorkOrderStatus } from '../lib/format';
 import { normalizeWorkOrders, type WorkOrderRecord } from '../lib/workOrders';
 import { useToast } from '@/components/ui/toast';
@@ -993,7 +994,40 @@ export default function WorkOrders() {
     </div>
   );
 }
-function errorMessage(mutationError: unknown, arg1: string): string | undefined {
-  throw new Error('Function not implemented.');
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiRequestError) {
+    return error.message || fallback;
+  }
+
+  if (isApiErrorResponse(error)) {
+    const message = error.error?.message;
+    if (typeof message === 'string' && message.trim().length > 0) {
+      return message;
+    }
+  }
+
+  if (isAxiosError(error)) {
+    const payload = error.response?.data;
+    if (isApiErrorResponse(payload)) {
+      const message = payload.error?.message;
+      if (typeof message === 'string' && message.trim().length > 0) {
+        return message;
+      }
+    }
+
+    if (typeof error.message === 'string' && error.message.trim().length > 0) {
+      return error.message;
+    }
+  }
+
+  if (error instanceof Error && typeof error.message === 'string' && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  if (typeof error === 'string' && error.trim().length > 0) {
+    return error;
+  }
+
+  return fallback;
 }
 
