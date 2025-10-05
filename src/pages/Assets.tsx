@@ -9,6 +9,7 @@ import {
   Loader2,
   Eye,
   Filter,
+  Loader2,
   LayoutGrid,
   List,
   MapPin,
@@ -33,6 +34,20 @@ import { cn, formatCurrency } from '../lib/utils';
 const assetStatuses = ['operational', 'maintenance', 'down', 'retired', 'decommissioned'] as const;
 
 type AssetStatus = (typeof assetStatuses)[number];
+
+
+export interface AssetRecord {
+  id: string;
+  code: string;
+  name: string;
+  status: AssetStatus;
+  location: string | null;
+  category: string | null;
+  purchaseDate: string | null;
+  cost: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 
 interface AssetsResponse {
@@ -80,7 +95,7 @@ type DrawerState =
   | { mode: 'view'; asset: AssetRecord }
   | null;
 
-const columns: ProTableColumn<AssetRecord>[] = [
+const assetColumns: ProTableColumn<AssetRecord>[] = [
   { key: 'code', header: 'Tag' },
   { key: 'name', header: 'Asset' },
   { key: 'location', header: 'Location' },
@@ -115,40 +130,242 @@ const baseFilters: FilterDefinition[] = [
   { key: 'category', label: 'Category', type: 'text', placeholder: 'Category', testId: 'asset-filter-category' },
 ];
 
-const columns: ProTableColumn<AssetTableRow>[] = [
-  { key: 'code', header: 'Tag' },
-  { key: 'name', header: 'Asset' },
-  { key: 'site', header: 'Site' },
-  { key: 'area', header: 'Area' },
-  { key: 'line', header: 'Line' },
+type HierarchyAssetPreview = Pick<AssetRecord, 'id' | 'code' | 'name'>;
+
+interface HierarchyStation {
+  id: string;
+  name: string;
+  assets: HierarchyAssetPreview[];
+}
+
+interface HierarchyLine {
+  id: string;
+  name: string;
+  stations: HierarchyStation[];
+}
+
+interface HierarchyArea {
+  id: string;
+  name: string;
+  lines: HierarchyLine[];
+}
+
+interface HierarchySite {
+  id: string;
+  name: string;
+  areas: HierarchyArea[];
+}
+
+const hierarchySeedData: HierarchySite[] = [
   {
-    label: 'Plant 1',
-    count: 124,
-    children: [
-      { label: 'Production', count: 68 },
-      { label: 'Utilities', count: 32 },
-      { label: 'Packaging', count: 24 },
+    id: 'site-plant-1',
+    name: 'Plant 1',
+    areas: [
+      {
+        id: 'area-plant-1-production',
+        name: 'Production',
+        lines: [
+          {
+            id: 'line-plant-1-production-1',
+            name: 'Line A',
+            stations: [
+              {
+                id: 'station-plant-1-prod-a',
+                name: 'Mixing',
+                assets: [
+                  { id: 'asset-plant-1-prod-a-1', code: 'PL1-MIX-001', name: 'Mixing Tank' },
+                  { id: 'asset-plant-1-prod-a-2', code: 'PL1-MIX-002', name: 'Blending Pump' },
+                ],
+              },
+              {
+                id: 'station-plant-1-prod-b',
+                name: 'Filling',
+                assets: [
+                  { id: 'asset-plant-1-prod-b-1', code: 'PL1-FIL-001', name: 'Filling Machine' },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'area-plant-1-utilities',
+        name: 'Utilities',
+        lines: [
+          {
+            id: 'line-plant-1-utilities-1',
+            name: 'Support Systems',
+            stations: [
+              {
+                id: 'station-plant-1-util-a',
+                name: 'Boiler Room',
+                assets: [
+                  { id: 'asset-plant-1-util-a-1', code: 'PL1-UTL-001', name: 'Steam Boiler' },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'area-plant-1-packaging',
+        name: 'Packaging',
+        lines: [
+          {
+            id: 'line-plant-1-packaging-1',
+            name: 'Line B',
+            stations: [
+              {
+                id: 'station-plant-1-pack-a',
+                name: 'Labeling',
+                assets: [
+                  { id: 'asset-plant-1-pack-a-1', code: 'PL1-PKG-001', name: 'Labeler' },
+                ],
+              },
+            ],
+          },
+        ],
+      },
     ],
   },
   {
-    label: 'Plant 2',
-    count: 72,
-    children: [
-      { label: 'Production', count: 40 },
-      { label: 'Utilities', count: 20 },
-      { label: 'Warehouse', count: 12 },
+    id: 'site-plant-2',
+    name: 'Plant 2',
+    areas: [
+      {
+        id: 'area-plant-2-production',
+        name: 'Production',
+        lines: [
+          {
+            id: 'line-plant-2-production-1',
+            name: 'Assembly',
+            stations: [
+              {
+                id: 'station-plant-2-prod-a',
+                name: 'Assembly Line',
+                assets: [
+                  { id: 'asset-plant-2-prod-a-1', code: 'PL2-ASM-001', name: 'Assembly Robot' },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'area-plant-2-utilities',
+        name: 'Utilities',
+        lines: [
+          {
+            id: 'line-plant-2-utilities-1',
+            name: 'Facilities',
+            stations: [
+              {
+                id: 'station-plant-2-util-a',
+                name: 'Chiller Plant',
+                assets: [
+                  { id: 'asset-plant-2-util-a-1', code: 'PL2-UTL-001', name: 'Industrial Chiller' },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'area-plant-2-warehouse',
+        name: 'Warehouse',
+        lines: [
+          {
+            id: 'line-plant-2-warehouse-1',
+            name: 'Storage',
+            stations: [
+              {
+                id: 'station-plant-2-wh-a',
+                name: 'Racking',
+                assets: [
+                  { id: 'asset-plant-2-wh-a-1', code: 'PL2-WHS-001', name: 'Automated Racking' },
+                ],
+              },
+            ],
+          },
+        ],
+      },
     ],
   },
   {
-    label: 'Corporate HQ',
-    count: 38,
-    children: [
-      { label: 'Facilities', count: 18 },
-      { label: 'Security', count: 6 },
-      { label: 'IT Infrastructure', count: 14 },
+    id: 'site-hq',
+    name: 'Corporate HQ',
+    areas: [
+      {
+        id: 'area-hq-facilities',
+        name: 'Facilities',
+        lines: [
+          {
+            id: 'line-hq-facilities-1',
+            name: 'Building Services',
+            stations: [
+              {
+                id: 'station-hq-fac-a',
+                name: 'Lobby',
+                assets: [
+                  { id: 'asset-hq-fac-a-1', code: 'HQ-FAC-001', name: 'Security Console' },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'area-hq-security',
+        name: 'Security',
+        lines: [
+          {
+            id: 'line-hq-security-1',
+            name: 'Monitoring',
+            stations: [
+              {
+                id: 'station-hq-sec-a',
+                name: 'Command Center',
+                assets: [
+                  { id: 'asset-hq-sec-a-1', code: 'HQ-SEC-001', name: 'Surveillance Hub' },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'area-hq-it',
+        name: 'IT Infrastructure',
+        lines: [
+          {
+            id: 'line-hq-it-1',
+            name: 'Network',
+            stations: [
+              {
+                id: 'station-hq-it-a',
+                name: 'Data Center',
+                assets: [
+                  { id: 'asset-hq-it-a-1', code: 'HQ-IT-001', name: 'Core Switch' },
+                ],
+              },
+            ],
+          },
+        ],
+      },
     ],
   },
 ];
+
+const countAssetsInStation = (station: HierarchyStation) => station.assets.length;
+
+const countAssetsInLine = (line: HierarchyLine) =>
+  line.stations.reduce((total, station) => total + countAssetsInStation(station), 0);
+
+const countAssetsInArea = (area: HierarchyArea) =>
+  area.lines.reduce((total, line) => total + countAssetsInLine(line), 0);
+
+const countAssetsInSite = (site: HierarchySite) =>
+  site.areas.reduce((total, area) => total + countAssetsInArea(area), 0);
 
 function buildQueryString(params: Record<string, string | number | undefined | null>): string {
   const searchParams = new URLSearchParams();
@@ -192,6 +409,8 @@ export default function Assets() {
   const canManageAssets = useCan('manage', 'asset');
   const { showToast } = useToast();
   const queryClient = useQueryClient();
+  const hierarchy = hierarchySeedData;
+  const hierarchyLoading = false;
 
   const form = useForm<AssetFormValues>({
     resolver: zodResolver(assetFormSchema),
@@ -610,36 +829,6 @@ export default function Assets() {
   const disableBulkDelete = selectedIds.length === 0 || !canManageAssets || bulkDeleteMutation.isLoading;
   const disableCreateOrEdit = createAssetMutation.isLoading || updateAssetMutation.isLoading;
 
-  const countAssetsInLine = useCallback((line?: Line | null) => {
-    if (!line) {
-      return 0;
-    }
-
-    return (line.stations ?? []).reduce((total, station) => total + (station.assets?.length ?? 0), 0);
-  }, []);
-
-  const countAssetsInArea = useCallback(
-    (area?: Area | null) => {
-      if (!area) {
-        return 0;
-      }
-
-      return (area.lines ?? []).reduce((total, line) => total + countAssetsInLine(line), 0);
-    },
-    [countAssetsInLine],
-  );
-
-  const countAssetsInSite = useCallback(
-    (site?: Site | null) => {
-      if (!site) {
-        return 0;
-      }
-
-      return (site.areas ?? []).reduce((total, area) => total + countAssetsInArea(area), 0);
-    },
-    [countAssetsInArea],
-  );
-
   const handleAssetSelect = useCallback((id: string) => {
     setSelectedAssetId(id);
   }, []);
@@ -663,7 +852,7 @@ export default function Assets() {
             className="w-full px-10 py-3 text-sm transition bg-white border shadow-inner outline-none rounded-2xl border-border text-fg focus:ring-2 focus:ring-brand"
             data-testid="asset-search-input"
           />
-          {assetsFetching && (
+          {isFetching && (
             <Loader2 className="absolute w-4 h-4 right-4 top-3 animate-spin text-mutedfg" />
           )}
         </div>
@@ -694,7 +883,7 @@ export default function Assets() {
                   <span className="px-3 py-1 text-xs rounded-full bg-muted text-mutedfg">{siteAssetCount}</span>
                 </div>
                 <div className="pl-3 space-y-2 text-sm text-mutedfg">
-                  {(site.areas ?? []).map((area) => {
+                  {site.areas.map((area) => {
                     const areaCount = countAssetsInArea(area);
                     return (
                       <div key={area.id} className="space-y-2">
@@ -703,7 +892,7 @@ export default function Assets() {
                           <span>{areaCount}</span>
                         </div>
                         <div className="pl-3 space-y-2">
-                          {(area.lines ?? []).map((line) => {
+                          {area.lines.map((line) => {
                             const lineCount = countAssetsInLine(line);
                             return (
                               <div key={line.id} className="space-y-2">
@@ -712,13 +901,13 @@ export default function Assets() {
                                   <span>{lineCount}</span>
                                 </div>
                                 <ul className="pl-2 space-y-1">
-                                  {(line.stations ?? []).map((station) => (
+                                  {line.stations.map((station) => (
                                     <li key={station.id} className="space-y-1">
                                       <div className="text-xs font-medium text-mutedfg">
                                         {station.name} ({station.assets?.length ?? 0})
                                       </div>
                                       <ul className="pl-3 space-y-1">
-                                        {(station.assets ?? []).map((asset) => (
+                                        {station.assets.map((asset) => (
                                           <li key={asset.id}>
                                             <button
                                               type="button"
@@ -817,7 +1006,7 @@ export default function Assets() {
         {view === 'table' ? (
           <ProTable
             data={assets}
-            columns={columns}
+            columns={assetColumns}
             getRowId={(row) => row.id}
             loading={isLoading || isFetching}
             onRowClick={openViewDrawer}
