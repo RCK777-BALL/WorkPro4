@@ -1,4 +1,4 @@
-import { JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Building2,
+  Loader2,
   Eye,
   Filter,
   LayoutGrid,
@@ -18,6 +19,7 @@ import {
   Trash2,
   Wrench,
 } from 'lucide-react';
+import type { Area, AssetTree, Line, Site } from '../../shared/types/asset';
 import { DataBadge } from '../components/premium/DataBadge';
 import { SlideOver } from '../components/premium/SlideOver';
 import { ProTable, type ProTableColumn } from '../components/premium/ProTable';
@@ -185,6 +187,7 @@ export default function Assets() {
   const { filters, page, pageSize, search, status, location, category, sort } = useAssetFilters(searchParams);
   const [drawerState, setDrawerState] = useState<DrawerState>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const view = (searchParams.get('view') as 'table' | 'cards') ?? 'table';
   const canManageAssets = useCan('manage', 'asset');
   const { showToast } = useToast();
@@ -210,6 +213,15 @@ export default function Assets() {
     queryFn: async () => api.get<AssetsResponse>(`/assets${buildQueryString(filters)}`),
     keepPreviousData: true,
   });
+
+  const assetsFetching = isFetching;
+
+  const { data: hierarchyData, isLoading: hierarchyLoading } = useQuery<AssetTree>({
+    queryKey: ['asset-hierarchy'],
+    queryFn: () => api.get<AssetTree>('/hierarchy/assets'),
+  });
+
+  const hierarchy = hierarchyData?.sites ?? [];
 
   const assets = data?.assets ?? [];
   const meta = data?.meta ?? { page: 1, pageSize: 10, total: 0, totalPages: 1 };
@@ -598,9 +610,39 @@ export default function Assets() {
   const disableBulkDelete = selectedIds.length === 0 || !canManageAssets || bulkDeleteMutation.isLoading;
   const disableCreateOrEdit = createAssetMutation.isLoading || updateAssetMutation.isLoading;
 
-  function handleAssetSelect(id: any): void {
-    throw new Error('Function not implemented.');
-  }
+  const countAssetsInLine = useCallback((line?: Line | null) => {
+    if (!line) {
+      return 0;
+    }
+
+    return (line.stations ?? []).reduce((total, station) => total + (station.assets?.length ?? 0), 0);
+  }, []);
+
+  const countAssetsInArea = useCallback(
+    (area?: Area | null) => {
+      if (!area) {
+        return 0;
+      }
+
+      return (area.lines ?? []).reduce((total, line) => total + countAssetsInLine(line), 0);
+    },
+    [countAssetsInLine],
+  );
+
+  const countAssetsInSite = useCallback(
+    (site?: Site | null) => {
+      if (!site) {
+        return 0;
+      }
+
+      return (site.areas ?? []).reduce((total, area) => total + countAssetsInArea(area), 0);
+    },
+    [countAssetsInArea],
+  );
+
+  const handleAssetSelect = useCallback((id: string) => {
+    setSelectedAssetId(id);
+  }, []);
 
   return (
     <div className="grid gap-6 xl:grid-cols-[320px_1fr]">
@@ -642,11 +684,8 @@ export default function Assets() {
           {!hierarchyLoading && hierarchy.length === 0 && (
             <p className="text-sm text-mutedfg">No hierarchy data available yet.</p>
           )}
-          {hierarchy.map((site: { id: Key | null | undefined; name: string | number | boolean | ReactElement<any, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | null | undefined; areas: any[]; }) => {
+          {hierarchy.map((site) => {
             const siteAssetCount = countAssetsInSite(site);
-            function countAssetsInArea(area: any) {
-              throw new Error('Function not implemented.');
-            }
 
             return (
               <div key={site.id} className="space-y-3">
@@ -655,7 +694,7 @@ export default function Assets() {
                   <span className="px-3 py-1 text-xs rounded-full bg-muted text-mutedfg">{siteAssetCount}</span>
                 </div>
                 <div className="pl-3 space-y-2 text-sm text-mutedfg">
-                  {site.areas.map((area: { id: Key | null | undefined; name: string | number | boolean | ReactElement<any, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | null | undefined; lines: any[]; }) => {
+                  {(site.areas ?? []).map((area) => {
                     const areaCount = countAssetsInArea(area);
                     return (
                       <div key={area.id} className="space-y-2">
@@ -664,7 +703,7 @@ export default function Assets() {
                           <span>{areaCount}</span>
                         </div>
                         <div className="pl-3 space-y-2">
-                          {area.lines.map((line: { id: Key | null | undefined; name: string | number | boolean | ReactElement<any, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | null | undefined; stations: any[]; }) => {
+                          {(area.lines ?? []).map((line) => {
                             const lineCount = countAssetsInLine(line);
                             return (
                               <div key={line.id} className="space-y-2">
@@ -673,13 +712,13 @@ export default function Assets() {
                                   <span>{lineCount}</span>
                                 </div>
                                 <ul className="pl-2 space-y-1">
-                                  {line.stations.map((station: { id: Key | null | undefined; name: string | number | boolean | ReactElement<any, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | null | undefined; assets: any[]; }) => (
+                                  {(line.stations ?? []).map((station) => (
                                     <li key={station.id} className="space-y-1">
                                       <div className="text-xs font-medium text-mutedfg">
-                                        {station.name} ({station.assets.length})
+                                        {station.name} ({station.assets?.length ?? 0})
                                       </div>
                                       <ul className="pl-3 space-y-1">
-                                        {station.assets.map((asset: { id: Key | null | undefined; code: string | number | boolean | ReactElement<any, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | null | undefined; name: string | number | boolean | ReactElement<any, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | null | undefined; }) => (
+                                        {(station.assets ?? []).map((asset) => (
                                           <li key={asset.id}>
                                             <button
                                               type="button"
