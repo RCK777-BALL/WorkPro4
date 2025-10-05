@@ -1,12 +1,13 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, BellRing, Building2, ClipboardList, ShieldCheck, Users, Wrench } from 'lucide-react';
+import { AlertTriangle, ArrowRight, BellRing, Building2, ClipboardList, ShieldCheck, Users, Wrench } from 'lucide-react';
 import { KPICard } from '../components/premium/KPICard';
 import { DataBadge } from '../components/premium/DataBadge';
 import { ProTable, type ProTableColumn } from '../components/premium/ProTable';
 import { EmptyState } from '../components/premium/EmptyState';
 import { api } from '../lib/api';
 import { workOrdersApi } from '../lib/workOrdersApi';
+import { formatDate, formatWorkOrderPriority, formatWorkOrderStatus } from '../lib/utils';
 import { normalizeWorkOrders, type WorkOrderRecord } from '../lib/workOrders';
 
 type PriorityBuckets = Record<'critical' | 'high' | 'medium' | 'low', number>;
@@ -86,7 +87,7 @@ const columns: ProTableColumn<WorkOrderRecord>[] = [
   {
     key: 'status',
     header: 'Status',
-    accessor: (row) => <DataBadge status={row.statusLabel} />
+    accessor: (row) => <DataBadge status={formatWorkOrderStatus(row.status ?? '')} />
   },
   { key: 'critical', header: 'Critical', align: 'right' },
   { key: 'high', header: 'High', align: 'right' },
@@ -95,7 +96,7 @@ const columns: ProTableColumn<WorkOrderRecord>[] = [
   {
     key: 'priority',
     header: 'Priority',
-    accessor: (row) => <DataBadge status={row.priorityLabel} />
+    accessor: (row) => <DataBadge status={formatWorkOrderPriority(row.priority ?? '')} />
   },
   {
     key: 'assignee',
@@ -157,8 +158,8 @@ export default function Dashboard() {
   } = useQuery<WorkOrderRecord[]>({
     queryKey: ['dashboard', 'work-orders-preview'],
     queryFn: async () => {
-      const response = await workOrdersApi.list({ page: 1, limit: 16 });
-      return normalizeWorkOrders(response.items).slice(0, 8);
+      const response = await workOrdersApi.list({ limit: 8 });
+      return normalizeWorkOrders(response.items ?? []);
     },
     staleTime: 60_000,
     retry: false,
@@ -217,12 +218,12 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-10">
-      {isError && (
+      {metricsError && (
         <div className="flex items-start gap-3 p-5 text-sm border rounded-3xl border-danger/40 bg-danger/5 text-danger">
           <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" />
           <div>
             <p className="text-base font-semibold">Unable to load dashboard metrics</p>
-            <p className="mt-1 text-danger/80">{errorMessage}</p>
+            <p className="mt-1 text-danger/80">{metricsErrorMessage}</p>
           </div>
         </div>
       )}
