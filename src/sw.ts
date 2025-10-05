@@ -23,7 +23,7 @@ precacheAndRoute(self.__WB_MANIFEST);
 
 const mutationQueue = new Queue('api-mutation-queue', {
   maxRetentionTime: 24 * 60,
-  onSync: async ({ queue }) => {
+  onSync: async ({ queue }: { queue: Queue }) => {
     await broadcastQueueState('syncing', queue);
     try {
       await queue.replayRequests();
@@ -94,7 +94,7 @@ registerRoute(
   }),
 );
 
-self.addEventListener('fetch', (event) => {
+self.addEventListener('fetch', (event: FetchEvent) => {
   const { request } = event;
   const url = new URL(request.url);
 
@@ -121,7 +121,7 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-self.addEventListener('message', (event) => {
+self.addEventListener('message', (event: ExtendableMessageEvent) => {
   if (!event.data) {
     return;
   }
