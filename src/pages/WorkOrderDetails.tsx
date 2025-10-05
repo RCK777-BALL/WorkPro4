@@ -5,7 +5,7 @@ import { ArrowLeft, Calendar, ClipboardList, User, MapPin, FileText } from 'luci
 import type { ApiError, ApiResponse } from '../../shared/types/http';
 import type { WorkOrderSummary } from '../../shared/types/workOrder';
 import { api, isApiErrorResponse } from '../lib/api';
-import { formatDate, formatWorkOrderStatus } from '../lib/utils';
+import { formatDate, formatWorkOrderStatus } from '../lib/format';
 
 export default function WorkOrderDetails() {
   const navigate = useNavigate();

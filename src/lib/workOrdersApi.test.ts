@@ -1,33 +1,39 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AxiosResponse } from 'axios';
+import type { ApiResponse } from '../../shared/types/http';
+import type { PaginatedWorkOrders, WorkOrderListItem } from './api';
 
-vi.mock('./axiosClient', () => {
-  const get = vi.fn();
-  const post = vi.fn();
-
+function createAxiosResponse<T>(payload: ApiResponse<T>): AxiosResponse<ApiResponse<T>> {
   return {
-    axiosClient: { get, post },
-    unwrapResponse: <T>(promise: Promise<{ data: { data: T; error: null } }>) => promise.then((response) => response.data.data),
-  };
-});
+    data: payload,
+    status: 200,
+    statusText: 'OK',
+    headers: {},
+    config: {},
+  } as AxiosResponse<ApiResponse<T>>;
+}
 
 describe('workOrdersApi', () => {
-  let axiosModule: typeof import('./axiosClient');
-  let apiModule: typeof import('./workOrdersApi');
+  let apiModule: typeof import('./api');
 
   beforeEach(async () => {
-    axiosModule = await import('./axiosClient');
-    apiModule = await import('./workOrdersApi');
-    axiosModule.axiosClient.get.mockReset();
-    axiosModule.axiosClient.post.mockReset();
+    vi.resetModules();
+    apiModule = await import('./api');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('passes through query parameters when listing work orders', async () => {
-    axiosModule.axiosClient.get.mockResolvedValue({
-      data: {
-        data: { items: [], total: 0, page: 1, limit: 10, totalPages: 1 },
-        error: null,
-      },
-    });
+    const getSpy = vi
+      .spyOn(apiModule.httpClient, 'get')
+      .mockResolvedValue(
+        createAxiosResponse<PaginatedWorkOrders>({
+          data: { items: [], total: 0, page: 1, limit: 10, totalPages: 1 },
+          error: null,
+        }),
+      );
 
     await apiModule.workOrdersApi.list({
       page: 2,
@@ -40,7 +46,7 @@ describe('workOrdersApi', () => {
       sortDir: 'asc',
     });
 
-    expect(axiosModule.axiosClient.get).toHaveBeenCalledWith('/work-orders', {
+    expect(getSpy).toHaveBeenCalledWith('/work-orders', {
       params: {
         page: 2,
         limit: 10,
@@ -55,16 +61,18 @@ describe('workOrdersApi', () => {
   });
 
   it('uses export endpoint with filters', async () => {
-    axiosModule.axiosClient.get.mockResolvedValue({
-      data: {
-        data: { items: [] },
-        error: null,
-      },
-    });
+    const getSpy = vi
+      .spyOn(apiModule.httpClient, 'get')
+      .mockResolvedValue(
+        createAxiosResponse<{ items: WorkOrderListItem[] }>({
+          data: { items: [] },
+          error: null,
+        }),
+      );
 
     await apiModule.workOrdersApi.export({ search: 'motor', assignee: 'alex', limit: 25, status: 'assigned' });
 
-    expect(axiosModule.axiosClient.get).toHaveBeenCalledWith('/work-orders/export', {
+    expect(getSpy).toHaveBeenCalledWith('/work-orders/export', {
       params: {
         search: 'motor',
         assignee: 'alex',
@@ -75,4 +83,3 @@ describe('workOrdersApi', () => {
     });
   });
 });
-

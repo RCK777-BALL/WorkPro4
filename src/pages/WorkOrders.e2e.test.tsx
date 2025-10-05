@@ -5,14 +5,19 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import WorkOrders from './WorkOrders';
 import { useAuth } from '../hooks/useAuth';
-import type { WorkOrderListItem } from '../lib/workOrdersApi';
+import type { WorkOrderListItem } from '../lib/api';
 
 const now = new Date().toISOString();
 
 let workOrders: WorkOrderListItem[] = [];
 
-vi.mock('../lib/workOrdersApi', () => {
+vi.mock('../lib/api', () => {
+  const api = {
+    get: vi.fn(async () => workOrders),
+  };
+
   return {
+    api,
     workOrdersApi: {
       list: vi.fn(async () => ({
         items: [...workOrders],
@@ -81,6 +86,7 @@ vi.mock('../lib/workOrdersApi', () => {
       export: vi.fn(async () => ({ items: [...workOrders] })),
       import: vi.fn(async () => workOrders),
     },
+    isApiErrorResponse: () => false,
   };
 });
 
