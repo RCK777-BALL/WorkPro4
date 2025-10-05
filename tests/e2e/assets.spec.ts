@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Route, type Request } from '@playwright/test';
 
 interface TestAsset {
   id: string;
@@ -65,9 +65,10 @@ test.describe('Assets flow', () => {
       });
     });
 
-    const fulfillAssets = async (route: any) => {
-      const url = new URL(route.request().url());
-      const method = route.request().method();
+    const fulfillAssets = async (route: Route) => {
+      const request: Request = route.request();
+      const url = new URL(request.url());
+      const method = request.method();
 
       if (method === 'GET') {
         const pageParam = Number.parseInt(url.searchParams.get('page') ?? '1', 10) || 1;
@@ -92,13 +93,17 @@ test.describe('Assets flow', () => {
         return;
       }
 
-      const body = route.request().postDataJSON?.();
+      const parsedBody =
+        typeof request.postDataJSON === 'function' ? request.postDataJSON() : undefined;
+      const body = (parsedBody ?? {}) as Partial<TestAsset> & Record<string, unknown>;
 
       if (method === 'POST') {
+        const code = body.code as string;
+        const name = body.name as string;
         const created: TestAsset = {
           id: `asset-${assets.length + 1}`,
-          code: body.code,
-          name: body.name,
+          code,
+          name,
           status: body.status ?? 'operational',
           location: body.location ?? null,
           category: body.category ?? null,
