@@ -10,9 +10,8 @@ import { SlideOver } from '../components/premium/SlideOver';
 import { ConfirmDialog } from '../components/premium/ConfirmDialog';
 import { DataBadge } from '../components/premium/DataBadge';
 import { EmptyState } from '../components/premium/EmptyState';
-import { api, ApiError, ApiRequestError, ApiResponse, isApiErrorResponse, PaginatedWorkOrders, SaveWorkOrderPayload, WorkOrderPriority, workOrdersApi, WorkOrderStatus } from '../lib/api';
+import { ApiError, ApiRequestError, ApiResponse, isApiErrorResponse, PaginatedWorkOrders, SaveWorkOrderPayload, type WorkOrderListItem, WorkOrderPriority, workOrdersApi, WorkOrderStatus } from '../lib/api';
 import { formatDate, formatWorkOrderPriority, formatWorkOrderStatus } from '../lib/format';
-import { normalizeWorkOrders, type WorkOrderRecord } from '../lib/workOrders';
 import { useToast } from '@/components/ui/toast';
 import { useCan } from '@/lib/rbac';
 import { toTitleCase } from '@/lib/utils';
@@ -139,7 +138,7 @@ function normalizePriority(value: unknown): WorkOrderPriority {
   return 'medium';
 }
 
-function mapToTableRow(record: WorkOrderRecord): WorkOrderTableRow {
+function mapToTableRow(record: WorkOrderListItem): WorkOrderTableRow {
   const assetName = record.asset?.name ?? record.asset?.code ?? record.assetId ?? '';
   return {
     id: record.id,
@@ -151,7 +150,7 @@ function mapToTableRow(record: WorkOrderRecord): WorkOrderTableRow {
     assigneeName: record.assignee?.name ?? 'Unassigned',
     assetName,
     assetId: record.asset?.id ?? record.assetId ?? null,
-    dueDate: record.dueDate,
+    dueDate: record.dueDate ?? null,
     createdAt: record.createdAt,
     description: record.description ?? '',
     category: record.category ?? '',
