@@ -25,7 +25,11 @@ const OBJECT_ID_REGEX = /^[a-fA-F0-9]{24}$/;`r`n`r`nconst workOrderSchema = z.ob
     .max(2000, 'Description must be 2000 characters or fewer')
     .optional()
     .or(z.literal('')),
-  assetId: z\n    .string()\n    .optional()\n    .or(z.literal(''))\n    .transform((value) => (value && value.trim().length > 0 ? value.trim() : '')),
+  assetId: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : '')),
   priority: z.enum(['low', 'medium', 'high', 'urgent'], {
     errorMap: () => ({ message: 'Select a priority' }),
   }),
@@ -36,7 +40,6 @@ const OBJECT_ID_REGEX = /^[a-fA-F0-9]{24}$/;`r`n`r`nconst workOrderSchema = z.ob
       (value) => !value || !Number.isNaN(Date.parse(value)),
       'Enter a valid due date',
     ),
-
   category: z
     .string()
     .max(255, 'Category must be 255 characters or fewer')
@@ -172,7 +175,6 @@ export function WorkOrderForm({ onClose, onSuccess, defaultValues, asset: assetP
       priority: values.priority,
       assetId: assetIdValue,
       dueDate: values.dueDate ? new Date(values.dueDate).toISOString() : undefined,
-
       category: values.category?.trim() ? values.category.trim() : undefined,
 
     };
