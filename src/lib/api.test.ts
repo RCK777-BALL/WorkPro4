@@ -17,6 +17,62 @@ function createLocalStorageMock() {
   } as unknown as Storage;
 }
 
+describe('normalizeApiBaseUrl', () => {
+  const originalWindow = globalThis.window;
+
+  afterEach(() => {
+    vi.resetModules();
+    if (originalWindow) {
+      Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        writable: true,
+        value: originalWindow,
+      });
+    } else {
+      Reflect.deleteProperty(globalThis, 'window');
+    }
+  });
+
+  it('appends /api to absolute base URLs', async () => {
+    vi.resetModules();
+    const { normalizeApiBaseUrl } = await import('./api');
+    expect(normalizeApiBaseUrl('https://example.com')).toBe('https://example.com/api');
+    expect(normalizeApiBaseUrl('https://example.com/')).toBe('https://example.com/api');
+    expect(normalizeApiBaseUrl('https://example.com/api')).toBe('https://example.com/api');
+  });
+
+  it('normalizes relative base paths', async () => {
+    vi.resetModules();
+    const { normalizeApiBaseUrl } = await import('./api');
+    expect(normalizeApiBaseUrl('backend')).toBe('/backend/api');
+    expect(normalizeApiBaseUrl('/backend/')).toBe('/backend/api');
+  });
+
+  it('defaults to /api when running in a browser context', async () => {
+    if (!originalWindow) {
+      Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        writable: true,
+        value: { dispatchEvent: vi.fn() } as Window & typeof globalThis,
+      });
+    }
+
+    vi.resetModules();
+    const { normalizeApiBaseUrl } = await import('./api');
+    expect(normalizeApiBaseUrl(undefined)).toBe('/api');
+  });
+
+  it('falls back to the localhost API when window is unavailable', async () => {
+    if (originalWindow) {
+      Reflect.deleteProperty(globalThis, 'window');
+    }
+
+    vi.resetModules();
+    const { normalizeApiBaseUrl } = await import('./api');
+    expect(normalizeApiBaseUrl(undefined)).toBe('http://localhost:5010/api');
+  });
+});
+
 describe('api client', () => {
   let mock: MockAdapter;
   let apiModule: typeof import('./api');
