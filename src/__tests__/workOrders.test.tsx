@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import WorkOrders from '../pages/WorkOrders';
-import { api } from '../lib/api';
+import { workOrdersApi } from '../lib/workOrdersApi';
 import { renderWithQueryClient } from '../test/utils';
 
 describe('WorkOrders page states', () => {
@@ -11,7 +11,7 @@ describe('WorkOrders page states', () => {
   });
 
   it('surfaces API errors from the work orders query', async () => {
-    vi.spyOn(api, 'get').mockRejectedValue(new Error('service unavailable'));
+    vi.spyOn(workOrdersApi, 'list').mockRejectedValue(new Error('service unavailable'));
 
     renderWithQueryClient(
       <MemoryRouter>
