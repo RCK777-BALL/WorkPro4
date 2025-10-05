@@ -5,7 +5,6 @@ import { api } from '../../lib/api';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Badge } from '../ui/badge';
 import { X, Plus, Trash2 } from 'lucide-react';
 
 interface WorkOrderFormData {
@@ -52,7 +51,7 @@ export function WorkOrderForm({ workOrderId, onClose, onSuccess }: WorkOrderForm
   const [checklistItems, setChecklistItems] = useState<{ text: string; note?: string }[]>([]);
   const queryClient = useQueryClient();
   
-  const { register, handleSubmit, setValue, reset, watch, formState: { errors } } = useForm<WorkOrderFormData>({
+  const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<WorkOrderFormData>({
     defaultValues: {
       priority: 'medium',
       assignees: [],
@@ -88,6 +87,25 @@ export function WorkOrderForm({ workOrderId, onClose, onSuccess }: WorkOrderForm
       return allAssets;
     }
   });
+  // Fetch users for assignment
+  const { data: users = [] } = useQuery({
+    queryKey: ['users'],
+    queryFn: async (): Promise<User[]> => {
+      const result = await api.get<User[]>('/users');
+      return Array.isArray(result) ? result : [];
+    }
+  });
+
+  // Fetch existing work order if editing
+  const { data: existingWorkOrder } = useQuery<ExistingWorkOrder | null>({
+    queryKey: ['work-order', workOrderId],
+    queryFn: async (): Promise<ExistingWorkOrder | null> => {
+      if (!workOrderId) return null;
+      return api.get<ExistingWorkOrder>(`/work-orders/${workOrderId}`);
+    },
+    enabled: !!workOrderId
+  });
+
 
   useEffect(() => {
     if (!existingWorkOrder) return;
@@ -115,25 +133,6 @@ export function WorkOrderForm({ workOrderId, onClose, onSuccess }: WorkOrderForm
     setValue('checklists', sanitizedChecklists);
     setChecklistItems(sanitizedChecklists);
   }, [existingWorkOrder, reset, setValue]);
-
-  // Fetch users for assignment
-  const { data: users = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: async (): Promise<User[]> => {
-      const result = await api.get<User[]>('/users');
-      return Array.isArray(result) ? result : [];
-    }
-  });
-
-  // Fetch existing work order if editing
-  const { data: existingWorkOrder } = useQuery<ExistingWorkOrder | null>({
-    queryKey: ['work-order', workOrderId],
-    queryFn: async (): Promise<ExistingWorkOrder | null> => {
-      if (!workOrderId) return null;
-      return api.get<ExistingWorkOrder>(`/work-orders/${workOrderId}`);
-    },
-    enabled: !!workOrderId
-  });
 
   // Create/Update mutation
   const mutation = useMutation({

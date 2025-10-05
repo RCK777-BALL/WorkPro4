@@ -235,16 +235,31 @@ export function ProTable<T>({
                       data-testid={`pro-table-row-select-${id}`}
                     />
                   </td>
-                  {columnList.map((column) => (
-                    <td
-                      key={String(column.key)}
-                      className={`${bodyCellClass} border-b border-border px-4 text-fg transition group-hover:border-brand/30 ${
-                        column.align === 'right' ? 'text-right' : column.align === 'center' ? 'text-center' : ''
-                      }`}
-                    >
-                      {column.accessor ? column.accessor(row) : (row as Record<string, unknown>)[column.key as string]}
-                    </td>
-                  ))}
+                  {columnList.map((column) => {
+                    const fallbackValue = (row as Record<string, unknown>)[column.key as string];
+                    let cellValue: ReactNode;
+
+                    if (column.accessor) {
+                      cellValue = column.accessor(row);
+                    } else if (typeof fallbackValue === 'string' || typeof fallbackValue === 'number') {
+                      cellValue = fallbackValue;
+                    } else if (typeof fallbackValue === 'boolean') {
+                      cellValue = fallbackValue ? 'Yes' : 'No';
+                    } else {
+                      cellValue = null;
+                    }
+
+                    return (
+                      <td
+                        key={String(column.key)}
+                        className={`${bodyCellClass} border-b border-border px-4 text-fg transition group-hover:border-brand/30 ${
+                          column.align === 'right' ? 'text-right' : column.align === 'center' ? 'text-center' : ''
+                        }`}
+                      >
+                        {cellValue}
+                      </td>
+                    );
+                  })}
                   {rowActions && (
                     <td className={`${bodyCellClass} border-b border-border px-4 text-right`}>{rowActions(row)}</td>
                   )}

@@ -111,6 +111,8 @@ export function normalizeApiBaseUrl(value?: string | null): string {
 
 const apiBaseUrl = normalizeApiBaseUrl(import.meta.env?.VITE_API_URL);
 
+export const API_BASE_URL = apiBaseUrl;
+
 export const httpClient: AxiosInstance = axios.create({
   baseURL: apiBaseUrl,
   headers: {

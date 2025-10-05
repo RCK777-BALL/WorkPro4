@@ -50,13 +50,7 @@ export default function PM() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['pm', 'overview'],
-    queryFn: async () => {
-      const result = await api.getPmOverview();
-      if (!result.data || result.error) {
-        throw new Error(result.error?.message ?? 'Failed to load PM overview');
-      }
-      return result.data as PmOverviewResponse;
-    },
+    queryFn: () => api.get<PmOverviewResponse>('/pm/overview'),
     staleTime: 60_000,
   });
 

@@ -1,4 +1,4 @@
-import { Bell, Search, User, Settings, LogOut } from 'lucide-react';
+import { Bell, Search, User } from 'lucide-react';
 
 export function Header() {
   return (

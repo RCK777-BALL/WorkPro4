@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Palette, RotateCcw } from 'lucide-react';
+import { useState } from 'react';
+import { Palette } from 'lucide-react';
 
 interface ColorPickerProps {
   label: string;

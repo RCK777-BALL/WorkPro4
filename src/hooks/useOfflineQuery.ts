@@ -1,4 +1,4 @@
-import { useQuery, type QueryKey } from '@tanstack/react-query';
+import { useQuery, type QueryKey, type UseQueryOptions } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api, ApiRequestError } from '../lib/api';
 import { getCachedApiResponse, warmApiCache } from '../lib/offlineCache';
@@ -20,7 +20,7 @@ export function useOfflineQuery<TData>({
 }: OfflineQueryOptions<TData>) {
   const [servedFromCache, setServedFromCache] = useState(false);
 
-  const query = useQuery({
+  const options: UseQueryOptions<TData, unknown, TData, QueryKey> = {
     queryKey,
     enabled,
     staleTime,
@@ -50,7 +50,9 @@ export function useOfflineQuery<TData>({
     },
     retry: 0,
     refetchOnWindowFocus: false,
-  });
+  };
+
+  const query = useQuery(options);
 
   return { ...query, servedFromCache };
 }

@@ -1,4 +1,3 @@
-import React from 'react';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToString } from 'react-dom/server';

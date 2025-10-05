@@ -43,7 +43,7 @@ export function isApiResponse<T>(value: unknown): value is ApiResponse<T> {
   return Boolean(value) && typeof value === 'object' && 'data' in value && 'error' in value;
 }
 
-export function isApiErrorResponse(value: unknown): value is ApiResponse<ApiError> {
+export function isApiErrorResponse(value: unknown): value is ApiResponse<ApiError> & { error: ApiError } {
   return isApiResponse(value) && value.error != null;
 }
 

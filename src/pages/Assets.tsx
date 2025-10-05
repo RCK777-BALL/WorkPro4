@@ -201,7 +201,7 @@ function useAssetFilters(searchParams: URLSearchParams) {
 
 export default function Assets() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { filters, page, pageSize, search, status, location, category, sort } = useAssetFilters(searchParams);
+  const { filters, page, pageSize, search, status, location, category } = useAssetFilters(searchParams);
   const [drawerState, setDrawerState] = useState<DrawerState>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);

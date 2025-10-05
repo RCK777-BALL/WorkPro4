@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { ColorPicker } from './ui/ColorPicker';
-import { X, Sun, Moon, RotateCcw, Palette } from 'lucide-react';
+import { X, Sun, Moon, RotateCcw } from 'lucide-react';
 
 interface ThemeCustomizerProps {
   isOpen: boolean;

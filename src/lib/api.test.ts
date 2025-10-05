@@ -53,7 +53,7 @@ describe('normalizeApiBaseUrl', () => {
       Object.defineProperty(globalThis, 'window', {
         configurable: true,
         writable: true,
-        value: { dispatchEvent: vi.fn() } as Window & typeof globalThis,
+        value: { dispatchEvent: vi.fn() } as unknown as Window & typeof globalThis,
       });
     }
 
@@ -90,7 +90,7 @@ describe('api client', () => {
 
     Object.defineProperty(globalThis, 'window', {
       configurable: true,
-      value: { localStorage: storage, dispatchEvent: dispatchEventSpy } as Window & typeof globalThis,
+      value: { localStorage: storage, dispatchEvent: dispatchEventSpy } as unknown as Window & typeof globalThis,
     });
 
     apiModule = await import('./api');

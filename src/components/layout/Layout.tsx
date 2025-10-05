@@ -8,19 +8,23 @@ import { navItems } from './Sidebar';
 const SIDEBAR_STORAGE_KEY = 'wp3.sidebar.collapsed';
 
 export function Layout() {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window === 'undefined') {
       return false;
     }
 
     try {
       const stored = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
-      return stored ? JSON.parse(stored) : false;
+      if (stored == null) {
+        return false;
+      }
+      const parsed = JSON.parse(stored);
+      return typeof parsed === 'boolean' ? parsed : false;
     } catch (error) {
       return false;
     }
   });
-  
+
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {

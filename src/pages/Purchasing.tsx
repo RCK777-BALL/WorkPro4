@@ -9,13 +9,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import {
   Plus,
   Search,
-  Filter,
   ShoppingCart,
   FileText,
   Truck,
   CheckCircle,
   Clock,
-  DollarSign,
   Building,
 } from 'lucide-react';
 import { formatCurrency, formatDate, getStatusColor } from '../lib/utils';

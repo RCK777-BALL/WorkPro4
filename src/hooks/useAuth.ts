@@ -45,7 +45,7 @@ export const useAuth = create<AuthState>()(
           set({ user: normalizedUser, isAuthenticated: true, isLoading: false, error: null });
         } catch (error) {
           api.clearToken();
-          const message = isApiErrorResponse(error)
+          const message = isApiErrorResponse(error) && error.error
             ? error.error.message
             : error instanceof Error
               ? error.message
@@ -76,7 +76,7 @@ export const useAuth = create<AuthState>()(
           set({ user: normalizedUser, isAuthenticated: true, isLoading: false, error: null });
         } catch (error) {
           api.clearToken();
-          const message = isApiErrorResponse(error)
+          const message = isApiErrorResponse(error) && error.error
             ? error.error.message
             : error instanceof Error
               ? error.message
