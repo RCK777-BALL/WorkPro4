@@ -473,11 +473,50 @@ router.put(
 
     const payload = assetPayloadSchema.parse(req.body);
 
-    if (!asset) {
+    const scope = buildTenantScope({ tenantId: req.user.tenantId, siteId: req.user.siteId ?? null });
+    const existing = await prisma.asset.findFirst({
+      where: { id: req.params.id, ...scope },
+      select: { id: true },
+    });
+
+    if (!existing) {
       return fail(res, 404, 'Asset not found');
     }
 
-    return ok(res, serializeAssetLifecycle(asset));
+    const data: Prisma.AssetUpdateInput = {
+      code: payload.code,
+      name: payload.name,
+    };
+
+    if (payload.location !== undefined) {
+      data.location = payload.location;
+    }
+    if (payload.category !== undefined) {
+      data.category = payload.category;
+    }
+    if (payload.purchaseDate !== undefined) {
+      data.purchaseDate = payload.purchaseDate;
+    }
+    if (payload.cost !== undefined) {
+      data.cost = payload.cost;
+    }
+    if (payload.status !== undefined) {
+      data.status = payload.status;
+    }
+
+    const updated = await prisma.asset.update({
+      where: { id: existing.id },
+      data,
+      include: {
+        site: true,
+        area: true,
+        line: true,
+        station: true,
+        bomItems: true,
+      },
+    });
+
+    return ok(res, serializeAssetLifecycle(updated));
   }),
 );
 
@@ -488,28 +527,23 @@ router.get(
       return fail(res, 401, 'Authentication required');
     }
 
-    const existing = await prisma.asset.findFirst({
+    const scope = buildTenantScope({ tenantId: req.user.tenantId, siteId: req.user.siteId ?? null });
+    const asset = await prisma.asset.findFirst({
       where: { id: req.params.id, ...scope },
-    });
-
-    if (!existing) {
-      return res.status(404).json({ ok: false, error: 'Asset not found' });
-    }
-
-    const updated = await prisma.asset.update({
-      where: { id: existing.id },
-      data: {
-        code: payload.code,
-        name: payload.name,
-        location: payload.location,
-        category: payload.category,
-        purchaseDate: payload.purchaseDate,
-        cost: payload.cost,
-        status: payload.status ?? existing.status,
+      include: {
+        site: true,
+        area: true,
+        line: true,
+        station: true,
+        bomItems: true,
       },
     });
 
-    return res.json({ ok: true, asset: serializeAsset(updated) });
+    if (!asset) {
+      return fail(res, 404, 'Asset not found');
+    }
+
+    return ok(res, serializeAssetLifecycle(asset));
   }),
 );
 
