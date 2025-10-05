@@ -18,7 +18,9 @@ const fileSchema = z.custom(
   },
 );
 
-const OBJECT_ID_REGEX = /^[a-fA-F0-9]{24}$/;`r`n`r`nconst workOrderSchema = z.object({
+const OBJECT_ID_REGEX = /^[a-fA-F0-9]{24}$/;
+
+const workOrderSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   description: z
     .string()
@@ -55,8 +57,6 @@ const DEFAULT_VALUES = {
   assetId: '',
   lineName: '',
   stationNumber: '',
-
-
 };
 
 export function WorkOrderForm({ onClose, onSuccess, defaultValues, asset: assetProp }) {
