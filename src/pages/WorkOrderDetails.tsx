@@ -48,7 +48,7 @@ export default function WorkOrderDetails() {
   const statusLabel = workOrder ? formatWorkOrderStatus(workOrder.status) : null;
   const errorMessage = isError
     ? isApiErrorResponse(error)
-      ? error.error.message
+      ? error.error?.message ?? 'Unable to load work order details'
       : 'Unable to load work order details'
     : null;
 
