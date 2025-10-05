@@ -5,6 +5,29 @@ function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
+function downloadBlob(blob, filename) {
+  if (!(blob instanceof Blob)) {
+    throw new Error('downloadBlob requires a Blob instance.');
+  }
+
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename || 'download';
+
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 1000);
+}
+
 function formatCurrency(amount, currency = 'USD') {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -84,6 +107,7 @@ function getPriorityColor(priority) {
 
 export {
   cn,
+  downloadBlob,
   formatCurrency,
   formatDate,
   formatDateTime,
