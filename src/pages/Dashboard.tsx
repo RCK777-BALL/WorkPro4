@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type ComponentProps } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ArrowRight, BellRing, Building2, ClipboardList, ShieldCheck, Users, Wrench } from 'lucide-react';
 import { KPICard } from '../components/premium/KPICard';
@@ -10,6 +10,8 @@ import { formatDate, formatWorkOrderPriority, formatWorkOrderStatus } from '../l
 import { normalizeWorkOrders, type WorkOrderRecord } from '../lib/workOrders';
 
 type PriorityBuckets = Record<'critical' | 'high' | 'medium' | 'low', number>;
+type Trend = 'positive' | 'negative' | 'neutral';
+type KPICardConfig = Omit<ComponentProps<typeof KPICard>, 'loading'>;
 
 interface DashboardMetrics {
   kpis: {
@@ -56,20 +58,20 @@ function formatDelta(value: number | undefined, suffix: string) {
   return `${prefix}${rounded}${suffix}`;
 }
 
-function deltaType(value: number | undefined) {
+function deltaType(value: number | undefined): Trend {
   if (typeof value !== 'number' || value === 0) {
-    return 'neutral' as const;
+    return 'neutral';
   }
 
-  return (value > 0 ? 'positive' : 'negative') as const;
+  return value > 0 ? 'positive' : 'negative';
 }
 
-function mttrDeltaType(value: number | undefined) {
+function mttrDeltaType(value: number | undefined): Trend {
   if (typeof value !== 'number' || value === 0) {
-    return 'neutral' as const;
+    return 'neutral';
   }
 
-  return (value < 0 ? 'positive' : 'negative') as const;
+  return value < 0 ? 'positive' : 'negative';
 }
 
 function prioritySparkline(buckets: PriorityBuckets | undefined) {
@@ -166,13 +168,13 @@ export default function Dashboard() {
 
   const workOrders = previewOrders ?? [];
 
-  const kpiCards = useMemo(
+  const kpiCards = useMemo<KPICardConfig[]>(
     () => [
       {
         title: 'Active Work Orders',
         value: metrics ? formatNumber(metrics.kpis.openWorkOrders.total) : '—',
         delta: metrics ? formatDelta(metrics.kpis.openWorkOrders.delta7d, '% vs last 7d') : undefined,
-        deltaType: metrics ? deltaType(metrics.kpis.openWorkOrders.delta7d) : ('neutral' as const),
+        deltaType: metrics ? deltaType(metrics.kpis.openWorkOrders.delta7d) : 'neutral',
         description: metrics
           ? `${metrics.kpis.openWorkOrders.byPriority.critical} critical · ${metrics.kpis.openWorkOrders.byPriority.high} high`
           : undefined,
@@ -183,7 +185,7 @@ export default function Dashboard() {
         title: 'Asset Uptime',
         value: metrics ? `${formatNumber(metrics.kpis.uptimePct.value, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%` : '—',
         delta: metrics ? formatDelta(metrics.kpis.uptimePct.delta30d, '% vs prev 30d') : undefined,
-        deltaType: metrics ? deltaType(metrics.kpis.uptimePct.delta30d) : ('neutral' as const),
+        deltaType: metrics ? deltaType(metrics.kpis.uptimePct.delta30d) : 'neutral',
         sparkline: metrics ? Array(7).fill(metrics.kpis.uptimePct.value) : [],
         icon: <ShieldCheck className="w-6 h-6" />,
       },
@@ -193,7 +195,7 @@ export default function Dashboard() {
           ? formatNumber(metrics.kpis.mttrHours.value, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
           : '—',
         delta: metrics ? formatDelta(metrics.kpis.mttrHours.delta30d, ' hrs vs prev 30d') : undefined,
-        deltaType: metrics ? mttrDeltaType(metrics.kpis.mttrHours.delta30d) : ('neutral' as const),
+        deltaType: metrics ? mttrDeltaType(metrics.kpis.mttrHours.delta30d) : 'neutral',
         sparkline: metrics ? Array(7).fill(metrics.kpis.mttrHours.value) : [],
         icon: <Users className="w-6 h-6" />,
       },
@@ -201,7 +203,7 @@ export default function Dashboard() {
         title: 'Stockout Risk',
         value: metrics ? formatNumber(metrics.kpis.stockoutRisk.count) : '—',
         delta: undefined,
-        deltaType: 'neutral' as const,
+        deltaType: 'neutral',
         description:
           metrics && metrics.kpis.stockoutRisk.items.length > 0
             ? `Watch ${metrics.kpis.stockoutRisk.items.slice(0, 2).map((item) => item.name).join(', ')}`
