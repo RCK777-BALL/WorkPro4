@@ -24,7 +24,7 @@ export function useOfflineQuery<TData>({
     queryKey,
     enabled,
     staleTime,
-    gcTime: staleTime * 2,
+    cacheTime: staleTime * 2,
     queryFn: async () => {
       try {
         const data = await api.get<TData>(endpoint);

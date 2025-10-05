@@ -40,11 +40,18 @@ export function normalizeApiError(
 }
 
 export function isApiResponse<T>(value: unknown): value is ApiResponse<T> {
-  return Boolean(value) && typeof value === 'object' && 'data' in value && 'error' in value;
+  if (value == null || typeof value !== 'object') {
+    return false;
+  }
+  return 'data' in value && 'error' in value;
 }
 
 export function isApiErrorResponse(value: unknown): value is ApiResponse<ApiError> & { error: ApiError } {
-  return isApiResponse(value) && value.error != null;
+  if (!isApiResponse(value)) {
+    return false;
+  }
+  const response = value as ApiResponse<ApiError>;
+  return response.error != null;
 }
 
 export function toApiRequestError(
