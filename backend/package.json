@@ -14,7 +14,7 @@
     "db:seed": "tsx src/scripts/seed.ts",
     "db:seed:demo": "tsx src/scripts/seedDashboardDemo.ts",
     "db:reset": "prisma db push --force-reset",
-    "lint": "eslint src --ext .ts",
+    "lint": "eslint src",
     "format": "prettier --write src"
   },
   "dependencies": {
