@@ -28,37 +28,18 @@ import { Button } from '../components/ui/button';
 import { useToast } from '../components/ui/toast';
 import { useCan } from '../lib/rbac';
 import { api } from '../lib/api';
+import {
+  assetStatuses,
+  type AssetRecord,
+  type AssetsResponse,
+  type AssetQuery,
+  type SaveAssetPayload,
+  createAsset as createAssetApi,
+  updateAsset as updateAssetApi,
+  deleteAsset as deleteAssetApi,
+  listAssets,
+} from '../lib/assets';
 import { cn, formatCurrency } from '../lib/utils';
-
-const assetStatuses = ['operational', 'maintenance', 'down', 'retired', 'decommissioned'] as const;
-
-type AssetStatus = (typeof assetStatuses)[number];
-
-
-export interface AssetRecord {
-  id: string;
-  code: string;
-  name: string;
-  status: AssetStatus;
-  location: string | null;
-  category: string | null;
-  purchaseDate: string | null;
-  cost: number | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-
-interface AssetsResponse {
-  ok: boolean;
-  assets: AssetRecord[];
-  meta: {
-    page: number;
-    pageSize: number;
-    total: number;
-    totalPages: number;
-  };
-}
 
 const assetFormSchema = z.object({
   name: z.string().min(1, 'Asset name is required'),
@@ -167,18 +148,6 @@ const countAssetsInArea = (area: HierarchyArea) =>
 const countAssetsInSite = (site: HierarchySite) =>
   site.areas.reduce((total, area) => total + countAssetsInArea(area), 0);
 
-function buildQueryString(params: Record<string, string | number | undefined | null>): string {
-  const searchParams = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === '') {
-      return;
-    }
-    searchParams.set(key, String(value));
-  });
-  const qs = searchParams.toString();
-  return qs ? `?${qs}` : '';
-}
-
 function useAssetFilters(searchParams: URLSearchParams) {
   const parsedPage = Number.parseInt(searchParams.get('page') ?? '1', 10);
   const parsedPageSize = Number.parseInt(searchParams.get('pageSize') ?? '10', 10);
@@ -191,7 +160,7 @@ function useAssetFilters(searchParams: URLSearchParams) {
   const category = searchParams.get('category') ?? '';
   const sort = searchParams.get('sort') ?? 'createdAt:desc';
 
-  const filters = useMemo(
+  const filters = useMemo<AssetQuery>(
     () => ({ page, pageSize, search, status, location, category, sort }),
     [page, pageSize, search, status, location, category, sort],
   );
@@ -227,7 +196,7 @@ export default function Assets() {
 
   const { data, isLoading, isFetching } = useQuery<AssetsResponse>({
     queryKey: assetsQueryKey,
-    queryFn: async () => api.get<AssetsResponse>(`/assets${buildQueryString(filters)}`),
+    queryFn: () => listAssets(filters),
     keepPreviousData: true,
   });
 
@@ -295,7 +264,7 @@ export default function Assets() {
     });
   };
 
-  const buildPayload = (values: AssetFormValues) => ({
+  const buildPayload = (values: AssetFormValues): SaveAssetPayload => ({
     name: values.name.trim(),
     code: values.code.trim(),
     status: values.status,
@@ -308,7 +277,7 @@ export default function Assets() {
   const createAssetMutation = useMutation({
     mutationFn: async (values: AssetFormValues) => {
       const payload = buildPayload(values);
-      return api.post<{ ok: boolean; asset: AssetRecord }>('/assets', payload);
+      return createAssetApi(payload);
     },
     onMutate: async (values) => {
       await queryClient.cancelQueries({ queryKey: assetsQueryKey });
@@ -326,10 +295,9 @@ export default function Assets() {
         updatedAt: new Date().toISOString(),
       };
 
-      queryClient.setQueryData<AssetsResponse>(assetsQueryKey, (current) => {
+      queryClient.setQueryData<AssetsResponse | undefined>(assetsQueryKey, (current) => {
         if (!current) {
           return {
-            ok: true,
             assets: [optimisticAsset],
             meta: { page: 1, pageSize: pageSize, total: 1, totalPages: 1 },
           };
@@ -359,12 +327,10 @@ export default function Assets() {
         variant: 'error',
       });
     },
-    onSuccess: (result, _values, context) => {
-      const created = result.asset;
-      queryClient.setQueryData<AssetsResponse>(assetsQueryKey, (current) => {
+    onSuccess: (created, _values, context) => {
+      queryClient.setQueryData<AssetsResponse | undefined>(assetsQueryKey, (current) => {
         if (!current) {
           return {
-            ok: true,
             assets: [created],
             meta: {
               page: 1,
@@ -398,12 +364,12 @@ export default function Assets() {
   const updateAssetMutation = useMutation({
     mutationFn: async ({ id, values }: { id: string; values: AssetFormValues }) => {
       const payload = buildPayload(values);
-      return api.put<{ ok: boolean; asset: AssetRecord }>(`/assets/${id}`, payload);
+      return updateAssetApi(id, payload);
     },
     onMutate: async ({ id, values }) => {
       await queryClient.cancelQueries({ queryKey: assetsQueryKey });
       const previous = queryClient.getQueryData<AssetsResponse>(assetsQueryKey);
-      queryClient.setQueryData<AssetsResponse>(assetsQueryKey, (current) => {
+      queryClient.setQueryData<AssetsResponse | undefined>(assetsQueryKey, (current) => {
         if (!current) {
           return current;
         }
@@ -436,9 +402,8 @@ export default function Assets() {
         variant: 'error',
       });
     },
-    onSuccess: (result) => {
-      const updated = result.asset;
-      queryClient.setQueryData<AssetsResponse>(assetsQueryKey, (current) => {
+    onSuccess: (updated) => {
+      queryClient.setQueryData<AssetsResponse | undefined>(assetsQueryKey, (current) => {
         if (!current) {
           return current;
         }
@@ -461,7 +426,7 @@ export default function Assets() {
 
   const undoDelete = async (asset: AssetRecord) => {
     try {
-      await api.post<{ ok: boolean; asset: AssetRecord }>('/assets', {
+      const payload: SaveAssetPayload = {
         name: asset.name,
         code: asset.code,
         status: asset.status,
@@ -469,7 +434,8 @@ export default function Assets() {
         category: asset.category ?? undefined,
         purchaseDate: asset.purchaseDate ?? undefined,
         cost: asset.cost ?? undefined,
-      });
+      };
+      await createAssetApi(payload);
       queryClient.invalidateQueries({ queryKey: ['assets'] });
       showToast({ title: 'Asset restored', description: `${asset.name} was restored`, variant: 'success' });
     } catch (error) {
@@ -482,14 +448,11 @@ export default function Assets() {
   };
 
   const deleteAssetMutation = useMutation({
-    mutationFn: async (asset: AssetRecord) => {
-      await api.delete<{ ok: boolean; asset: AssetRecord }>(`/assets/${asset.id}`);
-      return asset;
-    },
+    mutationFn: async (asset: AssetRecord) => deleteAssetApi(asset.id),
     onMutate: async (asset) => {
       await queryClient.cancelQueries({ queryKey: assetsQueryKey });
       const previous = queryClient.getQueryData<AssetsResponse>(assetsQueryKey);
-      queryClient.setQueryData<AssetsResponse>(assetsQueryKey, (current) => {
+      queryClient.setQueryData<AssetsResponse | undefined>(assetsQueryKey, (current) => {
         if (!current) {
           return current;
         }
@@ -535,14 +498,12 @@ export default function Assets() {
   });
 
   const bulkDeleteMutation = useMutation({
-    mutationFn: async (assetsToDelete: AssetRecord[]) => {
-      await Promise.all(assetsToDelete.map((asset) => api.delete<{ ok: boolean; asset: AssetRecord }>(`/assets/${asset.id}`)));
-      return assetsToDelete;
-    },
+    mutationFn: async (assetsToDelete: AssetRecord[]) =>
+      Promise.all(assetsToDelete.map((asset) => deleteAssetApi(asset.id))),
     onMutate: async (assetsToDelete) => {
       await queryClient.cancelQueries({ queryKey: assetsQueryKey });
       const previous = queryClient.getQueryData<AssetsResponse>(assetsQueryKey);
-      queryClient.setQueryData<AssetsResponse>(assetsQueryKey, (current) => {
+      queryClient.setQueryData<AssetsResponse | undefined>(assetsQueryKey, (current) => {
         if (!current) {
           return current;
         }
