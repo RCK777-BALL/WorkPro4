@@ -9,7 +9,6 @@ import {
   Loader2,
   Eye,
   Filter,
-  Loader2,
   LayoutGrid,
   List,
   MapPin,
@@ -20,7 +19,7 @@ import {
   Trash2,
   Wrench,
 } from 'lucide-react';
-import type { Area, AssetTree, Line, Site } from '../../shared/types/asset';
+import type { AssetTree } from '../../shared/types/asset';
 import { DataBadge } from '../components/premium/DataBadge';
 import { SlideOver } from '../components/premium/SlideOver';
 import { ProTable, type ProTableColumn } from '../components/premium/ProTable';
@@ -156,205 +155,6 @@ interface HierarchySite {
   areas: HierarchyArea[];
 }
 
-const hierarchySeedData: HierarchySite[] = [
-  {
-    id: 'site-plant-1',
-    name: 'Plant 1',
-    areas: [
-      {
-        id: 'area-plant-1-production',
-        name: 'Production',
-        lines: [
-          {
-            id: 'line-plant-1-production-1',
-            name: 'Line A',
-            stations: [
-              {
-                id: 'station-plant-1-prod-a',
-                name: 'Mixing',
-                assets: [
-                  { id: 'asset-plant-1-prod-a-1', code: 'PL1-MIX-001', name: 'Mixing Tank' },
-                  { id: 'asset-plant-1-prod-a-2', code: 'PL1-MIX-002', name: 'Blending Pump' },
-                ],
-              },
-              {
-                id: 'station-plant-1-prod-b',
-                name: 'Filling',
-                assets: [
-                  { id: 'asset-plant-1-prod-b-1', code: 'PL1-FIL-001', name: 'Filling Machine' },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-      {
-        id: 'area-plant-1-utilities',
-        name: 'Utilities',
-        lines: [
-          {
-            id: 'line-plant-1-utilities-1',
-            name: 'Support Systems',
-            stations: [
-              {
-                id: 'station-plant-1-util-a',
-                name: 'Boiler Room',
-                assets: [
-                  { id: 'asset-plant-1-util-a-1', code: 'PL1-UTL-001', name: 'Steam Boiler' },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-      {
-        id: 'area-plant-1-packaging',
-        name: 'Packaging',
-        lines: [
-          {
-            id: 'line-plant-1-packaging-1',
-            name: 'Line B',
-            stations: [
-              {
-                id: 'station-plant-1-pack-a',
-                name: 'Labeling',
-                assets: [
-                  { id: 'asset-plant-1-pack-a-1', code: 'PL1-PKG-001', name: 'Labeler' },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'site-plant-2',
-    name: 'Plant 2',
-    areas: [
-      {
-        id: 'area-plant-2-production',
-        name: 'Production',
-        lines: [
-          {
-            id: 'line-plant-2-production-1',
-            name: 'Assembly',
-            stations: [
-              {
-                id: 'station-plant-2-prod-a',
-                name: 'Assembly Line',
-                assets: [
-                  { id: 'asset-plant-2-prod-a-1', code: 'PL2-ASM-001', name: 'Assembly Robot' },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-      {
-        id: 'area-plant-2-utilities',
-        name: 'Utilities',
-        lines: [
-          {
-            id: 'line-plant-2-utilities-1',
-            name: 'Facilities',
-            stations: [
-              {
-                id: 'station-plant-2-util-a',
-                name: 'Chiller Plant',
-                assets: [
-                  { id: 'asset-plant-2-util-a-1', code: 'PL2-UTL-001', name: 'Industrial Chiller' },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-      {
-        id: 'area-plant-2-warehouse',
-        name: 'Warehouse',
-        lines: [
-          {
-            id: 'line-plant-2-warehouse-1',
-            name: 'Storage',
-            stations: [
-              {
-                id: 'station-plant-2-wh-a',
-                name: 'Racking',
-                assets: [
-                  { id: 'asset-plant-2-wh-a-1', code: 'PL2-WHS-001', name: 'Automated Racking' },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'site-hq',
-    name: 'Corporate HQ',
-    areas: [
-      {
-        id: 'area-hq-facilities',
-        name: 'Facilities',
-        lines: [
-          {
-            id: 'line-hq-facilities-1',
-            name: 'Building Services',
-            stations: [
-              {
-                id: 'station-hq-fac-a',
-                name: 'Lobby',
-                assets: [
-                  { id: 'asset-hq-fac-a-1', code: 'HQ-FAC-001', name: 'Security Console' },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-      {
-        id: 'area-hq-security',
-        name: 'Security',
-        lines: [
-          {
-            id: 'line-hq-security-1',
-            name: 'Monitoring',
-            stations: [
-              {
-                id: 'station-hq-sec-a',
-                name: 'Command Center',
-                assets: [
-                  { id: 'asset-hq-sec-a-1', code: 'HQ-SEC-001', name: 'Surveillance Hub' },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-      {
-        id: 'area-hq-it',
-        name: 'IT Infrastructure',
-        lines: [
-          {
-            id: 'line-hq-it-1',
-            name: 'Network',
-            stations: [
-              {
-                id: 'station-hq-it-a',
-                name: 'Data Center',
-                assets: [
-                  { id: 'asset-hq-it-a-1', code: 'HQ-IT-001', name: 'Core Switch' },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-];
 
 const countAssetsInStation = (station: HierarchyStation) => station.assets.length;
 
@@ -409,8 +209,6 @@ export default function Assets() {
   const canManageAssets = useCan('manage', 'asset');
   const { showToast } = useToast();
   const queryClient = useQueryClient();
-  const hierarchy = hierarchySeedData;
-  const hierarchyLoading = false;
 
   const form = useForm<AssetFormValues>({
     resolver: zodResolver(assetFormSchema),
@@ -432,8 +230,6 @@ export default function Assets() {
     queryFn: async () => api.get<AssetsResponse>(`/assets${buildQueryString(filters)}`),
     keepPreviousData: true,
   });
-
-  const assetsFetching = isFetching;
 
   const { data: hierarchyData, isLoading: hierarchyLoading } = useQuery<AssetTree>({
     queryKey: ['asset-hierarchy'],
