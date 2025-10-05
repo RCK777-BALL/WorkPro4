@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import type { Asset, Prisma } from '@prisma/client';
+import type { AssetBomItem, Prisma } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { prisma } from '../db';
 import { asyncHandler, fail, ok } from '../utils/response';
@@ -37,11 +37,22 @@ const emptyToUndefined = (value: unknown) => {
   return value;
 };
 
+const normalizeOptionalString = (value: unknown) => {
+  if (value === undefined) {
+    return undefined;
+  }
   if (value === null) {
     return null;
   }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length === 0 ? null : trimmed;
+  }
+  return value;
+};
 
-  if (typeof value === 'string' && value.trim() === '') {
+const normalizeOptionalNumber = (value: unknown) => {
+  if (value === undefined) {
     return undefined;
   }
   if (value === null) {
@@ -61,7 +72,7 @@ const emptyToUndefined = (value: unknown) => {
   return value;
 };
 
-const normalizeNullableDate = (value: unknown) => {
+const normalizeOptionalDate = (value: unknown) => {
   if (value === undefined) {
     return undefined;
   }
@@ -105,6 +116,129 @@ const assetPayloadSchema = z
 const updateAssetSchema = assetPayloadSchema.partial().strict();
 
 type AssetStatus = z.infer<typeof assetStatusEnum>;
+
+const optionalCriticality = z.preprocess(
+  (value) => {
+    if (value === undefined || value === null || value === '') {
+      return undefined;
+    }
+    if (typeof value === 'number') {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return undefined;
+      }
+      const parsed = Number(trimmed);
+      return Number.isFinite(parsed) ? parsed : value;
+    }
+    return value;
+  },
+  z.number().int().min(1).max(5).optional(),
+);
+
+const optionalObjectId = z.preprocess(
+  (value) => {
+    if (value === undefined || value === null || value === '') {
+      return undefined;
+    }
+    return value;
+  },
+  z
+    .string()
+    .regex(objectIdRegex, 'Invalid identifier')
+    .optional(),
+);
+
+const bomLineSchema = z.object({
+  id: optionalObjectId.optional(),
+  reference: z.string().trim().min(1, 'Reference is required'),
+  description: z.string().trim().min(1, 'Description is required'),
+  quantity: z.preprocess(
+    normalizeOptionalNumber,
+    z.union([z.number().min(0), z.null()]).optional(),
+  ),
+  unit: z.preprocess(normalizeOptionalString, z.union([z.string(), z.null()]).optional()),
+  notes: z.preprocess(normalizeOptionalString, z.union([z.string(), z.null()]).optional()),
+  position: z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === '') {
+        return undefined;
+      }
+      if (typeof value === 'number') {
+        return value;
+      }
+      if (typeof value === 'string') {
+        const parsed = Number(value.trim());
+        return Number.isFinite(parsed) ? parsed : value;
+      }
+      return value;
+    }, z.number().int().min(0).optional()),
+});
+
+const createAssetSchema = assetPayloadSchema.extend({
+  criticality: optionalCriticality,
+  manufacturer: z.preprocess(
+    normalizeOptionalString,
+    z.union([z.string().trim().min(1), z.null()]).optional(),
+  ),
+  modelNumber: z.preprocess(
+    normalizeOptionalString,
+    z.union([z.string().trim().min(1), z.null()]).optional(),
+  ),
+  serialNumber: z.preprocess(
+    normalizeOptionalString,
+    z.union([z.string().trim().min(1), z.null()]).optional(),
+  ),
+  commissionedAt: z.preprocess(
+    normalizeOptionalDate,
+    z.union([z.coerce.date(), z.null()]).optional(),
+  ),
+  warrantyProvider: z.preprocess(
+    normalizeOptionalString,
+    z.union([z.string().trim().min(1), z.null()]).optional(),
+  ),
+  warrantyContact: z.preprocess(
+    normalizeOptionalString,
+    z.union([z.string().trim().min(1), z.null()]).optional(),
+  ),
+  warrantyExpiresAt: z.preprocess(
+    normalizeOptionalDate,
+    z.union([z.coerce.date(), z.null()]).optional(),
+  ),
+  warrantyNotes: z.preprocess(
+    normalizeOptionalString,
+    z.union([z.string().trim().min(1), z.null()]).optional(),
+  ),
+  siteId: optionalObjectId,
+  areaId: optionalObjectId,
+  lineId: optionalObjectId,
+  stationId: optionalObjectId,
+});
+
+const lifecycleUpdateSchema = createAssetSchema.partial().extend({
+  bomLines: z.array(bomLineSchema).optional(),
+});
+
+type AssetWithRelations = Prisma.AssetGetPayload<{
+  include: {
+    site: true;
+    area: true;
+    line: true;
+    station: true;
+  };
+}>;
+
+type AssetWithLifecycle = Prisma.AssetGetPayload<{
+  include: {
+    site: true;
+    area: true;
+    line: true;
+    station: true;
+    bomItems: true;
+  };
+}>;
 
 type TenantScopedWhere = {
   tenantId: string;
@@ -298,6 +432,25 @@ router.post(
     return ok(res, serializeAsset(asset));
   }),
 );
+
+async function assertAssetAccess(req: AuthRequest, assetId: string) {
+  if (!req.user) {
+    return null;
+  }
+
+  const asset = await prisma.asset.findFirst({
+    where: { id: assetId, tenantId: req.user.tenantId },
+    include: {
+      site: true,
+      area: true,
+      line: true,
+      station: true,
+      bomItems: true,
+    },
+  });
+
+  return asset;
+}
 
 router.put(
   '/:id',
