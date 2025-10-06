@@ -15,7 +15,7 @@ import { formatDate, formatWorkOrderPriority, formatWorkOrderStatus } from '../l
 import { useToast } from '@/components/ui/toast';
 import { useCan } from '@/lib/rbac';
 import { toTitleCase } from '@/lib/utils';
-import { read, utils, writeFile } from 'xlsx';
+import { createCsvFromRecords, exportArrayToXlsx, parseXlsxRows } from '@/lib/xlsx';
 
 type QueryState = {
   page: number;
@@ -529,10 +529,8 @@ export default function WorkOrders() {
         createdAt: item.createdAt,
       }));
 
-      const worksheet = utils.json_to_sheet(flattened);
-
       if (format === 'csv') {
-        const csv = utils.sheet_to_csv(worksheet);
+        const csv = createCsvFromRecords(flattened);
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
@@ -542,9 +540,7 @@ export default function WorkOrders() {
         document.body.removeChild(link);
         window.setTimeout(() => URL.revokeObjectURL(link.href), 0);
       } else {
-        const workbook = utils.book_new();
-        utils.book_append_sheet(workbook, worksheet, 'Work Orders');
-        writeFile(workbook, 'work-orders.xlsx');
+        await exportArrayToXlsx('work-orders.xlsx', flattened, { sheetName: 'Work Orders' });
       }
 
       showToast({
@@ -588,29 +584,46 @@ export default function WorkOrders() {
         }
       } else {
         const buffer = await file.arrayBuffer();
-        const workbook = read(buffer, { type: 'array' });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows: Record<string, unknown>[] = utils.sheet_to_json<Record<string, unknown>>(sheet);
+        const rows = await parseXlsxRows(buffer);
+
+        const getValue = (record: Record<string, unknown>, keys: string[]): unknown => {
+          for (const key of keys) {
+            if (key in record) {
+              return record[key];
+            }
+          }
+          return undefined;
+        };
+
+        const toOptionalString = (value: unknown): string | undefined => {
+          if (value === null || value === undefined) {
+            return undefined;
+          }
+
+          if (value instanceof Date) {
+            return value.toISOString().slice(0, 10);
+          }
+
+          const stringValue = String(value).trim();
+          return stringValue ? stringValue : undefined;
+        };
+
+        const toStringOrEmpty = (value: unknown): string => toOptionalString(value) ?? '';
+
         payload = rows
           .map((row: Record<string, unknown>): SaveWorkOrderPayload => ({
-            title: String(row.title ?? row.Title ?? '').trim(),
-            description: String(row.description ?? row.Description ?? '').trim() || undefined,
-            status: normalizeStatus(row.status ?? row.Status),
-            priority: normalizePriority(row.priority ?? row.Priority),
+            title: toStringOrEmpty(getValue(row, ['title', 'Title'])),
+            description: toOptionalString(getValue(row, ['description', 'Description'])),
+            status: normalizeStatus(toOptionalString(getValue(row, ['status', 'Status']))),
+            priority: normalizePriority(toOptionalString(getValue(row, ['priority', 'Priority']))),
             dueDate:
-              typeof row.dueDate === 'string'
-                ? row.dueDate
-                : typeof row['Due Date'] === 'string'
-                  ? (row['Due Date'] as string)
-                  : undefined,
-            category:
-              typeof row.category === 'string'
-                ? row.category
-                : typeof row.Category === 'string'
-                  ? (row.Category as string)
-                  : undefined,
-            assigneeId: typeof row.assigneeId === 'string' ? row.assigneeId : undefined,
-            assetId: typeof row.assetId === 'string' ? row.assetId : undefined,
+              toOptionalString(getValue(row, ['dueDate', 'Due Date'])) ??
+              toOptionalString(getValue(row, ['due_date', 'Due_Date'])),
+            category: toOptionalString(getValue(row, ['category', 'Category'])),
+            assigneeId: toOptionalString(
+              getValue(row, ['assigneeId', 'Assignee Id', 'Assignee ID', 'AssigneeID']),
+            ),
+            assetId: toOptionalString(getValue(row, ['assetId', 'Asset Id', 'Asset ID', 'AssetID'])),
           }))
           .filter((item): item is SaveWorkOrderPayload => item.title.trim().length >= 3);
       }

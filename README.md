@@ -50,6 +50,19 @@ workpro-cmms/
 - pnpm 8+
 - Docker & Docker Compose
 
+### Install without warnings
+
+Use an Active LTS release of Node.js (20.x or 22.x) before installing dependencies. To refresh the workspace without triggering
+peer-resolution overrides, run the following from the repository root:
+
+```bash
+npm run clean
+npm install
+```
+
+Avoid `npm audit fix --force`; the command can downgrade packages and reintroduce the peer warnings this project is configured to
+avoid.
+
 ### Development Setup
 
 1. **Clone and install dependencies:**
