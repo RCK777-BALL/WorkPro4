@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import * as XLSX from 'xlsx';
+import { exportTableToXlsx } from '@/lib/xlsx';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -273,9 +273,8 @@ export function Assets() {
     }
   }, [filters, toast]);
 
-  const handleDownloadTemplate = useCallback(() => {
+  const handleDownloadTemplate = useCallback(async () => {
     try {
-      const workbook = XLSX.utils.book_new();
       const headerRow = [
         'Name*',
         'Code*',
@@ -321,15 +320,9 @@ export function Assets() {
         '',
       ];
 
-      const worksheet = XLSX.utils.aoa_to_sheet([headerRow, exampleRow]);
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Template');
-
-      const buffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
-      const blob = new Blob([buffer], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      await exportTableToXlsx('asset-import-template.xlsx', [headerRow, exampleRow], {
+        sheetName: 'Template',
       });
-
-      downloadBlob(blob, 'asset-import-template.xlsx');
       toast({
         title: 'Template downloaded',
         description: 'The asset import template has been downloaded.',
